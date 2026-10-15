@@ -1,5 +1,9 @@
+"use client";
+
 import Link from 'next/link';
 import NewProjectButton from './NewProjectButton';
+import LangSwitch from './LangSwitch';
+import { useT } from './I18nProvider';
 import styles from './SiteNav.module.css';
 
 export function BrandMark() {
@@ -14,15 +18,17 @@ export function BrandMark() {
 
 /** overlay: przezroczysty pasek nad grafiką hero (strona główna). */
 export default function SiteNav({ overlay }: { overlay?: boolean }) {
+  const t = useT();
   return (
     <header className={styles.nav} data-overlay={overlay || undefined}>
       <div className={`wrap ${styles.inner}`}>
-        <Link href="/" aria-label="Strona główna">
+        <Link href="/" aria-label={t.common.home}>
           <BrandMark />
         </Link>
         <nav className={styles.links}>
-          <Link href="/builder">Moje projekty</Link>
+          <Link href="/builder">{t.common.myProjects}</Link>
         </nav>
+        <LangSwitch />
         <NewProjectButton />
       </div>
     </header>

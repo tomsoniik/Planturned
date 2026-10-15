@@ -5,92 +5,95 @@
 <h1 align="center">Planturned</h1>
 
 <p align="center">
-  Planer baz do <b>Unturned</b>. Rysujesz bazę w 2D, potem chodzisz po niej w 3D na prawdziwej mapie z gry.
+  A base planner for <b>Unturned</b>. Draw your base in 2D, then walk through it in 3D on a real map from the game.
   <br>
-  <a href="https://base-planner-unturned.vercel.app"><b>Otwórz w przeglądarce</b></a>
+  <a href="https://base-planner-unturned.vercel.app"><b>Open in the browser</b></a>
 </p>
+
+<p align="center"><b>English</b> · <a href="README.pl.md">Polski</a></p>
 
 <p align="center">
-  <img src="docs/demo.gif" alt="Demo: nowy projekt, podłogi, ściany, okna, drzwi, filary i dach w 2D, potem baza w 3D w dzień, o zmierzchu i w nocy" width="100%">
+  <img src="docs/demo.gif" alt="Demo: new project, floors, walls, windows, a door, pillars and a roof in 2D, then the base in 3D at day, dusk and night" width="100%">
 </p>
 
-Nagranie pokazuje prawdziwą sesję w aplikacji: nowy projekt, 6 podłóg, ściany z oknami i drzwiami, filary w narożnikach, dach na piętrze 1 i przejście do widoku 3D (dzień, zmierzch, noc).
+The recording is a real session in the app (with the Polish UI): a new project, 6 floors, walls with windows and a door, corner pillars, a roof over the ground floor, then the 3D view at day, dusk and night.
 
-## Co potrafi
+## Features
 
-- **Plan 2D jak w grze.** Podłogi, ściany, filary, dachy, schody i rampy z pięciu materiałów (klon, brzoza, sosna, metal, cegła). Ściany i filary same przyklejają się do krawędzi i narożników, kolizja jest widoczna od razu.
-- **Piętra.** Do czterech poziomów; niższe widać pod spodem jako tło.
-- **Widok 3D z kamerą z gry.** Oryginalne modele struktur z plików Unturned. Latanie albo chodzenie, stawianie i wyburzanie z celownika, pora dnia.
-- **Prawdziwe mapy.** Russia, Washington, PEI, Germany, Yukon i inne: teren, satelita, budynki i drzewa w skali 1:1. Skybase na wybranej wysokości.
-- **Limity z gry.** Maksymalna wysokość budowania, granica tlenu i strefy zakazu budowy dla każdej mapy ([docs/sky-limits.md](docs/sky-limits.md)).
-- **Zasięg claimu łóżka.** Okrąg pokazuje, gdzie nikt spoza grupy nic nie postawi.
-- **Bez konta.** Projekty zostają w przeglądarce. Bazę eksportujesz do pliku `.baseplan.json` i wysyłasz ekipie.
+- **A 2D plan that works like the game.** Floors, walls, pillars, roofs, stairs and ramps in five materials (maple, birch, pine, metal, brick). Walls and pillars snap to edges and corners, and collisions show up right away.
+- **Floors.** Up to four levels; the ones below show through as a backdrop.
+- **3D view with an in-game camera.** Original structure models from the Unturned files. Fly or walk, place and demolish from the crosshair, change the time of day.
+- **Real maps.** Russia, Washington, PEI, Germany, Yukon and more: terrain, satellite, buildings and trees at 1:1 scale. Skybases at any height.
+- **Limits from the game.** Max build height, the oxygen line and no-build zones for each map ([docs/sky-limits.md](docs/sky-limits.md), in Polish).
+- **Bed claim radius.** A circle shows where nobody outside your group can build.
+- **No account.** Projects stay in your browser. Export a base to a `.baseplan.json` file and send it to your crew.
+- **English and Polish.** PL / EN switch in the menu and in the editor; without a choice the language follows your browser.
 
-## Sterowanie
+## Controls
 
-| Klawisz | Plan 2D | Widok 3D |
+| Key | 2D plan | 3D view |
 | --- | --- | --- |
-| `1`-`9` | element z przybornika | element z przybornika |
-| `X` / `B` | wyburzanie / łóżko | wyburzanie / łóżko |
-| `R` | obrót | obrót |
-| `LPM` | postaw, zaznacz, przeciągnij | postaw albo wyburz w celowniku |
-| `PPM`, kółko | przesuwanie, przybliżenie | |
-| `PgUp` / `PgDn` | piętro wyżej / niżej | |
-| `Shift` + klik | zaznacz kilka | |
-| `Ctrl C` / `Ctrl V` | kopiuj / wklej (podgląd pod kursorem) | |
-| `Ctrl Z` / `Ctrl Y` | cofnij / ponów | |
-| `W A S D`, `Spacja`, `Q` | | ruch, w górę, w dół |
-| `F` | | latanie albo chodzenie |
-| `Esc` | odłóż element | oddaj kursor |
+| `1`-`9` | piece from the toolbox | piece from the toolbox |
+| `X` / `B` | demolish / bed | demolish / bed |
+| `R` | rotate | rotate |
+| `LMB` | place, select, drag | place or demolish at the crosshair |
+| `RMB`, wheel | pan, zoom | |
+| `PgUp` / `PgDn` | floor up / down | |
+| `Shift` + click | select several | |
+| `Ctrl C` / `Ctrl V` | copy / paste (preview under the cursor) | |
+| `Ctrl Z` / `Ctrl Y` | undo / redo | |
+| `W A S D`, `Space`, `Q` | | move, up, down |
+| `F` | | fly or walk |
+| `Esc` | drop the piece | release the cursor |
 
-## Technologie
+## Tech
 
-[Next.js 16](https://nextjs.org) (App Router), React 19, TypeScript, [three.js](https://threejs.org) z React Three Fiber i Drei, Zustand, Phosphor Icons. Hosting: [Vercel](https://vercel.com).
+[Next.js 16](https://nextjs.org) (App Router), React 19, TypeScript, [three.js](https://threejs.org) with React Three Fiber and Drei, Zustand, Phosphor Icons. Hosted on [Vercel](https://vercel.com).
 
-## Uruchomienie lokalne
+## Running locally
 
 ```bash
 npm install
-npm run export:game   # jednorazowo: dane z lokalnej instalacji gry
+npm run export:game   # once: game data from your local install
 npm run dev           # http://localhost:3000
 ```
 
-Bez eksportu aplikacja też działa: struktury są wtedy prostymi bryłami, a zakładka Teren pokazuje instrukcję.
+The app works without the export too: structures are simple boxes and the Terrain tab shows instructions.
 
-## Dane z gry
+## Game data
 
-`npm run export:game` uruchamia `scripts/export_game_data.py`. Skrypt sam znajduje Unturned w bibliotekach Steam.
-Ścieżkę można też podać ręcznie: `python scripts/export_game_data.py "D:\Steam\steamapps\common\Unturned"`.
+`npm run export:game` runs `scripts/export_game_data.py`. The script finds Unturned in your Steam libraries on its own.
+You can also pass the path: `python scripts/export_game_data.py "D:\Steam\steamapps\common\Unturned"`.
 
-Wymagania: Python 3.10+ oraz `pip install UnityPy numpy pillow`.
+Requirements: Python 3.10+ and `pip install UnityPy numpy pillow`.
 
-Co powstaje (pliki gry, tylko do użytku lokalnego, są w `.gitignore`):
+What it writes (game files, for local use only, listed in `.gitignore`):
 
-| Ścieżka | Źródło w grze |
+| Path | Source in the game |
 | --- | --- |
-| `public/game/structures.json` | modele 3D, kolory i wytrzymałość struktur (`Bundles/core.masterbundle`, `Bundles/Items/Structures/*.dat`) |
-| `public/unturned/items/<id>.png` | ikony z [SilKsPlugins/UnturnedImages](https://github.com/SilksPlugins/UnturnedImages) (folder vanilla); brakujące są generowane z ikon tego samego kształtu |
-| `public/maps/<Mapa>/height.bin` | wysokości terenu (`Maps/<Mapa>/Landscape/Heightmaps`, co 4 m) |
-| `public/maps/<Mapa>/tiles/*.jpg` | satelita z gry (`Maps/<Mapa>/Map.png`) |
-| `public/maps/<Mapa>/meta.json` | rozmiar mapy (`Level.dat`), poziom wody (`Environment/Lighting.dat`), limity wysokości i strefy zakazu budowy (`Level.hierarchy`) |
-| `public/maps/<Mapa>/scene.json` | budynki, obiekty i drzewa 1:1 (`Level/Objects.dat`, `Terrain/Trees.dat`) |
-| `public/game/scenery/<guid>.json` | modele obiektów i drzew (LOD0, kolory palety) |
+| `public/game/structures.json` | 3D models, colors and health of structures (`Bundles/core.masterbundle`, `Bundles/Items/Structures/*.dat`) |
+| `public/unturned/items/<id>.png` | icons from [SilKsPlugins/UnturnedImages](https://github.com/SilksPlugins/UnturnedImages) (vanilla folder); missing ones are generated from icons of the same shape |
+| `public/maps/<Map>/height.bin` | terrain heights (`Maps/<Map>/Landscape/Heightmaps`, every 4 m) |
+| `public/maps/<Map>/tiles/*.jpg` | in-game satellite (`Maps/<Map>/Map.png`) |
+| `public/maps/<Map>/meta.json` | map size (`Level.dat`), water level (`Environment/Lighting.dat`), height limits and no-build zones (`Level.hierarchy`) |
+| `public/maps/<Map>/scene.json` | buildings, objects and trees 1:1 (`Level/Objects.dat`, `Terrain/Trees.dat`) |
+| `public/game/scenery/<guid>.json` | object and tree models (LOD0, palette colors) |
 
-Wymiary są zgodne z modelami gry: podłoga 6 × 6 m, poziom 4,5 m, ściana 5,6 × 4,25 m. W planie 1 m = 10 jednostek.
+Sizes match the game models: floor 6 × 6 m, level 4.5 m, wall 5.6 × 4.25 m. In the plan, 1 m = 10 units.
 
-## Struktura
+## Structure
 
 ```
-src/app/          strony: start, lista projektów, edytor /builder/[id]
-src/components/   edytor 3D, wybór mapy, teren i obiekty
-src/lib/          logika budowania, teren, modele z gry, projekty
-src/store/        stan aplikacji (Zustand)
-scripts/          eksport danych z instalacji gry
-docs/             notatki o mechanice gry, nagranie demo
+src/app/          pages: home, project list, editor /builder/[id]
+src/components/   3D editor, map picker, terrain and objects
+src/lib/          building logic, terrain, game models, projects, translations (i18n.ts)
+src/store/        app state (Zustand)
+scripts/          game data export
+docs/             notes on game mechanics, demo recording
 ```
 
-## Autor
+## Author
 
 **tomson** ([@tomsoniik](https://github.com/tomsoniik), [debskitomal@gmail.com](mailto:debskitomal@gmail.com))
 
-Unturned to znak towarowy Smartly Dressed Games. Projekt fanowski, niezwiązany z twórcami gry. Dane z gry nie są częścią repozytorium; wyjątek to tło strony głównej w `public/art` (ekran ładowania z gry Washington Landscape, autor: Phobia) i znak zombie.
+Unturned is a trademark of Smartly Dressed Games. Fan project, not affiliated with the game's developers. Game data is not part of this repository; the exceptions are the home page background in `public/art` (the in-game loading screen Washington Landscape by Phobia) and the zombie mark.

@@ -20,6 +20,8 @@ import {
 import { loadGameModels, type GameModel } from '@/lib/gameModels';
 import { loadMap, mapOverviewUrl, mapTileUrl, tilesInRange, type MapData, type Site } from '@/lib/terrain';
 import { DEFAULT_SCENE, type SceneSettings } from '@/lib/scene';
+import { itemLabel, type AimReason, type AimWarn } from '@/lib/i18n';
+import { useT } from './I18nProvider';
 import { Meadow, SkyAndLight, meadowHeight } from './Scenery';
 import MapObjects from './MapObjects';
 
@@ -496,8 +498,8 @@ interface Aim {
   targetId: string | null;
   /** Poziom powierzchni, na którą celujemy (0 = ziemia). */
   surface: number | null;
-  reason?: string;
-  warn?: string;
+  reason?: AimReason;
+  warn?: AimWarn;
 }
 
 /** Limity wysokości w układzie sceny (y = 0 to poziom bazy). Patrz docs/sky-limits.md. */
@@ -562,11 +564,11 @@ function AimController({
       if (slot) {
         const surface = slot.floor || 0;
         const top = surface * H + H;
-        let reason: string | undefined;
-        let warn: string | undefined;
-        if (top > limits.limitY) reason = 'ponad limit wysokości mapy';
-        else if (limits.inClip(slot.x * SCALE, surface * H + 1, slot.y * SCALE)) reason = 'strefa zakazu budowy';
-        if (!reason && limits.oxygenY !== null && top > limits.oxygenY) warn = 'powyżej granicy tlenu';
+        let reason: AimReason | undefined;
+        let warn: AimWarn | undefined;
+        if (top > limits.limitY) reason = 'mapLimit';
+        else if (limits.inClip(slot.x * SCALE, surface * H + 1, slot.y * SCALE)) reason = 'noBuildZone';
+        if (!reason && limits.oxygenY !== null && top > limits.oxygenY) warn = 'oxygen';
         next = { preview: slot, valid: isPlacementValid(activeDef, slot, items) && !reason, targetId: null, surface, reason, warn };
       }
     }
@@ -593,15 +595,15 @@ function AimController({
           turn,
         });
         const floorPart = activeDef.part === 'floor' || activeDef.part === 'tri_floor';
-        let reason: string | undefined;
-        let warn: string | undefined;
+        let reason: AimReason | undefined;
+        let warn: AimWarn | undefined;
         const top = surface * H + H;
         const px = (res.preview?.x ?? 0) * SCALE, pz = (res.preview?.y ?? 0) * SCALE;
-        if (floorPart && mode === 'sky') reason = 'w skybase podłogę zastępuje dach';
-        else if (floorPart && level > 0) reason = 'podłoga tylko na ziemi';
-        else if (top > limits.limitY) reason = 'ponad limit wysokości mapy';
-        else if (limits.inClip(px, surface * H + 1, pz)) reason = 'strefa zakazu budowy';
-        if (!reason && limits.oxygenY !== null && top > limits.oxygenY) warn = 'powyżej granicy tlenu';
+        if (floorPart && mode === 'sky') reason = 'skyFloor';
+        else if (floorPart && level > 0) reason = 'floorGroundOnly';
+        else if (top > limits.limitY) reason = 'mapLimit';
+        else if (limits.inClip(px, surface * H + 1, pz)) reason = 'noBuildZone';
+        if (!reason && limits.oxygenY !== null && top > limits.oxygenY) warn = 'oxygen';
         next = { preview: res.preview, valid: res.valid && !reason, targetId: null, surface, reason, warn };
       }
     }
@@ -666,6 +668,7 @@ export default function Builder3D({
 }: Builder3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const models = useGameModels();
+  const t = useT();
   const [aim, setAim] = useState<Aim>(EMPTY_AIM);
   const [locked, setLocked] = useState(false);
   const [walk, setWalk] = useState(false);
@@ -829,13 +832,13 @@ export default function Builder3D({
       {!locked && (
         <div className={styles.lockHint}>
           {lockFailed
-            ? 'Przeglądarka nie oddała kursora: obracaj kamerę prawym przyciskiem, stawiaj lewym'
-            : 'Kliknij w scenę, żeby sterować kamerą'}
+            ? t.view3d.lockFailed
+            : t.view3d.lockHint}
         </div>
       )}
 
       <div className={styles.modeBadge} data-ui>
-        {walk ? 'Chodzenie' : 'Latanie'} <kbd>F</kbd>
+        {walk ? t.view3d.walking : t.view3d.flying} <kbd>F</kbd>
         {sky && <span className={styles.modeMap}>Skybase {scene.skyHeight} m</span>}
         {site && <span className={styles.modeMap}>{site.map}</span>}
       </div>
@@ -843,10 +846,10 @@ export default function Builder3D({
       {/* Stan celownika: tylko gdy trzymasz element, skróty są w zakładce Skróty */}
       {activeDef && !isDemolish && (
         <div className={styles.aimStatus} data-ui data-bad={!aim.valid || undefined}>
-          <strong>{activeDef.name.replace(/ \(.*\)$/, '')}</strong>
-          {aim.reason ?? aim.warn ?? (aim.preview ? (aim.valid ? 'Pasuje' : 'Koliduje') : 'Wyceluj w siatkę')}
+          <strong>{itemLabel(activeDef, t)}</strong>
+          {aim.reason ? t.view3d.reasons[aim.reason] : aim.warn ? t.view3d.warns[aim.warn] : aim.preview ? (aim.valid ? t.view3d.fits : t.view3d.collides) : t.view3d.aimAtGrid}
           {aim.surface !== null && (
-            <span>{aim.surface === 0 ? 'ziemia' : `poziom ${aim.surface}`}, {(aim.surface * H).toFixed(1)} m</span>
+            <span>{aim.surface === 0 ? t.view3d.ground : t.view3d.level(aim.surface)}, {(aim.surface * H).toFixed(1)} m</span>
           )}
         </div>
       )}

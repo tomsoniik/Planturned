@@ -52,7 +52,6 @@ export const TRI_R = (SIDE * Math.sqrt(3)) / 6;
 export const TRI_H = (SIDE * Math.sqrt(3)) / 2;
 export const BED_CLAIM_RADIUS = 270;
 export const FLOORS = [0, 1, 2, 3];
-export const floorLabel = (lvl: number) => (lvl === 0 ? 'Parter' : `Piętro ${lvl}`);
 /** Jednostki planu na metr. */
 export const UNITS_PER_METER = 10;
 /** Wysokość poziomu w grze (od podłogi do dachu), w metrach. */
@@ -154,18 +153,6 @@ const HEALTH: Record<MaterialId, [number, number]> = {
   brick: [1850, 1650],
 };
 const HATCH_HEALTH: Partial<Record<MaterialId, number>> = { maple: 350, birch: 300, pine: 400, metal: 900 };
-
-export const MATERIAL_LABELS: Record<string, string> = {
-  maple_log: 'Kłody klonowe',
-  birch_log: 'Kłody brzozowe',
-  pine_log: 'Kłody sosnowe',
-  maple_plank: 'Deski klonowe',
-  birch_plank: 'Deski brzozowe',
-  pine_plank: 'Deski sosnowe',
-  metal_sheet: 'Blacha',
-  metal_scrap: 'Złom',
-  bricks: 'Cegły',
-};
 
 export const REMOVER: BuildItem = {
   id: 'remover_tool',

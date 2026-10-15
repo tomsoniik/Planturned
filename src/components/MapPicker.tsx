@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { loadMap, loadMapIndex, mapOverviewUrl, type MapData, type MapInfo, type Site } from '@/lib/terrain';
+import { useT } from './I18nProvider';
 import styles from './MapPicker.module.css';
 
 const round = (v: number, step: number) => Math.round(v / step) * step;
@@ -15,6 +16,7 @@ interface Props {
 
 /** Wybór mapy z gry i miejsca bazy (wycinek terenu pod plan 2D i scenę 3D). */
 export default function MapPicker({ site, onChange, showUnderlay, onToggleUnderlay }: Props) {
+  const t = useT();
   const [maps, setMaps] = useState<MapInfo[] | null>(null);
   const [selected, setSelected] = useState<string | null>(site?.map ?? null);
   const [data, setData] = useState<MapData | null>(null);
@@ -33,14 +35,14 @@ export default function MapPicker({ site, onChange, showUnderlay, onToggleUnderl
     };
   }, [current]);
 
-  if (maps === null) return <p className={styles.hint}>Wczytywanie listy map</p>;
+  if (maps === null) return <p className={styles.hint}>{t.map.loadingList}</p>;
 
   if (maps.length === 0) {
     return (
       <div className={styles.empty}>
-        <p>Brak map z gry. Wyeksportuj je z lokalnej instalacji Unturned:</p>
+        <p>{t.map.noMaps}</p>
         <code>npm run export:game</code>
-        <p className={styles.hint}>Potrzebny Python z pakietami UnityPy, numpy i pillow. Skrypt czyta pliki gry i zapisuje je w public/maps.</p>
+        <p className={styles.hint}>{t.map.noMapsHint}</p>
       </div>
     );
   }
@@ -67,7 +69,7 @@ export default function MapPicker({ site, onChange, showUnderlay, onToggleUnderl
 
   return (
     <div className={styles.wrap}>
-      <div className={styles.maps} role="group" aria-label="Mapa">
+      <div className={styles.maps} role="group" aria-label={t.map.mapGroup}>
         {maps.map((m) => (
           <button key={m.id} data-on={current === m.id || undefined} onClick={() => setSelected(m.id)}>
             {m.name}
@@ -78,10 +80,10 @@ export default function MapPicker({ site, onChange, showUnderlay, onToggleUnderl
 
       {current && (
         <>
-          <p className={styles.hint}>Kliknij na mapie miejsce bazy. Teren i satelita pochodzą z plików gry.</p>
-          <div className={styles.overview} onClick={handleClick} role="button" aria-label="Wybierz miejsce bazy">
+          <p className={styles.hint}>{t.map.pickHint}</p>
+          <div className={styles.overview} onClick={handleClick} role="button" aria-label={t.map.pickAria}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={mapOverviewUrl(current)} alt={`Mapa ${current}`} draggable={false} />
+            <img src={mapOverviewUrl(current)} alt={t.map.mapAlt(current)} draggable={false} />
             {marker && <span className={styles.marker} style={marker} />}
           </div>
         </>
@@ -90,7 +92,7 @@ export default function MapPicker({ site, onChange, showUnderlay, onToggleUnderl
       {site && (
         <div className={styles.fields}>
           <label>
-            X (wschód)
+            {t.map.east}
             <input
               className="input"
               type="number"
@@ -99,7 +101,7 @@ export default function MapPicker({ site, onChange, showUnderlay, onToggleUnderl
             />
           </label>
           <label>
-            Z (północ)
+            {t.map.north}
             <input
               className="input"
               type="number"
@@ -108,7 +110,7 @@ export default function MapPicker({ site, onChange, showUnderlay, onToggleUnderl
             />
           </label>
           <label className={styles.full}>
-            Wysokość parteru (m)
+            {t.map.elevation}
             <input
               className="input"
               type="number"
@@ -119,17 +121,17 @@ export default function MapPicker({ site, onChange, showUnderlay, onToggleUnderl
           </label>
           {ground !== null && (
             <p className={styles.hint}>
-              Teren w tym miejscu: {ground.toFixed(1)} m
-              {data?.meta.seaLevel != null && `, poziom wody: ${data.meta.seaLevel.toFixed(1)} m`}
+              {t.map.terrainHere(ground.toFixed(1))}
+              {data?.meta.seaLevel != null && t.map.water(data.meta.seaLevel.toFixed(1))}
             </p>
           )}
           <div className={styles.actions}>
-            <button className="btn btn-ghost" onClick={() => placeAt(site.x, site.z)}>Na teren</button>
-            <button className="btn btn-ghost" onClick={() => onChange(undefined)}>Bez mapy</button>
+            <button className="btn btn-ghost" onClick={() => placeAt(site.x, site.z)}>{t.map.toTerrain}</button>
+            <button className="btn btn-ghost" onClick={() => onChange(undefined)}>{t.map.noMap}</button>
           </div>
           <label className={styles.toggle}>
             <input type="checkbox" checked={showUnderlay} onChange={onToggleUnderlay} />
-            Satelita pod planem 2D
+            {t.map.underlay}
           </label>
         </div>
       )}

@@ -8,12 +8,13 @@ import SiteNav from '@/components/SiteNav';
 import NewProjectButton from '@/components/NewProjectButton';
 import PlanThumbnail from '@/components/PlanThumbnail';
 import { useAppStore } from '@/store/useAppStore';
+import { useI18n } from '@/components/I18nProvider';
+import type { Lang } from '@/lib/i18n';
 import { deleteProject, exportProject, importProjectFile, listProjects, type Project } from '@/lib/projects';
 import styles from './projects.module.css';
 
-const rtf = new Intl.RelativeTimeFormat('pl', { numeric: 'auto' });
-
-function timeAgo(iso: string) {
+function timeAgo(iso: string, lang: Lang) {
+  const rtf = new Intl.RelativeTimeFormat(lang, { numeric: 'auto' });
   const diff = (new Date(iso).getTime() - Date.now()) / 1000;
   const steps: [number, Intl.RelativeTimeFormatUnit][] = [
     [60, 'second'],
@@ -30,17 +31,11 @@ function timeAgo(iso: string) {
   return rtf.format(Math.round(value), 'year');
 }
 
-function elementsLabel(n: number) {
-  if (n === 1) return '1 element';
-  const lastDigit = n % 10, lastTwo = n % 100;
-  if (lastDigit >= 2 && lastDigit <= 4 && (lastTwo < 12 || lastTwo > 14)) return `${n} elementy`;
-  return `${n} elementów`;
-}
-
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[] | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { addNotification } = useAppStore();
+  const { t, lang } = useI18n();
 
   useEffect(() => {
     // localStorage jest dostępny dopiero po montażu (strona jest też renderowana na serwerze)
@@ -53,16 +48,16 @@ export default function ProjectsPage() {
     try {
       const p = await importProjectFile(file);
       setProjects(listProjects());
-      addNotification(`Wczytano "${p.name}"`, 'success');
+      addNotification(t.projects.loaded(p.name), 'success');
     } catch {
-      addNotification('Ten plik nie wygląda na projekt bazy', 'error');
+      addNotification(t.projects.badFile, 'error');
     } finally {
       if (fileRef.current) fileRef.current.value = '';
     }
   };
 
   const handleDelete = (p: Project) => {
-    if (!window.confirm(`Usunąć "${p.name}"? Tego nie da się cofnąć.`)) return;
+    if (!window.confirm(t.projects.confirmDelete(p.name))) return;
     deleteProject(p.id);
     setProjects(listProjects());
   };
@@ -70,7 +65,7 @@ export default function ProjectsPage() {
   const importButton = (
     <button className="btn btn-ghost" onClick={() => fileRef.current?.click()}>
       <UploadSimple size={16} weight="bold" />
-      Wczytaj plik
+      {t.projects.loadFile}
     </button>
   );
 
@@ -80,8 +75,8 @@ export default function ProjectsPage() {
       <main className={`wrap ${styles.page}`}>
         <header className={styles.header}>
           <div>
-            <h1 className={styles.title}>Moje projekty</h1>
-            <p className={styles.note}>Zapisane w tej przeglądarce. Eksportuj plik, jeśli chcesz mieć kopię.</p>
+            <h1 className={styles.title}>{t.common.myProjects}</h1>
+            <p className={styles.note}>{t.projects.note}</p>
           </div>
           <div className={styles.actions}>
             {importButton}
@@ -104,8 +99,8 @@ export default function ProjectsPage() {
           </div>
         ) : projects.length === 0 ? (
           <div className={styles.empty}>
-            <h2>Nie masz jeszcze projektów</h2>
-            <p>Utwórz pierwszy albo wczytaj plik .baseplan.json od kogoś z ekipy.</p>
+            <h2>{t.projects.emptyTitle}</h2>
+            <p>{t.projects.emptyText}</p>
             <div className={styles.actions}>
               {importButton}
               <NewProjectButton />
@@ -126,21 +121,21 @@ export default function ProjectsPage() {
                     {p.items.length > 0 ? (
                       <PlanThumbnail items={p.items} className={styles.thumbSvg} />
                     ) : (
-                      <span className={styles.thumbEmpty}>Pusty plan</span>
+                      <span className={styles.thumbEmpty}>{t.projects.emptyPlan}</span>
                     )}
                   </div>
                   <div className={styles.meta}>
                     <h2 className={styles.name}>{p.name}</h2>
                     <p className={styles.details}>
-                      {elementsLabel(p.items.length)} · {timeAgo(p.updatedAt)}
+                      {t.projects.elements(p.items.length)} · {timeAgo(p.updatedAt, lang)}
                     </p>
                   </div>
                 </Link>
                 <div className={styles.cardActions}>
-                  <button className="icon-btn" title="Eksportuj do pliku" onClick={() => exportProject(p)}>
+                  <button className="icon-btn" title={t.projects.exportTitle} onClick={() => exportProject(p)}>
                     <DownloadSimple size={16} weight="bold" />
                   </button>
-                  <button className="icon-btn danger" title="Usuń projekt" onClick={() => handleDelete(p)}>
+                  <button className="icon-btn danger" title={t.projects.deleteTitle} onClick={() => handleDelete(p)}>
                     <Trash size={16} weight="bold" />
                   </button>
                 </div>

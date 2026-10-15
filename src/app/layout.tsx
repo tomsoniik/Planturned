@@ -3,6 +3,9 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Notifications from "@/components/Notifications";
 import MotionProvider from "@/components/MotionProvider";
+import I18nProvider from "@/components/I18nProvider";
+import { getLang } from "@/lib/i18n-server";
+import { DICTS } from "@/lib/i18n";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,25 +17,28 @@ const geistMono = Geist_Mono({
   subsets: ["latin", "latin-ext"],
 });
 
-export const metadata: Metadata = {
-  title: "Planturned - planer baz do Unturned",
-  description: "Zaprojektuj bazę do Unturned w 2D i obejrzyj ją w 3D. Działa w przeglądarce, bez konta.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { meta } = DICTS[await getLang()];
+  return { title: meta.title, description: meta.description };
+}
 
 export const viewport: Viewport = {
   themeColor: "#0b100c",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const lang = await getLang();
   return (
-    <html lang="pl" className={`${geistSans.variable} ${geistMono.variable}`}>
+    <html lang={lang} className={`${geistSans.variable} ${geistMono.variable}`}>
       <body>
-        <MotionProvider>{children}</MotionProvider>
-        <Notifications />
+        <I18nProvider initialLang={lang}>
+          <MotionProvider>{children}</MotionProvider>
+          <Notifications />
+        </I18nProvider>
       </body>
     </html>
   );

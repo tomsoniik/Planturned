@@ -27,7 +27,10 @@ import styles from '../builder.module.css';
 import { useAppStore } from '@/store/useAppStore';
 import { exportProject, getProject, updateProject, type Project } from '@/lib/projects';
 import type { Site } from '@/lib/terrain';
-import { DEFAULT_SCENE, MODE_LABELS, SKY_HEIGHTS, TIME_LABELS, type SceneSettings, type TimeOfDay } from '@/lib/scene';
+import { DEFAULT_SCENE, SKY_HEIGHTS, type SceneSettings, type TimeOfDay } from '@/lib/scene';
+import { itemFullLabel, itemLabel, type PartGroupId, type SidebarTabId } from '@/lib/i18n';
+import { useI18n, useT } from '@/components/I18nProvider';
+import LangSwitch from '@/components/LangSwitch';
 import MapPicker from '@/components/MapPicker';
 import SiteUnderlay from '@/components/SiteUnderlay';
 import {
@@ -39,7 +42,6 @@ import {
   computePaste,
   computePlacement,
   findDef,
-  floorLabel,
   isRoofLayer,
   itemsForMaterial,
   getPolygonVertices,
@@ -54,48 +56,28 @@ import {
 
 const Builder3D = dynamic(() => import('@/components/Builder3D'), {
   ssr: false,
-  loading: () => <div className={styles.loading3d}>Ładowanie widoku 3D</div>,
+  loading: function Loading3D() {
+    return <div className={styles.loading3d}>{useT().editor.loading3d}</div>;
+  },
 });
 
 const PAINT_COLORS = ['#d9534f', '#e8692f', '#e2b93b', '#8dc46f', '#3e8ed0', '#8e6bbf', '#c9ccd1', '#3a3d42'];
 
-type SidebarTab = 'blocks' | 'map' | 'color' | 'hotkeys';
+type SidebarTab = SidebarTabId;
 
-const TABS: { id: SidebarTab; label: string; Icon: typeof Cube }[] = [
-  { id: 'blocks', label: 'Klocki', Icon: Cube },
-  { id: 'map', label: 'Teren', Icon: MapTrifold },
-  { id: 'color', label: 'Kolor', Icon: PaintBucket },
-  { id: 'hotkeys', label: 'Skróty', Icon: Keyboard },
+const TABS: { id: SidebarTab; Icon: typeof Cube }[] = [
+  { id: 'blocks', Icon: Cube },
+  { id: 'map', Icon: MapTrifold },
+  { id: 'color', Icon: PaintBucket },
+  { id: 'hotkeys', Icon: Keyboard },
 ];
 
 /** Grupy w przyborniku. Klawisze 1-9 dalej idą po kolejności PARTS. */
-const PART_GROUPS: { label: string; parts: PartId[] }[] = [
-  { label: 'Podłogi i dachy', parts: ['floor', 'tri_floor', 'roof', 'tri_roof', 'hole', 'tri_hole', 'hatch'] },
-  { label: 'Ściany', parts: ['wall', 'doorway', 'window', 'garage', 'rampart', 'ramp_wall'] },
-  { label: 'Filary', parts: ['pillar', 'post'] },
-  { label: 'Schody i rampy', parts: ['stairs', 'ramp'] },
-];
-
-const HOTKEYS: { keys: string[]; label: string }[] = [
-  { keys: ['1', '9'], label: 'element z przybornika' },
-  { keys: ['X'], label: 'wyburzanie' },
-  { keys: ['B'], label: 'łóżko' },
-  { keys: ['R'], label: 'obrót, inna krawędź' },
-  { keys: ['PgUp', 'PgDn'], label: '2D: piętro wyżej, niżej' },
-  { keys: ['Klik'], label: '3D: przejmij kamerę, Esc oddaje kursor' },
-  { keys: ['W', 'A', 'S', 'D'], label: '3D: ruch, Shift szybciej' },
-  { keys: ['Spacja', 'Q'], label: '3D: w górę, w dół (chodząc: skok)' },
-  { keys: ['F'], label: '3D: latanie albo chodzenie' },
-  { keys: ['Esc'], label: 'odłóż element, odznacz' },
-  { keys: ['LPM'], label: 'stawianie, zaznaczanie, przeciąganie' },
-  { keys: ['PPM'], label: 'przesuwanie widoku 2D' },
-  { keys: ['Kółko'], label: 'przybliżenie 2D' },
-  { keys: ['Shift', 'Klik'], label: 'zaznacz kilka' },
-  { keys: ['Delete'], label: 'usuń zaznaczone' },
-  { keys: ['Ctrl', 'C'], label: 'kopiuj zaznaczone' },
-  { keys: ['Ctrl', 'V'], label: 'wklej: podgląd pod kursorem, R obraca, klik wstawia' },
-  { keys: ['Ctrl', 'Z'], label: 'cofnij' },
-  { keys: ['Ctrl', 'Y'], label: 'ponów' },
+const PART_GROUPS: { id: PartGroupId; parts: PartId[] }[] = [
+  { id: 'slabs', parts: ['floor', 'tri_floor', 'roof', 'tri_roof', 'hole', 'tri_hole', 'hatch'] },
+  { id: 'walls', parts: ['wall', 'doorway', 'window', 'garage', 'rampart', 'ramp_wall'] },
+  { id: 'pillars', parts: ['pillar', 'post'] },
+  { id: 'stairs', parts: ['stairs', 'ramp'] },
 ];
 
 const shapeClassFor = (def: BuildItem) => {
@@ -192,6 +174,7 @@ const isTypingTarget = (t: EventTarget | null) =>
 export default function BuilderCanvas({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { addNotification } = useAppStore();
+  const { t } = useI18n();
 
   const [project, setProject] = useState<Project | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -274,8 +257,8 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   const filteredItems = useMemo(() => {
     if (!searchQuery.trim()) return materialItems;
     const q = searchQuery.toLowerCase();
-    return materialItems.filter(i => i.name.toLowerCase().includes(q));
-  }, [searchQuery, materialItems]);
+    return materialItems.filter(i => itemLabel(i, t).toLowerCase().includes(q));
+  }, [searchQuery, materialItems, t]);
 
   // Wczytanie projektu z localStorage
   useEffect(() => {
@@ -466,7 +449,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   const commitPaste = (keepPasting: boolean) => {
     if (!pastePreview) return;
     if (!pastePreview.valid) {
-      addNotification(pastePreview.items.length === 0 ? 'Te elementy już tu stoją' : 'Kopia nachodzi na istniejące elementy', 'error');
+      addNotification(pastePreview.items.length === 0 ? t.editor.pasteSame : t.editor.pasteOverlap, 'error');
       return;
     }
     const newItems = pastePreview.items.map(i => ({ ...i, id: newItemId() }));
@@ -693,9 +676,9 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   if (notFound) {
     return (
       <div className={styles.missing}>
-        <h1>Nie ma takiego projektu</h1>
-        <p>Projekty są zapisywane w przeglądarce, w której je utworzono. Ten link nie pasuje do żadnego z nich.</p>
-        <Link href="/builder" className="btn btn-primary">Moje projekty</Link>
+        <h1>{t.editor.notFoundTitle}</h1>
+        <p>{t.editor.notFoundText}</p>
+        <Link href="/builder" className="btn btn-primary">{t.common.myProjects}</Link>
       </div>
     );
   }
@@ -703,7 +686,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   const gridMinor = 30 * scale;
   const gridMajor = 120 * scale;
 
-  const shortName = (item: BuildItem) => (item.part ? item.name.replace(/ \(.*\)$/, '') : item.name);
+  const shortName = (item: BuildItem) => itemLabel(item, t);
 
   const renderCard = (item: BuildItem) => {
     const count = itemCounts[item.id] || 0;
@@ -735,15 +718,15 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
       onClick={() => selectItem(item.id)}
     >
       {item.shape === 'remover' ? <Hammer size={16} weight="bold" /> : <Bed size={16} weight="bold" />}
-      <span>{item.shape === 'bed' ? 'Łóżko' : item.name}</span>
+      <span>{shortName(item)}</span>
       <kbd>{hotkey}</kbd>
     </button>
   );
 
   const activeMaterial = MATERIALS.find(m => m.id === material);
   const groupedItems = searchQuery.trim()
-    ? [{ label: 'Wyniki', items: filteredItems }]
-    : PART_GROUPS.map(g => ({ label: g.label, items: filteredItems.filter(i => i.part && g.parts.includes(i.part)) }))
+    ? [{ label: t.editor.results, items: filteredItems }]
+    : PART_GROUPS.map(g => ({ label: t.editor.groups[g.id], items: filteredItems.filter(i => i.part && g.parts.includes(i.part)) }))
         .filter(g => g.items.length > 0);
 
   return (
@@ -751,14 +734,14 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
       {/* Górny pasek */}
       <header className={styles.topbar}>
         <div className={styles.topLeft}>
-          <Link href="/builder" className="icon-btn" title="Wróć do projektów">
+          <Link href="/builder" className="icon-btn" title={t.editor.back}>
             <ArrowLeft size={18} weight="bold" />
           </Link>
           <button
             className="icon-btn"
             data-on={!isSidebarCollapsed || undefined}
             onClick={() => setIsSidebarCollapsed(c => !c)}
-            title={isSidebarCollapsed ? 'Pokaż przybornik' : 'Schowaj przybornik'}
+            title={isSidebarCollapsed ? t.editor.showToolbox : t.editor.hideToolbox}
           >
             <SidebarSimple size={18} weight="bold" />
           </button>
@@ -774,49 +757,49 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                 if (e.key === 'Enter') saveName();
                 if (e.key === 'Escape') setIsEditingName(false);
               }}
-              aria-label="Nazwa projektu"
+              aria-label={t.editor.projectName}
             />
           ) : (
             <button
               className={styles.projectName}
               onClick={() => { setEditName(project?.name || ''); setIsEditingName(true); }}
-              title="Zmień nazwę"
+              title={t.editor.rename}
             >
-              <span>{project?.name || 'Wczytywanie'}</span>
+              <span>{project?.name || t.editor.loading}</span>
               <PencilSimple size={14} />
             </button>
           )}
-          <span className={styles.saveState}>{savedAt ? 'Zapisano' : 'Zapis automatyczny'}</span>
+          <span className={styles.saveState}>{savedAt ? t.editor.saved : t.editor.autosave}</span>
         </div>
 
         <div className={styles.topCenter}>
           {is3DMode ? (
             <>
-              <div className={styles.segmented} role="group" aria-label="Pora dnia">
-                {(['day', 'dusk', 'night'] as TimeOfDay[]).map(t => {
-                  const Icon = t === 'day' ? Sun : t === 'dusk' ? SunHorizon : Moon;
+              <div className={styles.segmented} role="group" aria-label={t.editor.timeOfDay}>
+                {(['day', 'dusk', 'night'] as TimeOfDay[]).map(time => {
+                  const Icon = time === 'day' ? Sun : time === 'dusk' ? SunHorizon : Moon;
                   return (
-                    <button key={t} data-on={scene.time === t || undefined} onClick={() => setScene({ time: t })} title={TIME_LABELS[t]}>
-                      <Icon size={14} weight="bold" /> <span className={styles.segLabel}>{TIME_LABELS[t]}</span>
+                    <button key={time} data-on={scene.time === time || undefined} onClick={() => setScene({ time })} title={t.time[time]}>
+                      <Icon size={14} weight="bold" /> <span className={styles.segLabel}>{t.time[time]}</span>
                     </button>
                   );
                 })}
               </div>
-              <div className={styles.segmented} role="group" aria-label="Rodzaj bazy">
+              <div className={styles.segmented} role="group" aria-label={t.editor.baseType}>
                 {(['ground', 'sky'] as const).map(m => (
                   <button key={m} data-on={scene.mode === m || undefined} onClick={() => setScene({ mode: m })}>
-                    {MODE_LABELS[m]}
+                    {t.mode[m]}
                   </button>
                 ))}
               </div>
               {scene.mode === 'sky' && (
-                <div className={styles.segmented} role="group" aria-label="Wysokość skybase">
+                <div className={styles.segmented} role="group" aria-label={t.editor.skyHeight}>
                   {SKY_HEIGHTS.filter(hgt => hgt <= maxSkyHeight).map(hgt => (
                     <button key={hgt} data-on={scene.skyHeight === hgt || undefined} onClick={() => setScene({ skyHeight: hgt })}>
                       {hgt}
                     </button>
                   ))}
-                  <label className={styles.skyInput} title={`Wysokość nad terenem (max ${maxSkyHeight} m przez limit mapy 1024 m)`}>
+                  <label className={styles.skyInput} title={t.editor.skyHeightTitle(maxSkyHeight)}>
                     <input
                       type="number"
                       min={5}
@@ -831,25 +814,25 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
               )}
             </>
           ) : (
-            <div className={styles.segmented} role="group" aria-label="Piętro">
+            <div className={styles.segmented} role="group" aria-label={t.editor.floor}>
               {floorsList.map(lvl => (
                 <button key={lvl} data-on={currentFloor === lvl || undefined} onClick={() => setCurrentFloor(lvl)}>
-                  {lvl === 0 ? 'Parter' : lvl}
+                  {lvl === 0 ? t.editor.groundFloor : lvl}
                 </button>
               ))}
             </div>
           )}
-          <div className={styles.segmented} role="group" aria-label="Widok">
+          <div className={styles.segmented} role="group" aria-label={t.editor.view}>
             <button data-on={!is3DMode || undefined} onClick={() => setIs3DMode(false)}>2D</button>
             <button data-on={is3DMode || undefined} onClick={() => setIs3DMode(true)}>3D</button>
           </div>
         </div>
 
         <div className={styles.topRight}>
-          <button className="icon-btn" onClick={undo} disabled={past.length === 0} title="Cofnij (Ctrl Z)">
+          <button className="icon-btn" onClick={undo} disabled={past.length === 0} title={t.editor.undo}>
             <ArrowCounterClockwise size={18} weight="bold" />
           </button>
-          <button className="icon-btn" onClick={redo} disabled={future.length === 0} title="Ponów (Ctrl Y)">
+          <button className="icon-btn" onClick={redo} disabled={future.length === 0} title={t.editor.redo}>
             <ArrowClockwise size={18} weight="bold" />
           </button>
           <span className={styles.divider} />
@@ -857,28 +840,30 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
             className="icon-btn"
             data-on={showBedAreas || undefined}
             onClick={() => setShowBedAreas(v => !v)}
-            title="Zasięg claimu łóżek"
+            title={t.editor.bedAreas}
           >
             <Bed size={18} weight="bold" />
           </button>
           <button
             className="icon-btn"
             onClick={() => project && exportProject({ ...project, items: placedItems })}
-            title="Eksportuj do pliku"
+            title={t.editor.export}
           >
             <DownloadSimple size={18} weight="bold" />
           </button>
           <button
             className="icon-btn danger"
             onClick={() => {
-              if (placedItems.length > 0 && window.confirm('Wyczyścić cały projekt? Możesz to cofnąć przez Ctrl Z.')) {
+              if (placedItems.length > 0 && window.confirm(t.editor.confirmClear)) {
                 commitAction([]);
               }
             }}
-            title="Wyczyść projekt"
+            title={t.editor.clear}
           >
             <Trash size={18} weight="bold" />
           </button>
+          <span className={styles.divider} />
+          <LangSwitch />
         </div>
       </header>
 
@@ -886,7 +871,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
         {/* Przybornik */}
         <aside className={styles.sidebar} data-collapsed={isSidebarCollapsed || undefined}>
           <div className={styles.tabs} role="tablist">
-            {TABS.filter(t => !(is3DMode && t.id === 'color')).map(({ id: tabId, label, Icon }) => (
+            {TABS.filter(tb => !(is3DMode && tb.id === 'color')).map(({ id: tabId, Icon }) => (
               <button
                 key={tabId}
                 role="tab"
@@ -895,7 +880,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                 onClick={() => setSidebarTab(tabId)}
               >
                 <Icon size={16} weight="bold" />
-                {label}
+                {t.editor.tabs[tabId]}
               </button>
             ))}
           </div>
@@ -909,17 +894,17 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                 </div>
 
                 <div className={styles.groupHead}>
-                  <h3>Materiał</h3>
-                  <span>{activeMaterial?.name}</span>
+                  <h3>{t.editor.material}</h3>
+                  <span>{activeMaterial && t.materials[activeMaterial.id]}</span>
                 </div>
-                <div className={styles.materials} role="radiogroup" aria-label="Materiał">
+                <div className={styles.materials} role="radiogroup" aria-label={t.editor.material}>
                   {MATERIALS.map(m => (
                     <button
                       key={m.id}
                       role="radio"
                       aria-checked={material === m.id}
-                      aria-label={m.name}
-                      title={m.name}
+                      aria-label={t.materials[m.id]}
+                      title={t.materials[m.id]}
                       data-on={material === m.id || undefined}
                       style={{ '--swatch': m.color } as React.CSSProperties}
                       onClick={() => {
@@ -936,12 +921,12 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                   <MagnifyingGlass size={14} weight="bold" />
                   <input
                     type="text"
-                    placeholder="Szukaj elementu"
+                    placeholder={t.editor.search}
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                   />
                   {searchQuery && (
-                    <button onClick={() => setSearchQuery('')} aria-label="Wyczyść wyszukiwanie">
+                    <button onClick={() => setSearchQuery('')} aria-label={t.editor.clearSearch}>
                       <X size={12} weight="bold" />
                     </button>
                   )}
@@ -956,10 +941,10 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                   </section>
                 ))}
                 {filteredItems.length === 0 && (
-                  <p className={styles.muted}>Nic nie pasuje do &quot;{searchQuery}&quot;.</p>
+                  <p className={styles.muted}>{t.editor.noMatch(searchQuery)}</p>
                 )}
                 {material === 'brick' && (
-                  <p className={styles.panelHint}>Cegła nie ma klapy w grze, do otworów użyj klapy z innego materiału.</p>
+                  <p className={styles.panelHint}>{t.editor.brickNoHatch}</p>
                 )}
               </>
             )}
@@ -976,7 +961,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
             {tab === 'color' && (
               <>
                 <p className={styles.panelHint}>
-                  Wybierz kolor, potem kliknij element (albo zaznaczenie), żeby go pomalować. Nowe elementy też dostaną ten kolor.
+                  {t.editor.colorHint}
                 </p>
                 <div className={styles.swatches}>
                   <button
@@ -984,15 +969,15 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                     data-on={selectedColor === '' || undefined}
                     onClick={() => setSelectedColor('')}
                   >
-                    Wyłącz
+                    {t.editor.colorOff}
                   </button>
                   <button
                     className={styles.swatchText}
                     data-on={selectedColor === 'clear' || undefined}
                     onClick={() => setSelectedColor('clear')}
-                    title="Przywróć kolor materiału"
+                    title={t.editor.colorDefaultTitle}
                   >
-                    <X size={12} weight="bold" /> Domyślny
+                    <X size={12} weight="bold" /> {t.editor.colorDefault}
                   </button>
                   {PAINT_COLORS.map(c => (
                     <button
@@ -1001,12 +986,12 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                       data-on={selectedColor === c || undefined}
                       style={{ backgroundColor: c }}
                       onClick={() => setSelectedColor(c)}
-                      aria-label={`Kolor ${c}`}
+                      aria-label={t.editor.colorAria(c)}
                     />
                   ))}
                 </div>
                 <label className={styles.customColor}>
-                  Własny kolor
+                  {t.editor.colorCustom}
                   <input
                     type="color"
                     value={selectedColor.startsWith('#') ? selectedColor : '#8dc46f'}
@@ -1019,10 +1004,10 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
 
             {tab === 'hotkeys' && (
               <dl className={styles.hotkeys}>
-                {HOTKEYS.map(h => (
-                  <div key={h.label}>
-                    <dt>{h.keys.map(k => <kbd key={k}>{k}</kbd>)}</dt>
-                    <dd>{h.label}</dd>
+                {t.editor.hotkeys.map(([keys, label]) => (
+                  <div key={label}>
+                    <dt>{keys.map(k => <kbd key={k}>{k}</kbd>)}</dt>
+                    <dd>{label}</dd>
                   </div>
                 ))}
               </dl>
@@ -1038,7 +1023,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                 <strong>{shortName(activeDef)}</strong>
                 {activeDef.health && <span>{activeDef.health} HP</span>}
               </div>
-              <span className={styles.activeHint}><kbd>R</kbd> obrót</span>
+              <span className={styles.activeHint}><kbd>R</kbd> {t.editor.rotate}</span>
             </div>
           )}
         </aside>
@@ -1190,38 +1175,38 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
 
               {placedItems.length === 0 && !activeItem && (
                 <div className={styles.emptyHint}>
-                  <p>Pusty plan. Wciśnij <kbd>1</kbd> (podłoga) i kliknij w siatkę.</p>
+                  <p>{t.editor.emptyHint[0]} <kbd>1</kbd> {t.editor.emptyHint[1]}</p>
                 </div>
               )}
 
               <div className={styles.statusbar}>
-                <span>{floorLabel(currentFloor)}: {floorCount}</span>
+                <span>{t.editor.floorLabel(currentFloor)}: {floorCount}</span>
                 <span>x {Math.round(mousePos.x)}, y {Math.round(mousePos.y)}</span>
                 <span className={styles.zoom}>
                   <button onClick={() => {
                     const r = containerRef.current?.getBoundingClientRect();
                     if (r) zoomAt(r.width / 2, r.height / 2, Math.max(scale / 1.2, 0.2));
-                  }} aria-label="Oddal">-</button>
+                  }} aria-label={t.editor.zoomOut}>-</button>
                   {Math.round(scale * 100)}%
                   <button onClick={() => {
                     const r = containerRef.current?.getBoundingClientRect();
                     if (r) zoomAt(r.width / 2, r.height / 2, Math.min(scale * 1.2, 4));
-                  }} aria-label="Przybliż">+</button>
+                  }} aria-label={t.editor.zoomIn}>+</button>
                 </span>
                 {pastePreview && (
                   <span className={styles.statusActive}>
-                    Wklejanie {pastePreview.items.length} el.: R obraca, klik wstawia (Shift: kolejna kopia), Esc anuluje
+                    {t.editor.pasteHint(pastePreview.items.length)}
                   </span>
                 )}
                 {activeDef && (
                   <span className={styles.statusActive}>
                     {isRemoverActive
-                      ? 'Wyburzanie: kliknij element'
+                      ? t.editor.demolishHint
                       : activeDef.shape === 'hatch' && !isValidPlacement
-                        ? 'Klapę stawia się w dachu z otworem'
+                        ? t.editor.hatchHint
                         : (activeDef.part === 'floor' || activeDef.part === 'tri_floor') && currentFloor > 0
-                          ? 'Podłogi tylko na parterze, wyżej stawiaj dachy'
-                        : `${activeDef.name}, R obraca`}
+                          ? t.editor.floorHint
+                        : t.editor.placingHint(itemFullLabel(activeDef, t))}
                   </span>
                 )}
               </div>

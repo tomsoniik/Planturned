@@ -865,34 +865,15 @@ export default function Builder3D({
         })}
       </div>
 
-      <div className={styles.help} data-ui>
-        <div className={styles.helpHead}>
-          <span>{isDemolish ? 'Wyburzanie' : activeDef ? activeDef.name : 'Podgląd'}</span>
-          {activeDef && !isDemolish && (
-            <span className={styles.helpState} data-bad={!aim.valid || undefined}>
-              {aim.reason ?? aim.warn ?? (aim.preview ? (aim.valid ? 'pasuje' : 'koliduje') : 'wyceluj w siatkę')}
-            </span>
+      {/* Stan celownika: tylko gdy trzymasz element, skróty są w zakładce Skróty */}
+      {activeDef && !isDemolish && (
+        <div className={styles.aimStatus} data-ui data-bad={!aim.valid || undefined}>
+          {aim.reason ?? aim.warn ?? (aim.preview ? (aim.valid ? 'Pasuje' : 'Koliduje') : 'Wyceluj w siatkę')}
+          {aim.surface !== null && (
+            <span>{aim.surface === 0 ? 'ziemia' : `poziom ${aim.surface}`}, {(aim.surface * H).toFixed(1)} m</span>
           )}
         </div>
-        {activeDef && !isDemolish && aim.surface !== null && (
-          <p className={styles.helpLevel}>
-            {aim.surface === 0 ? 'Na ziemi' : `Kondygnacja ${aim.surface}`}, wysokość {(aim.surface * H).toFixed(1)} m
-          </p>
-        )}
-        <p className={styles.helpLevel}>
-          Limit mapy: {Math.round(limits.limitY)} m nad bazą
-          {limits.oxygenY !== null ? `, tlen do ${Math.round(limits.oxygenY)} m` : ', bez limitu tlenu'}
-        </p>
-        <dl className={styles.helpList}>
-          <dt><kbd>Klik</kbd></dt><dd>przejmij kamerę, Esc oddaje kursor</dd>
-          <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>ruch, Shift szybciej</dd>
-          <dt><kbd>F</kbd></dt><dd>latanie albo chodzenie</dd>
-          <dt><kbd>Spacja</kbd></dt><dd>{walk ? 'skok' : 'w górę (Q w dół)'}</dd>
-          <dt><kbd>LPM</kbd></dt><dd>{isDemolish ? 'wyburz element w celowniku' : 'postaw element'}</dd>
-          <dt><kbd>R</kbd></dt><dd>obrót</dd>
-        </dl>
-        <p className={styles.helpLevel}>Poziom wynika z celownika: górna część ściany to dach nad nią, wierzch dachu to kolejne piętro.</p>
-      </div>
+      )}
     </div>
   );
 }

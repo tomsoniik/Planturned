@@ -655,54 +655,6 @@
   color: var(--text);
 }
 
-/* Koszt */
-.costs {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-}
-
-.costs div {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding: 12px 14px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-}
-
-.costs dt {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.costs dd {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 22px;
-  letter-spacing: -0.02em;
-}
-
-.breakdown {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: 13px;
-}
-
-.breakdown li {
-  display: flex;
-  justify-content: space-between;
-  padding: 5px 0;
-  color: var(--muted);
-}
-
-.breakdown li span:last-child {
-  font-family: var(--font-mono);
-  color: var(--text);
-}
-
 /* Skróty */
 .hotkeys {
   display: grid;

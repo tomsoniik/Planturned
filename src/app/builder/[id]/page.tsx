@@ -18,7 +18,6 @@ import {
   PaintBucket,
   PencilSimple,
   SidebarSimple,
-  Stack,
   Sun,
   Trash,
   X,
@@ -35,9 +34,7 @@ import {
   BED_CLAIM_RADIUS,
   FLOORS,
   MATERIALS,
-  MATERIAL_LABELS,
   REMOVER,
-  computeMaterials,
   computePaste,
   computePlacement,
   findDef,
@@ -61,13 +58,12 @@ const Builder3D = dynamic(() => import('@/components/Builder3D'), {
 
 const PAINT_COLORS = ['#d9534f', '#e8692f', '#e2b93b', '#8dc46f', '#3e8ed0', '#8e6bbf', '#c9ccd1', '#3a3d42'];
 
-type SidebarTab = 'blocks' | 'map' | 'color' | 'costs' | 'hotkeys';
+type SidebarTab = 'blocks' | 'map' | 'color' | 'hotkeys';
 
 const TABS: { id: SidebarTab; label: string; Icon: typeof Cube }[] = [
   { id: 'blocks', label: 'Klocki', Icon: Cube },
   { id: 'map', label: 'Teren', Icon: MapTrifold },
   { id: 'color', label: 'Kolor', Icon: PaintBucket },
-  { id: 'costs', label: 'Koszt', Icon: Stack },
   { id: 'hotkeys', label: 'Skróty', Icon: Keyboard },
 ];
 
@@ -85,6 +81,9 @@ const HOTKEYS: { keys: string[]; label: string }[] = [
   { keys: ['B'], label: 'łóżko' },
   { keys: ['R'], label: 'obrót, inna krawędź' },
   { keys: ['PgUp', 'PgDn'], label: '2D: piętro wyżej, niżej' },
+  { keys: ['Klik'], label: '3D: przejmij kamerę, Esc oddaje kursor' },
+  { keys: ['W', 'A', 'S', 'D'], label: '3D: ruch, Shift szybciej' },
+  { keys: ['Spacja', 'Q'], label: '3D: w górę, w dół (chodząc: skok)' },
   { keys: ['F'], label: '3D: latanie albo chodzenie' },
   { keys: ['Esc'], label: 'odłóż element, odznacz' },
   { keys: ['LPM'], label: 'stawianie, zaznaczanie, przeciąganie' },
@@ -668,7 +667,6 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   };
 
 
-  const totalMaterials = useMemo(() => computeMaterials(placedItems), [placedItems]);
   const floorCount = useMemo(
     () => placedItems.filter(i => (i.floor || 0) === currentFloor).length,
     [placedItems, currentFloor],
@@ -1019,35 +1017,6 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
               </>
             )}
 
-            {tab === 'costs' && (
-              Object.keys(totalMaterials).length === 0 ? (
-                <p className={styles.muted}>Plan jest pusty. Koszt pojawi się po postawieniu pierwszego elementu.</p>
-              ) : (
-                <>
-                  <dl className={styles.costs}>
-                    {Object.entries(totalMaterials).map(([mat, qty]) => (
-                      <div key={mat}>
-                        <dt>{MATERIAL_LABELS[mat] || mat}</dt>
-                        <dd>{qty}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                  <p className={styles.panelHint} style={{ marginTop: 12 }}>
-                    Receptury z plików gry (jeden craft na element). Łóżko nie jest liczone.
-                  </p>
-                  <h3 className={styles.panelSub}>Elementy</h3>
-                  <ul className={styles.breakdown}>
-                    {Object.entries(itemCounts).map(([defId, count]) => (
-                      <li key={defId}>
-                        <span>{findDef(defId)?.name}</span>
-                        <span>{count}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )
-            )}
-
             {tab === 'hotkeys' && (
               <dl className={styles.hotkeys}>
                 {HOTKEYS.map(h => (
@@ -1067,14 +1036,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
               </span>
               <div className={styles.activeInfo}>
                 <strong>{shortName(activeDef)}</strong>
-                <span>
-                  {[
-                    activeDef.health ? `${activeDef.health} HP` : null,
-                    ...Object.entries(activeDef.costs)
-                      .filter(([, q]) => q > 0)
-                      .map(([mat, q]) => `${q} ${(MATERIAL_LABELS[mat] || mat).toLowerCase()}`),
-                  ].filter(Boolean).join(', ')}
-                </span>
+                {activeDef.health && <span>{activeDef.health} HP</span>}
               </div>
               <span className={styles.activeHint}><kbd>R</kbd> obrót</span>
             </div>

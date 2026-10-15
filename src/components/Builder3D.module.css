@@ -1,0 +1,248 @@
+.container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background: var(--bg);
+}
+
+/* Celownik */
+.crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: var(--z-overlay);
+}
+
+.crosshair::before,
+.crosshair::after {
+  content: "";
+  position: absolute;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.6);
+}
+
+.crosshair::before {
+  left: 50%;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  transform: translateX(-50%);
+}
+
+.crosshair::after {
+  top: 50%;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  transform: translateY(-50%);
+}
+
+.crosshair[data-mode="demolish"]::before,
+.crosshair[data-mode="demolish"]::after {
+  background: var(--danger);
+}
+
+/* Hotbar */
+.hotbar {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: rgb(13 14 16 / 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  z-index: var(--z-overlay);
+}
+
+.slot {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  padding: 10px 6px 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.2s var(--ease), border-color 0.2s var(--ease), transform 0.2s var(--ease);
+}
+
+.slot:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.slot:active {
+  transform: scale(0.97);
+}
+
+.slot[data-active] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.slot[data-remover][data-active] {
+  background: rgb(229 72 77 / 0.12);
+  border-color: var(--danger);
+}
+
+.slotKey {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--faint);
+}
+
+.slot[data-active] .slotKey {
+  color: var(--accent);
+}
+
+.slotIcon {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+}
+
+/* Ikona młotka z gry jest ciemna; rozjaśniamy ją na ciemnym tle */
+.slot[data-remover] .slotIcon {
+  filter: invert(0.85);
+}
+
+
+/* Panel podpowiedzi */
+.help {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: 260px;
+  padding: 14px 16px;
+  background: rgb(13 14 16 / 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  font-size: 12px;
+  color: var(--muted);
+  z-index: var(--z-overlay);
+}
+
+.helpHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.helpState {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--accent);
+}
+
+.helpState[data-bad] {
+  color: var(--danger);
+}
+
+.helpLevel {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.helpList + .helpLevel {
+  margin: 10px 0 0;
+}
+
+.modeBadge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgb(13 14 16 / 0.85);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  color: var(--text);
+  z-index: var(--z-overlay);
+}
+
+.modeMap {
+  padding-left: 8px;
+  border-left: 1px solid var(--line-strong);
+  color: var(--muted);
+}
+
+.lockHint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, 28px);
+  padding: 6px 12px;
+  background: rgb(13 14 16 / 0.85);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  color: var(--muted);
+  pointer-events: none;
+  z-index: var(--z-overlay);
+}
+
+.rotateBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.helpList {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 10px;
+  margin: 0;
+  align-items: center;
+}
+
+.helpList dt {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.helpList dd {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .help {
+    display: none;
+  }
+}

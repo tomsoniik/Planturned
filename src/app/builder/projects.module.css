@@ -1,0 +1,165 @@
+.page {
+  padding-top: 56px;
+  padding-bottom: 96px;
+  min-height: calc(100dvh - 64px);
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 40px;
+}
+
+.title {
+  font-size: clamp(2rem, 3.4vw, 2.75rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  font-weight: 600;
+}
+
+.note {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  transition: border-color 0.25s var(--ease);
+}
+
+.card:hover {
+  border-color: var(--line-strong);
+}
+
+.cardLink {
+  display: block;
+}
+
+.thumb {
+  aspect-ratio: 16 / 10;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background-color: #111215;
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 32px 32px;
+  border-bottom: 1px solid var(--line);
+}
+
+.thumbSvg {
+  width: 100%;
+  height: 100%;
+  transition: transform 0.6s var(--ease);
+}
+
+.card:hover .thumbSvg {
+  transform: scale(1.03);
+}
+
+.thumbEmpty {
+  font-size: 13px;
+  color: var(--faint);
+}
+
+.meta {
+  padding: 14px 96px 16px 16px;
+}
+
+.name {
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.details {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.cardActions {
+  position: absolute;
+  right: 10px;
+  bottom: 14px;
+  display: flex;
+  gap: 2px;
+}
+
+.skeleton {
+  aspect-ratio: 16 / 13;
+  background: linear-gradient(100deg, var(--surface) 30%, var(--surface-2) 50%, var(--surface) 70%);
+  background-size: 300% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 48px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+}
+
+.empty h2 {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.empty p {
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+@media (max-width: 1023px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 639px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .empty {
+    padding: 28px;
+  }
+}

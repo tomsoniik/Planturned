@@ -1,0 +1,6 @@
+# Vercel wgrywa też public/game i public/maps (zasoby z gry, w .gitignore wykluczone)
+node_modules
+.next
+.env*
+*.tsbuildinfo
+next-env.d.ts

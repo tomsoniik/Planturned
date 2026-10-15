@@ -64,4 +64,4 @@ docs/             notatki o mechanice gry
 
 tomson ([debskitomal@gmail.com](mailto:debskitomal@gmail.com))
 
-Unturned to znak towarowy Smartly Dressed Games. Projekt fanowski, niezwiązany z twórcami gry. Dane z gry nie są częścią repozytorium; wyjątek to dwa tła w `public/art` (ekrany ładowania z gry: Washington Landscape autorstwa Phobia, Campsite autorstwa IamHonk) i znak zombie.
+Unturned to znak towarowy Smartly Dressed Games. Projekt fanowski, niezwiązany z twórcami gry. Dane z gry nie są częścią repozytorium; wyjątek to tło w `public/art` (ekran ładowania z gry Washington Landscape, autor: Phobia) i znak zombie.

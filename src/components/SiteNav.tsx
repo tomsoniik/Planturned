@@ -21,8 +21,6 @@ export default function SiteNav({ overlay }: { overlay?: boolean }) {
           <BrandMark />
         </Link>
         <nav className={styles.links}>
-          <Link href="/#funkcje">Funkcje</Link>
-          <Link href="/#skroty">Skróty</Link>
           <Link href="/builder">Moje projekty</Link>
         </nav>
         <NewProjectButton />

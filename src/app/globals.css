@@ -227,26 +227,4 @@ kbd {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
   }
-
-  .scroll-words span {
-    opacity: 1 !important;
-  }
-}
-
-/* Wejście przy przewijaniu (progressive enhancement) */
-@supports (animation-timeline: view()) {
-  @media (prefers-reduced-motion: no-preference) {
-    .reveal {
-      animation: reveal linear both;
-      animation-timeline: view();
-      animation-range: entry 0% entry 35%;
-    }
-  }
-}
-
-@keyframes reveal {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
 }

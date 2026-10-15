@@ -1,11 +1,10 @@
-.main {
-  overflow-x: hidden;
-}
-
-/* Hero: ekran ładowania z gry na całą szerokość, przyciemniony zielenią od lewej i od dołu */
+/* Cała strona to jeden ekran: ekran ładowania z gry, przyciemniony zielenią od lewej i od dołu */
 .heroBand {
   position: relative;
   isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
   overflow: hidden;
 }
 
@@ -26,17 +25,17 @@
   z-index: -1;
   background:
     linear-gradient(90deg, rgb(11 16 12 / 0.9) 0%, rgb(11 16 12 / 0.6) 42%, rgb(11 16 12 / 0.12) 100%),
-    linear-gradient(0deg, var(--bg) 0%, rgb(11 16 12 / 0) 38%);
+    linear-gradient(0deg, rgb(11 16 12 / 0.85) 0%, rgb(11 16 12 / 0) 30%);
 }
 
 .hero {
+  flex: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
   align-items: center;
   gap: 56px;
-  min-height: 100dvh;
   padding-top: 112px;
-  padding-bottom: 72px;
+  padding-bottom: 48px;
 }
 
 .heroCopy {
@@ -59,18 +58,18 @@
   color: rgb(233 239 228 / 0.78);
 }
 
-/* Ghost na zdjęciu: ciemne tło pod napisem, żeby kontrast nie zależał od obrazu */
-.heroCtas :global(.btn-ghost) {
-  background: rgb(11 16 12 / 0.55);
-  border-color: rgb(233 239 228 / 0.28);
-  backdrop-filter: blur(8px);
-}
-
 .heroCtas {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 8px;
+}
+
+/* Ghost na zdjęciu: ciemne tło pod napisem, żeby kontrast nie zależał od obrazu */
+.heroCtas :global(.btn-ghost) {
+  background: rgb(11 16 12 / 0.55);
+  border-color: rgb(233 239 228 / 0.28);
+  backdrop-filter: blur(8px);
 }
 
 .heroVisual {
@@ -128,367 +127,37 @@
   }
 }
 
-/* Sekcje */
-.section {
-  padding-top: 128px;
-  padding-bottom: 64px;
-}
-
-.sectionTitle {
-  max-width: 22ch;
-  font-size: clamp(2rem, 3.4vw, 3rem);
-  line-height: 1.08;
-  letter-spacing: -0.03em;
-  font-weight: 600;
-  margin-bottom: 48px;
-}
-
-/* Bento: 3 kolumny, A zajmuje 2x2, B i C prawa kolumna, D cały dół. 4 komórki, zero luk. */
-.bento {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-auto-flow: dense;
-  gap: 12px;
-}
-
-.cell {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 32px;
-  padding: 28px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  transition: border-color 0.3s var(--ease);
-}
-
-.cell:hover {
-  border-color: var(--line-strong);
-}
-
-.cellText {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-width: 46ch;
-}
-
-.cellText h3 {
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.cellText p {
-  font-size: 15px;
-  color: var(--muted);
-}
-
-.cellPlan {
-  grid-column: span 2;
-  grid-row: span 2;
-  padding: 0;
-  overflow: hidden;
-}
-
-.cellPlan .cellText {
-  padding: 0 28px 28px;
-}
-
-/* Siatka planu: drobna co 30 jednostek, gruba co 120 (jak w edytorze) */
-.blueprint {
-  flex: 1;
-  min-height: 300px;
-  display: grid;
-  place-items: center;
-  padding: 32px;
-  background-color: var(--canvas);
-  background-image:
-    linear-gradient(var(--line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--line) 1px, transparent 1px),
-    linear-gradient(rgb(255 255 255 / 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(255 255 255 / 0.03) 1px, transparent 1px);
-  background-size: 96px 96px, 96px 96px, 24px 24px, 24px 24px;
-  border-bottom: 1px solid var(--line);
-}
-
-.planSvg {
-  width: 100%;
-  max-width: 520px;
-  height: auto;
-  max-height: 360px;
-}
-
-.cellWalk {
-  background: linear-gradient(160deg, var(--accent-soft), transparent 60%), var(--surface);
-}
-
-.keyCluster {
-  display: grid;
-  grid-template-columns: repeat(3, 44px);
-  grid-template-rows: repeat(2, 44px);
-  gap: 6px;
-}
-
-.keyCluster kbd {
-  width: 44px;
-  height: 44px;
-  font-size: 14px;
-  border-radius: var(--r-sm);
-}
-
-.keyCluster kbd:nth-child(2) {
-  grid-column: 1;
-  grid-row: 2;
-}
-
-.keyCluster kbd:nth-child(3) {
-  grid-column: 2;
-  grid-row: 2;
-}
-
-.keyCluster kbd:nth-child(4) {
-  grid-column: 3;
-  grid-row: 2;
-}
-
-.keyW {
-  grid-column: 2;
-  background: var(--accent) !important;
-  border-color: var(--accent-hover) !important;
-  color: var(--accent-ink) !important;
-}
-
-.costList {
-  display: grid;
-  grid-template-columns: repeat(3, auto);
-  justify-content: start;
-  gap: 24px;
-  margin: 0;
-}
-
-.costList dt {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.costList dd {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 32px;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
-}
-
-.cellClaim {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  align-items: center;
-  padding: 0 0 0 28px;
-  overflow: hidden;
-}
-
-.claimVisual {
-  height: 260px;
-  display: grid;
-  place-items: center;
-  padding: 16px;
-  background: var(--canvas);
-  border-left: 1px solid var(--line);
-}
-
-.claimVisual .planSvg {
-  height: 100%;
-  max-height: none;
-}
-
-/* Manifest */
-.manifesto {
-  padding-top: 128px;
-  padding-bottom: 64px;
-}
-
-.manifestoText {
-  max-width: 28ch;
-  font-size: clamp(1.75rem, 3.6vw, 3.25rem);
-  line-height: 1.15;
-  letter-spacing: -0.03em;
-  font-weight: 500;
-}
-
-/* Skróty */
-.shortcuts {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 48px;
-}
-
-.shortcutTitle {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--muted);
-  margin-bottom: 16px;
-}
-
-.shortcutGrid {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border-top: 1px solid var(--line-strong);
-}
-
-.shortcut {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 0;
-  font-size: 15px;
-  color: var(--text);
-}
-
-.shortcut + .shortcut {
-  border-top: 1px solid var(--line);
-}
-
-.keys {
-  display: flex;
-  flex-shrink: 0;
-  gap: 4px;
-}
-
-/* Finał: drugi ekran ładowania, ciemniejszy niż hero */
-.final {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  margin-top: 128px;
-  padding-top: 160px;
-  padding-bottom: 96px;
-}
-
-.finalArt {
-  position: absolute;
-  inset: 0;
-  z-index: -2;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: 50% 45%;
-}
-
-.final::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background:
-    linear-gradient(180deg, var(--bg) 0%, rgb(11 16 12 / 0.55) 35%, rgb(11 16 12 / 0.8) 100%);
-}
-
-.finalInner {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 32px;
-}
-
-.finalTitle {
-  font-size: clamp(2.5rem, 6vw, 5.5rem);
-  line-height: 1;
-  letter-spacing: -0.04em;
-  font-weight: 600;
-}
-
-/* Stopka */
+/* Stopka na dole tego samego ekranu */
 .footer {
-  border-top: 1px solid var(--line);
-}
-
-.footerInner {
   display: flex;
   align-items: center;
   gap: 24px;
-  min-height: 72px;
   padding-top: 20px;
   padding-bottom: 20px;
+  border-top: 1px solid rgb(233 239 228 / 0.1);
   font-size: 13px;
-  color: var(--faint);
+  color: rgb(233 239 228 / 0.55);
 }
 
-.footerInner p {
-  margin-right: auto;
-}
-
-.footerInner a:hover {
-  color: var(--text);
-}
-
-/* Mobile: wszystko w jednej kolumnie */
 @media (max-width: 1023px) {
   .hero {
     grid-template-columns: 1fr;
-    min-height: 0;
     gap: 40px;
   }
 
   .heroBand::before {
-    background:
-      linear-gradient(180deg, rgb(11 16 12 / 0.75) 0%, rgb(11 16 12 / 0.55) 40%, var(--bg) 100%);
+    background: linear-gradient(180deg, rgb(11 16 12 / 0.75) 0%, rgb(11 16 12 / 0.55) 40%, var(--bg) 100%);
   }
 }
 
 @media (max-width: 767px) {
   .hero {
-    padding-top: 32px;
+    padding-top: 96px;
   }
 
-  .section,
-  .manifesto {
-    padding-top: 88px;
-  }
-
-  .bento,
-  .shortcuts {
-    grid-template-columns: 1fr;
-  }
-
-  .cellPlan,
-  .cellClaim {
-    grid-column: auto;
-    grid-row: auto;
-  }
-
-  .cellClaim {
-    grid-template-columns: 1fr;
-    padding: 28px 0 0;
-  }
-
-  .cellClaim .cellText {
-    padding: 0 28px;
-  }
-
-  .claimVisual {
-    border-left: 0;
-    border-top: 1px solid var(--line);
-  }
-
-  .final {
-    margin-top: 88px;
-    padding-top: 112px;
-    padding-bottom: 72px;
-  }
-
-  .footerInner {
+  .footer {
     flex-direction: column;
     align-items: flex-start;
-    justify-content: center;
     gap: 6px;
-    height: auto;
-    padding-top: 24px;
-    padding-bottom: 24px;
   }
 }

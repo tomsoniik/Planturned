@@ -309,10 +309,17 @@
   transition: border-color 0.2s var(--ease), background 0.2s var(--ease), transform 0.15s var(--ease);
 }
 
-.toolBtn img {
-  width: 18px;
-  height: 18px;
-  object-fit: contain;
+.toolBtn svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.toolBtn[data-on] svg {
+  color: var(--accent);
+}
+
+.toolBtn[data-remover][data-on] svg {
+  color: var(--danger);
 }
 
 .toolBtn span {
@@ -339,9 +346,6 @@
   transform: scale(0.98);
 }
 
-.toolBtn[data-remover] img {
-  filter: invert(0.85);
-}
 
 .toolBtn[data-on] {
   background: var(--accent-soft);

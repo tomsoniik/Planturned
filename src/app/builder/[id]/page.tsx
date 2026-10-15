@@ -10,6 +10,7 @@ import {
   Bed,
   Cube,
   DownloadSimple,
+  Hammer,
   Keyboard,
   MagnifyingGlass,
   MapTrifold,
@@ -260,7 +261,6 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   const [showUnderlay, setShowUnderlay] = useState(true);
 
   const materialItems = useMemo(() => itemsForMaterial(material), [material]);
-  const hotbar = useMemo(() => [REMOVER, ...materialItems.slice(0, 9)], [materialItems]);
 
   const itemCounts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -734,7 +734,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
       data-remover={item.shape === 'remover' || undefined}
       onClick={() => selectItem(item.id)}
     >
-      <img src={item.icon} alt="" />
+      {item.shape === 'remover' ? <Hammer size={16} weight="bold" /> : <Bed size={16} weight="bold" />}
       <span>{item.shape === 'bed' ? 'Łóżko' : item.name}</span>
       <kbd>{hotkey}</kbd>
     </button>
@@ -1058,7 +1058,6 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
           {is3DMode ? (
             <Builder3D
               placedItems={placedItems}
-              hotbar={hotbar}
               activeItem={activeItem}
               turn={turn}
               showBedAreas={showBedAreas}
@@ -1069,10 +1068,6 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
               onDeleteItem={(itemId) => {
                 commitAction(placedItemsRef.current.filter(i => i.id !== itemId));
                 setSelectedItemIds(prev => prev.filter(i => i !== itemId));
-              }}
-              onSelectActiveItem={(itemId) => {
-                setActiveItem(itemId);
-                setTurn(0);
               }}
             />
           ) : (

@@ -46,88 +46,10 @@
   background: var(--danger);
 }
 
-/* Hotbar */
-.hotbar {
-  position: absolute;
-  bottom: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  background: rgb(11 16 12 / 0.88);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  z-index: var(--z-overlay);
-}
-
-.slot {
-  position: relative;
-  width: 56px;
-  height: 56px;
-  display: grid;
-  place-items: center;
-  padding: 10px 6px 6px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--r-sm);
-  color: var(--muted);
-  cursor: pointer;
-  transition: background 0.2s var(--ease), border-color 0.2s var(--ease), transform 0.2s var(--ease);
-}
-
-.slot:hover {
-  background: var(--surface-2);
-  color: var(--text);
-}
-
-.slot:active {
-  transform: scale(0.97);
-}
-
-.slot[data-active] {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--text);
-}
-
-.slot[data-remover][data-active] {
-  background: rgb(229 72 77 / 0.12);
-  border-color: var(--danger);
-}
-
-.slotKey {
-  position: absolute;
-  top: 4px;
-  left: 6px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--faint);
-}
-
-.slot[data-active] .slotKey {
-  color: var(--accent);
-}
-
-.slotIcon {
-  width: 34px;
-  height: 34px;
-  object-fit: contain;
-}
-
-/* Ikona młotka z gry jest ciemna; rozjaśniamy ją na ciemnym tle */
-.slot[data-remover] .slotIcon {
-  filter: invert(0.85);
-}
-
-
-/* Panel podpowiedzi */
-/* Stan celownika nad paskiem: krótko, bez listy skrótów */
+/* Stan celownika u dołu: trzymany element i czy pasuje */
 .aimStatus {
   position: absolute;
-  bottom: 84px;
+  bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
   display: inline-flex;
@@ -147,6 +69,11 @@
 
 .aimStatus[data-bad] {
   color: var(--danger);
+}
+
+.aimStatus strong {
+  font-weight: 600;
+  color: var(--text);
 }
 
 .aimStatus span {

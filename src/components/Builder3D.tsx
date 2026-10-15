@@ -643,7 +643,6 @@ function AimController({
 
 interface Builder3DProps {
   placedItems: PlacedItem[];
-  hotbar: BuildItem[];
   activeItem: string | null;
   turn: number;
   showBedAreas: boolean;
@@ -652,12 +651,10 @@ interface Builder3DProps {
   site?: Site;
   onPlaceItem: (item: Omit<PlacedItem, 'id'>) => void;
   onDeleteItem: (id: string) => void;
-  onSelectActiveItem: (id: string | null) => void;
 }
 
 export default function Builder3D({
   placedItems,
-  hotbar,
   activeItem,
   turn,
   showBedAreas,
@@ -666,7 +663,6 @@ export default function Builder3D({
   site,
   onPlaceItem,
   onDeleteItem,
-  onSelectActiveItem,
 }: Builder3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const models = useGameModels();
@@ -844,30 +840,10 @@ export default function Builder3D({
         {site && <span className={styles.modeMap}>{site.map}</span>}
       </div>
 
-      <div className={styles.hotbar} data-ui>
-        {hotbar.map((item, idx) => {
-          const isActive = activeItem === item.id;
-          const isRemover = item.shape === 'remover';
-          return (
-            <button
-              key={item.id}
-              className={styles.slot}
-              data-active={isActive || undefined}
-              data-remover={isRemover || undefined}
-              onClick={() => onSelectActiveItem(isActive ? null : item.id)}
-              title={item.name}
-            >
-              <span className={styles.slotKey}>{isRemover ? 'X' : idx}</span>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={item.icon} alt="" className={styles.slotIcon} />
-            </button>
-          );
-        })}
-      </div>
-
       {/* Stan celownika: tylko gdy trzymasz element, skróty są w zakładce Skróty */}
       {activeDef && !isDemolish && (
         <div className={styles.aimStatus} data-ui data-bad={!aim.valid || undefined}>
+          <strong>{activeDef.name.replace(/ \(.*\)$/, '')}</strong>
           {aim.reason ?? aim.warn ?? (aim.preview ? (aim.valid ? 'Pasuje' : 'Koliduje') : 'Wyceluj w siatkę')}
           {aim.surface !== null && (
             <span>{aim.surface === 0 ? 'ziemia' : `poziom ${aim.surface}`}, {(aim.surface * H).toFixed(1)} m</span>

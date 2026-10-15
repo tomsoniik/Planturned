@@ -63,7 +63,7 @@
   display: grid;
   place-items: center;
   padding: 20px;
-  background-color: #111215;
+  background-color: var(--canvas);
   background-image:
     linear-gradient(var(--line) 1px, transparent 1px),
     linear-gradient(90deg, var(--line) 1px, transparent 1px);

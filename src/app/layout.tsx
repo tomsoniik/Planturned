@@ -15,12 +15,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Base Planner - planer baz do Unturned",
+  title: "Planturned - planer baz do Unturned",
   description: "Zaprojektuj bazę do Unturned w 2D i obejrzyj ją w 3D. Działa w przeglądarce, bez konta.",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0d0e10",
+  themeColor: "#0b100c",
 };
 
 export default function RootLayout({

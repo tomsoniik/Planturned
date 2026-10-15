@@ -108,7 +108,7 @@ function Piece({ def, model, color, clip, ghost, highlight, itemId }: PieceProps
   const palette = !!model?.hasColors && highlight !== 'target';
   const material = ghost ? (
     <meshStandardMaterial
-      color={ghost === 'ok' ? '#e8692f' : '#e5484d'}
+      color={ghost === 'ok' ? '#8dc46f' : '#e5484d'}
       transparent
       opacity={0.45}
       depthWrite={false}
@@ -119,7 +119,7 @@ function Piece({ def, model, color, clip, ghost, highlight, itemId }: PieceProps
       key={`${palette ? 'palette' : 'flat'}-${clip ? 'clip' : 'full'}`}
       vertexColors={palette}
       color={highlight === 'target' ? '#e5484d' : palette ? '#ffffff' : color}
-      emissive={highlight === 'selected' ? '#e8692f' : highlight === 'target' ? '#7a1c1f' : '#000000'}
+      emissive={highlight === 'selected' ? '#8dc46f' : highlight === 'target' ? '#7a1c1f' : '#000000'}
       emissiveIntensity={highlight ? 0.35 : 0}
       clippingPlanes={clip}
       // Przycięta podłoga nie ma spodu: od dołu pokazujemy wnętrze płyty, inaczej skybase jest przezroczysty.
@@ -198,7 +198,7 @@ export function Item3D({
       {def.shape === 'bed' && showBedAreas && (
         <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <ringGeometry args={[27 - 0.15, 27, 96]} />
-          <meshBasicMaterial color="#e8692f" transparent opacity={0.7} depthWrite={false} />
+          <meshBasicMaterial color="#8dc46f" transparent opacity={0.7} depthWrite={false} />
         </mesh>
       )}
     </group>

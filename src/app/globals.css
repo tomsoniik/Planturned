@@ -1,27 +1,30 @@
 /*
-  Base Planner - tokeny.
+  Planturned - tokeny.
   Motyw: tylko ciemny (edytor to ciemne płótno; strona i edytor mają jeden wygląd).
   Zaokrąglenia: --r-sm 6px (przyciski, pola, klawisze), --r-md 8px (panele, karty).
-  Akcent: jeden, spalony pomarańcz. Czerwony tylko dla akcji niszczących.
+  Neutralne: chłodna zieleń lasu. Akcent: jeden, zieleń liści (jak zombie z logo).
+  Czerwony tylko dla akcji niszczących.
 */
 :root {
   color-scheme: dark;
 
-  --bg: #0d0e10;
-  --surface: #141518;
-  --surface-2: #1b1d21;
-  --surface-3: #24272c;
-  --line: rgb(255 255 255 / 0.08);
-  --line-strong: rgb(255 255 255 / 0.15);
+  --bg: #0b100c;
+  --surface: #111813;
+  --surface-2: #172019;
+  --surface-3: #202b22;
+  --canvas: #0e140f;
+  --line: rgb(214 236 205 / 0.08);
+  --line-strong: rgb(214 236 205 / 0.16);
 
-  --text: #ecebe7;
-  --muted: #9a9ca1;
-  --faint: #6b6e74;
+  --text: #e9efe4;
+  --muted: #9aa894;
+  --faint: #66745f;
 
-  --accent: #e8692f;
-  --accent-hover: #f17b45;
-  --accent-ink: #1c0d05;
-  --accent-soft: rgb(232 105 47 / 0.12);
+  --accent: #8dc46f;
+  --accent-hover: #a2d486;
+  --accent-ink: #0d1a08;
+  --accent-soft: rgb(141 196 111 / 0.13);
+  --accent-rgb: 141 196 111;
   --danger: #e5484d;
 
   --r-sm: 6px;

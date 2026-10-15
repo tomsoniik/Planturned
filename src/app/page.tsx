@@ -36,12 +36,12 @@ function ShortcutGroup({ title, items }: { title: string; items: typeof SHORTCUT
       <ul className={styles.shortcutGrid}>
         {items.map((s) => (
           <li key={s.label} className={styles.shortcut}>
+            <span>{s.label}</span>
             <span className={styles.keys}>
               {s.keys.map((k) => (
                 <kbd key={k}>{k}</kbd>
               ))}
             </span>
-            <span>{s.label}</span>
           </li>
         ))}
       </ul>
@@ -52,8 +52,11 @@ function ShortcutGroup({ title, items }: { title: string; items: typeof SHORTCUT
 export default function Home() {
   return (
     <>
-      <SiteNav />
+      <SiteNav overlay />
       <main className={styles.main}>
+        <div className={styles.heroBand}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/art/washington.jpg" alt="" className={styles.heroArt} fetchPriority="high" />
         <section className={`wrap ${styles.hero}`}>
           <div className={styles.heroCopy}>
             <h1 className={`${styles.heroTitle} ${styles.enter}`}>Zaplanuj bazę, zanim ją postawisz.</h1>
@@ -75,6 +78,7 @@ export default function Home() {
             <p className={styles.previewCaption}>Przykładowa baza 4x3. Przeciągnij, żeby obrócić.</p>
           </div>
         </section>
+        </div>
 
         <section id="funkcje" className={`wrap ${styles.section}`}>
           <Reveal>
@@ -155,8 +159,10 @@ export default function Home() {
           </Reveal>
         </section>
 
-        <section className={`wrap ${styles.final}`}>
-          <Reveal className={styles.finalInner}>
+        <section className={styles.final}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/art/campsite.jpg" alt="" className={styles.finalArt} decoding="async" />
+          <Reveal className={`wrap ${styles.finalInner}`}>
             <h2 className={styles.finalTitle}>Pierwszy fundament czeka.</h2>
             <NewProjectButton size="lg" />
           </Reveal>
@@ -166,7 +172,10 @@ export default function Home() {
       <footer className={styles.footer}>
         <div className={`wrap ${styles.footerInner}`}>
           <BrandMark />
-          <p>Projekt fanowski. Unturned należy do Smartly Dressed Games.</p>
+          <p>
+            Projekt fanowski. Unturned należy do Smartly Dressed Games. Tła: ekrany ładowania z gry, Washington
+            Landscape (Phobia) i Campsite (IamHonk).
+          </p>
           <Link href="/builder">Moje projekty</Link>
         </div>
       </footer>

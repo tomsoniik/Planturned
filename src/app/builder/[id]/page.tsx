@@ -50,6 +50,7 @@ import {
   snapGroupDelta,
   type BuildItem,
   type MaterialId,
+  type PartId,
   type PlacedItem,
 } from '@/lib/builder';
 
@@ -58,7 +59,7 @@ const Builder3D = dynamic(() => import('@/components/Builder3D'), {
   loading: () => <div className={styles.loading3d}>Ładowanie widoku 3D</div>,
 });
 
-const PAINT_COLORS = ['#d9534f', '#e8692f', '#e2b93b', '#4cc38a', '#3e8ed0', '#8e6bbf', '#c9ccd1', '#3a3d42'];
+const PAINT_COLORS = ['#d9534f', '#e8692f', '#e2b93b', '#8dc46f', '#3e8ed0', '#8e6bbf', '#c9ccd1', '#3a3d42'];
 
 type SidebarTab = 'blocks' | 'map' | 'color' | 'costs' | 'hotkeys';
 
@@ -68,6 +69,14 @@ const TABS: { id: SidebarTab; label: string; Icon: typeof Cube }[] = [
   { id: 'color', label: 'Kolor', Icon: PaintBucket },
   { id: 'costs', label: 'Koszt', Icon: Stack },
   { id: 'hotkeys', label: 'Skróty', Icon: Keyboard },
+];
+
+/** Grupy w przyborniku. Klawisze 1-9 dalej idą po kolejności PARTS. */
+const PART_GROUPS: { label: string; parts: PartId[] }[] = [
+  { label: 'Podłogi i dachy', parts: ['floor', 'tri_floor', 'roof', 'tri_roof', 'hole', 'tri_hole', 'hatch'] },
+  { label: 'Ściany', parts: ['wall', 'doorway', 'window', 'garage', 'rampart', 'ramp_wall'] },
+  { label: 'Filary', parts: ['pillar', 'post'] },
+  { label: 'Schody i rampy', parts: ['stairs', 'ramp'] },
 ];
 
 const HOTKEYS: { keys: string[]; label: string }[] = [
@@ -696,28 +705,48 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   const gridMinor = 30 * scale;
   const gridMajor = 120 * scale;
 
-  const renderCard = (item: BuildItem, hotkey?: string) => {
+  const shortName = (item: BuildItem) => (item.part ? item.name.replace(/ \(.*\)$/, '') : item.name);
+
+  const renderCard = (item: BuildItem) => {
     const count = itemCounts[item.id] || 0;
-    const isActive = activeItem === item.id;
+    const idx = materialItems.indexOf(item);
     return (
       <button
         key={item.id}
         className={styles.itemCard}
-        data-on={isActive || undefined}
-        data-remover={item.shape === 'remover' || undefined}
+        data-on={activeItem === item.id || undefined}
         onClick={() => selectItem(item.id)}
-        title={item.health ? `${item.name}, wytrzymałość ${item.health}` : item.name}
+        title={item.health ? `${shortName(item)}, ${item.health} HP` : shortName(item)}
       >
-        {hotkey && <span className={styles.itemKey}>{hotkey}</span>}
-        {item.health && <span className={styles.itemNote}>{item.health} HP</span>}
+        {idx >= 0 && idx < 9 && <kbd className={styles.itemKey}>{idx + 1}</kbd>}
         {count > 0 && <span className={styles.itemCount}>{count}</span>}
         <span className={styles.itemThumb}>
           <img src={item.icon} alt="" />
         </span>
-        <span className={styles.itemName}>{item.part ? item.name.replace(/ \(.*\)$/, '') : item.name}</span>
+        <span className={styles.itemName}>{shortName(item)}</span>
       </button>
     );
   };
+
+  const renderTool = (item: BuildItem, hotkey: string) => (
+    <button
+      key={item.id}
+      className={styles.toolBtn}
+      data-on={activeItem === item.id || undefined}
+      data-remover={item.shape === 'remover' || undefined}
+      onClick={() => selectItem(item.id)}
+    >
+      <img src={item.icon} alt="" />
+      <span>{item.shape === 'bed' ? 'Łóżko' : item.name}</span>
+      <kbd>{hotkey}</kbd>
+    </button>
+  );
+
+  const activeMaterial = MATERIALS.find(m => m.id === material);
+  const groupedItems = searchQuery.trim()
+    ? [{ label: 'Wyniki', items: filteredItems }]
+    : PART_GROUPS.map(g => ({ label: g.label, items: filteredItems.filter(i => i.part && g.parts.includes(i.part)) }))
+        .filter(g => g.items.length > 0);
 
   return (
     <div className={styles.shell}>
@@ -877,25 +906,31 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
             {tab === 'blocks' && (
               <>
                 <div className={styles.tools}>
-                  {renderCard(REMOVER, 'X')}
-                  {renderCard(BED, 'B')}
+                  {renderTool(REMOVER, 'X')}
+                  {renderTool(BED, 'B')}
                 </div>
 
-                <div className={styles.materials} role="group" aria-label="Materiał">
+                <div className={styles.groupHead}>
+                  <h3>Materiał</h3>
+                  <span>{activeMaterial?.name}</span>
+                </div>
+                <div className={styles.materials} role="radiogroup" aria-label="Materiał">
                   {MATERIALS.map(m => (
                     <button
                       key={m.id}
+                      role="radio"
+                      aria-checked={material === m.id}
+                      aria-label={m.name}
+                      title={m.name}
                       data-on={material === m.id || undefined}
+                      style={{ '--swatch': m.color } as React.CSSProperties}
                       onClick={() => {
                         setMaterial(m.id);
                         // zachowaj typ elementu przy zmianie materiału, jeśli istnieje
                         const part = activeDef?.part;
                         if (part) setActiveItem(itemsForMaterial(m.id).find(i => i.part === part)?.id ?? null);
                       }}
-                    >
-                      <span className={styles.materialSwatch} style={{ backgroundColor: m.color }} />
-                      {m.name}
-                    </button>
+                    />
                   ))}
                 </div>
 
@@ -907,17 +942,24 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                   />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery('')} aria-label="Wyczyść wyszukiwanie">
+                      <X size={12} weight="bold" />
+                    </button>
+                  )}
                 </label>
 
-                <div className={styles.itemsGrid}>
-                  {filteredItems.map(item => {
-                    const idx = materialItems.indexOf(item);
-                    return renderCard(item, idx < 9 ? String(idx + 1) : undefined);
-                  })}
-                  {filteredItems.length === 0 && (
-                    <p className={styles.muted}>Nic nie pasuje do &quot;{searchQuery}&quot;.</p>
-                  )}
-                </div>
+                {groupedItems.map(g => (
+                  <section key={g.label} className={styles.group}>
+                    <div className={styles.groupHead}>
+                      <h3>{g.label}</h3>
+                    </div>
+                    <div className={styles.itemsGrid}>{g.items.map(renderCard)}</div>
+                  </section>
+                ))}
+                {filteredItems.length === 0 && (
+                  <p className={styles.muted}>Nic nie pasuje do &quot;{searchQuery}&quot;.</p>
+                )}
                 {material === 'brick' && (
                   <p className={styles.panelHint}>Cegła nie ma klapy w grze, do otworów użyj klapy z innego materiału.</p>
                 )}
@@ -969,7 +1011,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                   Własny kolor
                   <input
                     type="color"
-                    value={selectedColor.startsWith('#') ? selectedColor : '#e8692f'}
+                    value={selectedColor.startsWith('#') ? selectedColor : '#8dc46f'}
                     onChange={e => setSelectedColor(e.target.value)}
                   />
                   <code>{selectedColor.startsWith('#') ? selectedColor : '-'}</code>
@@ -1017,6 +1059,26 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
               </dl>
             )}
           </div>
+
+          {tab === 'blocks' && activeDef && !isRemoverActive && (
+            <div className={styles.activeBar}>
+              <span className={styles.activeThumb}>
+                <img src={activeDef.icon} alt="" />
+              </span>
+              <div className={styles.activeInfo}>
+                <strong>{shortName(activeDef)}</strong>
+                <span>
+                  {[
+                    activeDef.health ? `${activeDef.health} HP` : null,
+                    ...Object.entries(activeDef.costs)
+                      .filter(([, q]) => q > 0)
+                      .map(([mat, q]) => `${q} ${(MATERIAL_LABELS[mat] || mat).toLowerCase()}`),
+                  ].filter(Boolean).join(', ')}
+                </span>
+              </div>
+              <span className={styles.activeHint}><kbd>R</kbd> obrót</span>
+            </div>
+          )}
         </aside>
 
         {/* Płótno */}

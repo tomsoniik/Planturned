@@ -1,6 +1,6 @@
-# Base Planner (Unturned)
+# Planturned
 
-Planer baz do gry **Unturned**: rzut 2D ze snapowaniem i scena 3D z oryginalnymi modelami struktur, postawiona na terenie wybranej mapy z gry.
+Planturned to planer baz do gry **Unturned**: rzut 2D ze snapowaniem i scena 3D z oryginalnymi modelami struktur, postawiona na terenie wybranej mapy z gry.
 
 **Demo:** [base-planner-unturned.vercel.app](https://base-planner-unturned.vercel.app)
 
@@ -64,4 +64,4 @@ docs/             notatki o mechanice gry
 
 tomson ([debskitomal@gmail.com](mailto:debskitomal@gmail.com))
 
-Unturned to znak towarowy Smartly Dressed Games. Projekt fanowski, niezwiązany z twórcami gry. Pliki gry nie są częścią repozytorium.
+Unturned to znak towarowy Smartly Dressed Games. Projekt fanowski, niezwiązany z twórcami gry. Dane z gry nie są częścią repozytorium; wyjątek to dwa tła w `public/art` (ekrany ładowania z gry: Washington Landscape autorstwa Phobia, Campsite autorstwa IamHonk) i znak zombie.

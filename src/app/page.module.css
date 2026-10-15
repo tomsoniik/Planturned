@@ -1,18 +1,42 @@
 .main {
   overflow-x: hidden;
-  /* Delikatna poświata akcentu w górnym rogu, nieruchoma */
-  background: radial-gradient(60% 40% at 85% 0%, rgb(232 105 47 / 0.07), transparent 70%);
 }
 
-/* Hero */
+/* Hero: ekran ładowania z gry na całą szerokość, przyciemniony zielenią od lewej i od dołu */
+.heroBand {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.heroArt {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 60%;
+}
+
+.heroBand::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(90deg, rgb(11 16 12 / 0.9) 0%, rgb(11 16 12 / 0.6) 42%, rgb(11 16 12 / 0.12) 100%),
+    linear-gradient(0deg, var(--bg) 0%, rgb(11 16 12 / 0) 38%);
+}
+
 .hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
   align-items: center;
   gap: 56px;
-  min-height: calc(100dvh - 64px);
-  padding-top: 48px;
-  padding-bottom: 64px;
+  min-height: 100dvh;
+  padding-top: 112px;
+  padding-bottom: 72px;
 }
 
 .heroCopy {
@@ -32,7 +56,14 @@
   max-width: 44ch;
   font-size: 18px;
   line-height: 1.55;
-  color: var(--muted);
+  color: rgb(233 239 228 / 0.78);
+}
+
+/* Ghost na zdjęciu: ciemne tło pod napisem, żeby kontrast nie zależał od obrazu */
+.heroCtas :global(.btn-ghost) {
+  background: rgb(11 16 12 / 0.55);
+  border-color: rgb(233 239 228 / 0.28);
+  backdrop-filter: blur(8px);
 }
 
 .heroCtas {
@@ -51,10 +82,11 @@
 .previewFrame {
   position: relative;
   aspect-ratio: 4 / 3;
-  border: 1px solid var(--line);
+  border: 1px solid rgb(233 239 228 / 0.14);
   border-radius: var(--r-md);
   overflow: hidden;
   background: var(--surface);
+  box-shadow: 0 24px 60px rgb(4 8 5 / 0.45);
   cursor: grab;
 }
 
@@ -81,7 +113,7 @@
 
 .previewCaption {
   font-size: 13px;
-  color: var(--faint);
+  color: rgb(233 239 228 / 0.6);
 }
 
 /* Wejście hero w CSS: widoczne bez czekania na JS */
@@ -171,7 +203,7 @@
   display: grid;
   place-items: center;
   padding: 32px;
-  background-color: #111215;
+  background-color: var(--canvas);
   background-image:
     linear-gradient(var(--line) 1px, transparent 1px),
     linear-gradient(90deg, var(--line) 1px, transparent 1px),
@@ -263,7 +295,7 @@
   display: grid;
   place-items: center;
   padding: 16px;
-  background: #111215;
+  background: var(--canvas);
   border-left: 1px solid var(--line);
 }
 
@@ -301,35 +333,59 @@
 }
 
 .shortcutGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
+  border-top: 1px solid var(--line-strong);
 }
 
 .shortcut {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  font-size: 14px;
-  color: var(--muted);
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.shortcut + .shortcut {
+  border-top: 1px solid var(--line);
 }
 
 .keys {
   display: flex;
+  flex-shrink: 0;
   gap: 4px;
 }
 
-/* Finał */
+/* Finał: drugi ekran ładowania, ciemniejszy niż hero */
 .final {
-  padding-top: 128px;
-  padding-bottom: 128px;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin-top: 128px;
+  padding-top: 160px;
+  padding-bottom: 96px;
+}
+
+.finalArt {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 45%;
+}
+
+.final::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(180deg, var(--bg) 0%, rgb(11 16 12 / 0.55) 35%, rgb(11 16 12 / 0.8) 100%);
 }
 
 .finalInner {
@@ -338,8 +394,6 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: 32px;
-  padding-top: 48px;
-  border-top: 1px solid var(--line);
 }
 
 .finalTitle {
@@ -358,7 +412,9 @@
   display: flex;
   align-items: center;
   gap: 24px;
-  height: 72px;
+  min-height: 72px;
+  padding-top: 20px;
+  padding-bottom: 20px;
   font-size: 13px;
   color: var(--faint);
 }
@@ -377,6 +433,11 @@
     grid-template-columns: 1fr;
     min-height: 0;
     gap: 40px;
+  }
+
+  .heroBand::before {
+    background:
+      linear-gradient(180deg, rgb(11 16 12 / 0.75) 0%, rgb(11 16 12 / 0.55) 40%, var(--bg) 100%);
   }
 }
 
@@ -416,8 +477,9 @@
   }
 
   .final {
-    padding-top: 88px;
-    padding-bottom: 88px;
+    margin-top: 88px;
+    padding-top: 112px;
+    padding-bottom: 72px;
   }
 
   .footerInner {

@@ -1,5 +1,5 @@
 /*
-  Model klocków Base Plannera.
+  Model klocków Planturned.
 
   Struktury, ID, kolory, receptury i wymiary pochodzą z plików gry Unturned
   (Bundles/Items/Structures/*.dat i modele z core.masterbundle, patrz scripts/export_game_data.py).

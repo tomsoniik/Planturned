@@ -13,7 +13,9 @@ export default function BasePreview3D({ items }: { items: PlacedItem[] }) {
 
   return (
     <Canvas shadows="percentage" camera={{ position: [34, 27, 40], fov: 36 }} dpr={[1, 2]} gl={{ preserveDrawingBuffer: true }}>
-      <color attach="background" args={['#141518']} />
+      <color attach="background" args={['#111813']} />
+      {/* mgła w kolorze tła: krawędź ziemi znika zamiast tworzyć elipsę */}
+      <fog attach="fog" args={['#111813', 55, 95]} />
       <ambientLight intensity={0.5} />
       <directionalLight
         position={[20, 30, 12]}
@@ -22,11 +24,11 @@ export default function BasePreview3D({ items }: { items: PlacedItem[] }) {
         shadow-mapSize={[1024, 1024]}
         color="#fff4e8"
       />
-      <hemisphereLight args={['#e9eef5', '#2a2622', 0.9]} />
+      <hemisphereLight args={['#eef3e6', '#2c3a24', 0.9]} />
 
       <mesh position={[0, -0.05, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <circleGeometry args={[40, 64]} />
-        <meshStandardMaterial color="#17181b" roughness={0.95} />
+        <circleGeometry args={[60, 64]} />
+        <meshStandardMaterial color="#2b3d24" roughness={0.95} />
       </mesh>
       <ContactShadows position={[0, 0, 0]} opacity={0.5} scale={40} blur={2.2} far={8} />
 

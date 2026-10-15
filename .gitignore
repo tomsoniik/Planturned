@@ -53,3 +53,4 @@ next-env.d.ts
 # python
 __pycache__/
 /public/unturned
+/public/777_addons/images/background.png

@@ -68,7 +68,7 @@ The app works without the export too: structures are simple boxes and the Terrai
 `npm run export:game` runs `scripts/export_game_data.py`. The script finds Unturned in your Steam libraries on its own.
 You can also pass the path: `python scripts/export_game_data.py "D:\Steam\steamapps\common\Unturned"`.
 
-Requirements: Python 3.10+ and `pip install UnityPy numpy pillow`.
+Requirements: Python 3.10+ and `pip install UnityPy numpy pillow`. Ground textures and roads only: `python scripts/export_game_data.py --terrain`.
 
 What it writes (game files, for local use only, listed in `.gitignore`):
 
@@ -81,6 +81,8 @@ What it writes (game files, for local use only, listed in `.gitignore`):
 | `public/maps/<Map>/meta.json` | map size (`Level.dat`), water level (`Environment/Lighting.dat`), height limits and no-build zones (`Level.hierarchy`) |
 | `public/maps/<Map>/scene.json` | buildings, objects and trees 1:1 (`Level/Objects.dat`, `Terrain/Trees.dat`) |
 | `public/game/scenery/<guid>.json` | object and tree models (LOD0, palette colors) |
+| `public/maps/<Map>/splat_N.png`, `public/game/terrain/*.png` | ground textures and their weights every 4 m (`Landscape/Splatmaps`, landscape materials in `Level.hierarchy`) |
+| `public/maps/<Map>/roads.json`, `roads/*.png` | roads rebuilt from `Environment/Paths.dat`, `Roads.dat`, `Roads.unity3d` |
 
 Sizes match the game models: floor 6 × 6 m, level 4.5 m, wall 5.6 × 4.25 m. In the plan, 1 m = 10 units.
 

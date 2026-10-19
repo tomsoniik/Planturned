@@ -16,6 +16,21 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.4.0',
+    date: '2026-10-19',
+    title: { pl: 'Teren i drogi jak w grze', en: 'Ground and roads like in the game' },
+    changes: [
+      {
+        pl: 'W 3D ziemia ma prawdziwe tekstury z gry (trawa, ziemia, żwir, piasek, śnieg) mieszane tak jak w Unturned. Ostra z bliska, bez rozmytych plam z mapy satelitarnej.',
+        en: 'In 3D the ground uses the real game textures (grass, dirt, gravel, sand, snow) blended like in Unturned. Sharp up close, no blurry blotches from the satellite map.',
+      },
+      {
+        pl: 'Drogi odtworzone z plików mapy: asfalt z pasami, ścieżki, tory i autostrady, na tej samej wysokości co teren.',
+        en: 'Roads rebuilt from the map files: asphalt with lane markings, trails, tracks and highways, following the terrain.',
+      },
+    ],
+  },
+  {
     version: '0.3.0',
     date: '2026-10-19',
     title: { pl: 'Płynny plan 2D i własne klawisze', en: 'Smooth 2D plan and custom keys' },

@@ -25,6 +25,7 @@ import { useT } from './I18nProvider';
 import { keyLabel, useKeybinds } from '@/lib/keybinds';
 import { Meadow, SkyAndLight, meadowHeight } from './Scenery';
 import MapObjects from './MapObjects';
+import { GameRoads, useGroundMaterial } from './GameGround';
 
 // --- Wymiary w metrach (zgodne z modelami gry) ---
 export const SCALE = 1 / 10; // jednostki planu -> metry
@@ -212,6 +213,8 @@ export function Item3D({
 
 function TerrainPatch({ site, map }: { site: Site; map: MapData }) {
   const { meta, heightAt } = map;
+  // Tekstury terenu z gry (splatmapy); bez nich (stary eksport) satelita z Map.png
+  const ground = useGroundMaterial(map, site);
 
   const geometry = useMemo(() => {
     const seg = Math.round(TERRAIN_SPAN / 2.5);
@@ -228,6 +231,7 @@ function TerrainPatch({ site, map }: { site: Site; map: MapData }) {
 
   const [texture, setTexture] = useState<THREE.CanvasTexture | null>(null);
   useEffect(() => {
+    if (meta.terrain) return;
     let alive = true;
     const half = TERRAIN_SPAN / 2;
     const metersPerPx = meta.extent / (meta.tiles * 512);
@@ -268,11 +272,16 @@ function TerrainPatch({ site, map }: { site: Site; map: MapData }) {
 
   return (
     <>
-      <mesh geometry={geometry} receiveShadow userData={{ terrain: true }}>
-        {/* key: materiał musi się przekompilować, gdy dochodzi tekstura (map z null na teksturę) */}
-        <meshStandardMaterial key={texture ? 'tex' : 'plain'} map={texture} color={texture ? '#ffffff' : '#3c4a2c'} roughness={1} />
-      </mesh>
-      <FarTerrain site={site} map={map} />
+      {ground ? (
+        <mesh geometry={geometry} material={ground} receiveShadow userData={{ terrain: true }} />
+      ) : (
+        <mesh geometry={geometry} receiveShadow userData={{ terrain: true }}>
+          {/* key: materiał musi się przekompilować, gdy dochodzi tekstura (map z null na teksturę) */}
+          <meshStandardMaterial key={texture ? 'tex' : 'plain'} map={texture} color={texture ? '#ffffff' : '#3c4a2c'} roughness={1} />
+        </mesh>
+      )}
+      <GameRoads site={site} map={map} span={TERRAIN_SPAN / 2 + 40} />
+      <FarTerrain site={site} map={map} ground={ground} />
       {meta.seaLevel !== null && (
         <mesh position={[0, meta.seaLevel - site.elevation, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[meta.extent * 2.5, meta.extent * 2.5]} />
@@ -289,7 +298,7 @@ const FAR_STEP = 16; // rozdzielczość terenu całej mapy (m)
  * Reszta mapy poza wycinkiem: cała mapa w niskiej rozdzielczości z podglądem satelity.
  * Widać ją głównie ze skybase; środek (szczegółowy wycinek) jest wycięty, a całość lekko obniżona, żeby nie przebijała.
  */
-function FarTerrain({ site, map }: { site: Site; map: MapData }) {
+function FarTerrain({ site, map, ground }: { site: Site; map: MapData; ground: THREE.MeshStandardMaterial | null }) {
   const { meta, heightAt } = map;
 
   const geometry = useMemo(() => {
@@ -326,6 +335,7 @@ function FarTerrain({ site, map }: { site: Site; map: MapData }) {
 
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
   useEffect(() => {
+    if (meta.terrain) return;
     let alive = true;
     new THREE.TextureLoader().load(mapOverviewUrl(meta.id), (tex) => {
       if (!alive) return;
@@ -336,8 +346,9 @@ function FarTerrain({ site, map }: { site: Site; map: MapData }) {
     return () => {
       alive = false;
     };
-  }, [meta.id]);
+  }, [meta.id, meta.terrain]);
 
+  if (ground) return <mesh geometry={geometry} material={ground} receiveShadow />;
   return (
     <mesh geometry={geometry} receiveShadow>
       <meshStandardMaterial key={texture ? 'tex' : 'plain'} map={texture} color={texture ? '#ffffff' : '#3c4a2c'} roughness={1} />

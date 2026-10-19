@@ -27,6 +27,10 @@ export interface MapMeta extends MapInfo {
   oxygenLine?: number | null;
   /** Strefy zakazu budowy (PlayerClipVolume): pozycja, obrót (kwaternion Unity), skala. */
   clipVolumes?: { p: number[]; r: number[]; s: number[] }[];
+  /** Tekstury terenu z gry: warstwy (tekstura 64 px, co ile metrów się powtarza) i liczba plików wag splat_N.png. */
+  terrain?: { layers: { tex: string; size: number }[]; splats: number } | null;
+  /** Czy jest roads.json (drogi z Paths.dat). */
+  roads?: boolean;
 }
 
 export interface MapData {

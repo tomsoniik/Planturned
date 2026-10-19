@@ -68,7 +68,7 @@ Bez eksportu aplikacja też działa: struktury są wtedy prostymi bryłami, a za
 `npm run export:game` uruchamia `scripts/export_game_data.py`. Skrypt sam znajduje Unturned w bibliotekach Steam.
 Ścieżkę można też podać ręcznie: `python scripts/export_game_data.py "D:\Steam\steamapps\common\Unturned"`.
 
-Wymagania: Python 3.10+ oraz `pip install UnityPy numpy pillow`.
+Wymagania: Python 3.10+ oraz `pip install UnityPy numpy pillow`. Same tekstury terenu i drogi: `python scripts/export_game_data.py --terrain`.
 
 Co powstaje (pliki gry, tylko do użytku lokalnego, są w `.gitignore`):
 
@@ -81,6 +81,8 @@ Co powstaje (pliki gry, tylko do użytku lokalnego, są w `.gitignore`):
 | `public/maps/<Mapa>/meta.json` | rozmiar mapy (`Level.dat`), poziom wody (`Environment/Lighting.dat`), limity wysokości i strefy zakazu budowy (`Level.hierarchy`) |
 | `public/maps/<Mapa>/scene.json` | budynki, obiekty i drzewa 1:1 (`Level/Objects.dat`, `Terrain/Trees.dat`) |
 | `public/game/scenery/<guid>.json` | modele obiektów i drzew (LOD0, kolory palety) |
+| `public/maps/<Mapa>/splat_N.png`, `public/game/terrain/*.png` | tekstury podłoża i ich wagi co 4 m (`Landscape/Splatmaps`, materiały terenu z `Level.hierarchy`) |
+| `public/maps/<Mapa>/roads.json`, `roads/*.png` | drogi odtworzone z `Environment/Paths.dat`, `Roads.dat`, `Roads.unity3d` |
 
 Wymiary są zgodne z modelami gry: podłoga 6 × 6 m, poziom 4,5 m, ściana 5,6 × 4,25 m. W planie 1 m = 10 jednostek.
 

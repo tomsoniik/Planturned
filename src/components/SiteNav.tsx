@@ -27,6 +27,7 @@ export default function SiteNav({ overlay }: { overlay?: boolean }) {
         </Link>
         <nav className={styles.links}>
           <Link href="/builder">{t.common.myProjects}</Link>
+          <Link href="/changelog">{t.changelog.nav}</Link>
         </nav>
         <LangSwitch />
         <NewProjectButton />

@@ -1,0 +1,136 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.hint {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.group h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.rows {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rows li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.rows[data-fixed] .name {
+  color: var(--muted);
+}
+
+/* Klawisz do kliknięcia: wygląda jak kbd, ale reaguje */
+.key {
+  flex-shrink: 0;
+  min-width: 34px;
+  height: 26px;
+  padding: 0 8px;
+  background: var(--surface-3);
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease), transform 0.15s var(--ease);
+}
+
+.key:hover {
+  border-color: var(--accent);
+}
+
+.key:active {
+  transform: translateY(1px);
+}
+
+.key[data-changed] {
+  color: var(--accent);
+}
+
+.key[data-active] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+
+.slots {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.key[data-compact] {
+  min-width: 0;
+  padding: 0;
+}
+
+/* W trybie czekania na klawisz napis nie mieści się w małym kafelku: kafelek rozciąga się na cały rząd */
+.slots .key[data-active] {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.resetOne {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.resetOne:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.fixedKeys {
+  display: flex;
+  flex-shrink: 0;
+  gap: 3px;
+}
+
+.resetAll {
+  align-self: flex-start;
+  height: 34px;
+  font-size: 13px;
+}
+
+.resetAll:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

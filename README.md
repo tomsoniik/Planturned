@@ -10,7 +10,7 @@
   <a href="https://base-planner-unturned.vercel.app"><b>Open in the browser</b></a>
 </p>
 
-<p align="center"><b>English</b> · <a href="README.pl.md">Polski</a></p>
+<p align="center"><b>English</b> · <a href="README.pl.md">Polski</a> · <a href="https://base-planner-unturned.vercel.app/changelog">Changelog</a></p>
 
 <p align="center">
   <img src="docs/demo.gif" alt="Demo: new project, floors, walls, windows, a door, pillars and a roof in 2D, then the base in 3D at day, dusk and night" width="100%">
@@ -27,9 +27,12 @@ The recording is a real session in the app (with the Polish UI): a new project, 
 - **Limits from the game.** Max build height, the oxygen line and no-build zones for each map ([docs/sky-limits.md](docs/sky-limits.md), in Polish).
 - **Bed claim radius.** A circle shows where nobody outside your group can build.
 - **No account.** Projects stay in your browser. Export a base to a `.baseplan.json` file and send it to your crew.
+- **Custom keys.** Rebind toolbox pieces, demolish, bed, rotate, floors and 3D movement in the Keys tab.
 - **English and Polish.** PL / EN switch in the menu and in the editor; without a choice the language follows your browser.
 
 ## Controls
+
+Keys can be changed in the editor's **Keys** tab (saved in your browser). Defaults:
 
 | Key | 2D plan | 3D view |
 | --- | --- | --- |

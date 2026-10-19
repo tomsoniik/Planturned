@@ -22,6 +22,7 @@ import { loadMap, mapOverviewUrl, mapTileUrl, tilesInRange, type MapData, type S
 import { DEFAULT_SCENE, type SceneSettings } from '@/lib/scene';
 import { itemLabel, type AimReason, type AimWarn } from '@/lib/i18n';
 import { useT } from './I18nProvider';
+import { keyLabel, useKeybinds } from '@/lib/keybinds';
 import { Meadow, SkyAndLight, meadowHeight } from './Scenery';
 import MapObjects from './MapObjects';
 
@@ -369,6 +370,12 @@ function PlayerCamera({
 }) {
   const { camera, scene } = useThree();
   const keys = useRef<Record<string, boolean>>({});
+  // klawisze z ustawień; referencja, żeby pętla klatek nie musiała się odtwarzać po zmianie
+  const binds = useKeybinds((s) => s.binds);
+  const bindsRef = useRef(binds);
+  useEffect(() => {
+    bindsRef.current = binds;
+  }, [binds]);
   const pitch = useRef(0);
   const yaw = useRef(0);
   const velocityY = useRef(0);
@@ -399,7 +406,7 @@ function PlayerCamera({
     const keyDown = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
       keys.current[e.code] = true;
-      if (e.code === 'Space' && walk) e.preventDefault();
+      if (e.code === bindsRef.current.up && walk) e.preventDefault();
     };
     const keyUp = (e: KeyboardEvent) => {
       keys.current[e.code] = false;
@@ -434,19 +441,20 @@ function PlayerCamera({
   useFrame((_, rawDelta) => {
     const delta = Math.min(rawDelta, 0.05);
     const k = keys.current;
+    const b = bindsRef.current;
     const pos = camera.position;
 
     if (!walk) {
-      const speed = (k.ShiftLeft ? 30 : 14) * delta;
+      const speed = (k[b.sprint] ? 30 : 14) * delta;
       const forward = new THREE.Vector3();
       camera.getWorldDirection(forward);
       const right = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
-      if (k.KeyW) pos.addScaledVector(forward, speed);
-      if (k.KeyS) pos.addScaledVector(forward, -speed);
-      if (k.KeyA) pos.addScaledVector(right, -speed);
-      if (k.KeyD) pos.addScaledVector(right, speed);
-      if (k.KeyE || k.Space) pos.y += speed;
-      if (k.KeyQ) pos.y -= speed;
+      if (k[b.forward]) pos.addScaledVector(forward, speed);
+      if (k[b.back]) pos.addScaledVector(forward, -speed);
+      if (k[b.left]) pos.addScaledVector(right, -speed);
+      if (k[b.right]) pos.addScaledVector(right, speed);
+      if (k[b.up]) pos.y += speed;
+      if (k[b.down]) pos.y -= speed;
       return;
     }
 
@@ -455,14 +463,14 @@ function PlayerCamera({
     scene.traverse((o) => {
       if ((o as THREE.Mesh).isMesh && (o.userData.itemId || o.userData.terrain || o.userData.mapObject)) meshes.push(o);
     });
-    const speed = (k.ShiftLeft ? 7.5 : 4.5) * delta;
+    const speed = (k[b.sprint] ? 7.5 : 4.5) * delta;
     const forward = new THREE.Vector3(-Math.sin(yaw.current), 0, -Math.cos(yaw.current));
     const right = new THREE.Vector3(-forward.z, 0, forward.x);
     const step = new THREE.Vector3();
-    if (k.KeyW) step.add(forward);
-    if (k.KeyS) step.sub(forward);
-    if (k.KeyA) step.sub(right);
-    if (k.KeyD) step.add(right);
+    if (k[b.forward]) step.add(forward);
+    if (k[b.back]) step.sub(forward);
+    if (k[b.left]) step.sub(right);
+    if (k[b.right]) step.add(right);
     if (step.lengthSq() > 0) {
       step.normalize().multiplyScalar(speed);
       const feet = pos.y - EYE;
@@ -479,7 +487,7 @@ function PlayerCamera({
     const ground = Math.max(hit ? hit.point.y : -Infinity, groundAt(pos.x, pos.z));
 
     velocityY.current -= 22 * delta;
-    if (k.Space && pos.y - EYE <= ground + 0.05) velocityY.current = 7;
+    if (k[b.up] && pos.y - EYE <= ground + 0.05) velocityY.current = 7;
     pos.y += velocityY.current * delta;
     if (pos.y - EYE < ground) {
       pos.y = ground + EYE;
@@ -669,6 +677,11 @@ export default function Builder3D({
   const containerRef = useRef<HTMLDivElement>(null);
   const models = useGameModels();
   const t = useT();
+  const binds = useKeybinds((s) => s.binds);
+  const flyKeyRef = useRef(binds.toggleFly);
+  useEffect(() => {
+    flyKeyRef.current = binds.toggleFly;
+  }, [binds.toggleFly]);
   const [aim, setAim] = useState<Aim>(EMPTY_AIM);
   const [locked, setLocked] = useState(false);
   const [walk, setWalk] = useState(false);
@@ -699,7 +712,7 @@ export default function Builder3D({
     const onChange = () => setLocked(document.pointerLockElement === containerRef.current);
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
-      if (e.code === 'KeyF') setWalk((w) => !w);
+      if (e.code === flyKeyRef.current) setWalk((w) => !w);
     };
     document.addEventListener('pointerlockchange', onChange);
     window.addEventListener('keydown', onKey);
@@ -838,7 +851,7 @@ export default function Builder3D({
       )}
 
       <div className={styles.modeBadge} data-ui>
-        {walk ? t.view3d.walking : t.view3d.flying} <kbd>F</kbd>
+        {walk ? t.view3d.walking : t.view3d.flying} <kbd>{keyLabel(binds.toggleFly, { space: t.keys.space, shift: t.keys.shift })}</kbd>
         {sky && <span className={styles.modeMap}>Skybase {scene.skyHeight} m</span>}
         {site && <span className={styles.modeMap}>{site.map}</span>}
       </div>

@@ -34,6 +34,8 @@ import LangSwitch from '@/components/LangSwitch';
 import MapPicker from '@/components/MapPicker';
 import SiteUnderlay from '@/components/SiteUnderlay';
 import PlanCanvas, { layerOf } from '@/components/PlanCanvas';
+import KeybindsPanel from '@/components/KeybindsPanel';
+import { SLOT_ACTIONS, keyLabel, useKeybinds } from '@/lib/keybinds';
 import {
   BED,
   BED_CLAIM_RADIUS,
@@ -123,6 +125,10 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   const { id } = use(params);
   const { addNotification } = useAppStore();
   const { t } = useI18n();
+  const binds = useKeybinds(s => s.binds);
+  const hydrateKeybinds = useKeybinds(s => s.hydrate);
+  useEffect(() => hydrateKeybinds(), [hydrateKeybinds]);
+  const keyName = (code: string) => keyLabel(code, { space: t.keys.space, shift: t.keys.shift });
 
   const [project, setProject] = useState<Project | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -337,7 +343,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
         setSelectedItemId(null);
         setSelectedItemIds([]);
       }
-      if (e.key === 'Delete') deleteSelection();
+      if (e.code === binds.deleteSelected) deleteSelection();
       if (mod && k === 'z' && !e.shiftKey) {
         e.preventDefault();
         undo();
@@ -349,7 +355,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
       if (mod && k === 'c') {
         const itemsToCopy = placedItems.filter(i => selectedItemIds.includes(i.id));
         setClipboard(itemsToCopy);
-        if (itemsToCopy.length > 0) addNotification(`Skopiowano: ${itemsToCopy.length}`, 'success');
+        if (itemsToCopy.length > 0) addNotification(t.editor.copied(itemsToCopy.length), 'success');
       }
       if (mod && k === 'v' && clipboard.length > 0 && !is3DMode) {
         e.preventDefault();
@@ -359,20 +365,22 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
         setPaste({ turn: 0 });
       }
       if (mod) return;
-      if (k === 'r' && paste) setPaste(p => (p ? { turn: p.turn + 1 } : p));
-      if (k === 'r' && activeDef) setTurn(t => t + 1);
-      if (k === 'x') selectItem(REMOVER.id);
-      if (k === 'b') selectItem(BED.id);
-      if (e.key === 'PageUp') {
+      const code = e.code;
+      if (code === binds.rotate && paste) setPaste(p => (p ? { turn: p.turn + 1 } : p));
+      if (code === binds.rotate && activeDef) setTurn(t => t + 1);
+      if (code === binds.demolish) selectItem(REMOVER.id);
+      if (code === binds.bed) selectItem(BED.id);
+      if (code === binds.floorUp) {
         e.preventDefault();
         setCurrentFloor(f => Math.min(f + 1, floorsList.length - 1));
       }
-      if (e.key === 'PageDown') {
+      if (code === binds.floorDown) {
         e.preventDefault();
         setCurrentFloor(f => Math.max(f - 1, 0));
       }
-      if (/^[1-9]$/.test(e.key)) {
-        const target = materialItems[Number(e.key) - 1];
+      const slot = SLOT_ACTIONS.findIndex(a => binds[a] === code);
+      if (slot >= 0) {
+        const target = materialItems[slot];
         if (target) selectItem(target.id);
       }
     };
@@ -652,7 +660,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
         onClick={() => selectItem(item.id)}
         title={item.health ? `${shortName(item)}, ${item.health} HP` : shortName(item)}
       >
-        {idx >= 0 && idx < 9 && <kbd className={styles.itemKey}>{idx + 1}</kbd>}
+        {idx >= 0 && idx < 9 && <kbd className={styles.itemKey}>{keyName(binds[SLOT_ACTIONS[idx]])}</kbd>}
         {count > 0 && <span className={styles.itemCount}>{count}</span>}
         <span className={styles.itemThumb}>
           <img src={item.icon} alt="" />
@@ -842,8 +850,8 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
             {tab === 'blocks' && (
               <>
                 <div className={styles.tools}>
-                  {renderTool(REMOVER, 'X')}
-                  {renderTool(BED, 'B')}
+                  {renderTool(REMOVER, keyName(binds.demolish))}
+                  {renderTool(BED, keyName(binds.bed))}
                 </div>
 
                 <div className={styles.groupHead}>
@@ -955,16 +963,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
               </>
             )}
 
-            {tab === 'hotkeys' && (
-              <dl className={styles.hotkeys}>
-                {t.editor.hotkeys.map(([keys, label]) => (
-                  <div key={label}>
-                    <dt>{keys.map(k => <kbd key={k}>{k}</kbd>)}</dt>
-                    <dd>{label}</dd>
-                  </div>
-                ))}
-              </dl>
-            )}
+            {tab === 'hotkeys' && <KeybindsPanel />}
           </div>
 
           {tab === 'blocks' && activeDef && !isRemoverActive && (
@@ -976,7 +975,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                 <strong>{shortName(activeDef)}</strong>
                 {activeDef.health && <span>{activeDef.health} HP</span>}
               </div>
-              <span className={styles.activeHint}><kbd>R</kbd> {t.editor.rotate}</span>
+              <span className={styles.activeHint}><kbd>{keyName(binds.rotate)}</kbd> {t.editor.rotate}</span>
             </div>
           )}
         </aside>
@@ -1115,7 +1114,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
 
               {placedItems.length === 0 && !activeItem && (
                 <div className={styles.emptyHint}>
-                  <p>{t.editor.emptyHint[0]} <kbd>1</kbd> {t.editor.emptyHint[1]}</p>
+                  <p>{t.editor.emptyHint[0]} <kbd>{keyName(binds.slot1)}</kbd> {t.editor.emptyHint[1]}</p>
                 </div>
               )}
 
@@ -1135,7 +1134,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                 </span>
                 {pastePreview && (
                   <span className={styles.statusActive}>
-                    {t.editor.pasteHint(pastePreview.items.length)}
+                    {t.editor.pasteHint(pastePreview.items.length, keyName(binds.rotate))}
                   </span>
                 )}
                 {activeDef && (
@@ -1146,7 +1145,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                         ? t.editor.hatchHint
                         : (activeDef.part === 'floor' || activeDef.part === 'tri_floor') && currentFloor > 0
                           ? t.editor.floorHint
-                        : t.editor.placingHint(itemFullLabel(activeDef, t))}
+                        : t.editor.placingHint(itemFullLabel(activeDef, t), keyName(binds.rotate))}
                   </span>
                 )}
               </div>

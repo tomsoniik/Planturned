@@ -10,7 +10,7 @@
   <a href="https://base-planner-unturned.vercel.app"><b>Otwórz w przeglądarce</b></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <b>Polski</b></p>
+<p align="center"><a href="README.md">English</a> · <b>Polski</b> · <a href="https://base-planner-unturned.vercel.app/changelog">Changelog</a></p>
 
 <p align="center">
   <img src="docs/demo.gif" alt="Demo: nowy projekt, podłogi, ściany, okna, drzwi, filary i dach w 2D, potem baza w 3D w dzień, o zmierzchu i w nocy" width="100%">
@@ -27,9 +27,12 @@ Nagranie pokazuje prawdziwą sesję w aplikacji: nowy projekt, 6 podłóg, ścia
 - **Limity z gry.** Maksymalna wysokość budowania, granica tlenu i strefy zakazu budowy dla każdej mapy ([docs/sky-limits.md](docs/sky-limits.md)).
 - **Zasięg claimu łóżka.** Okrąg pokazuje, gdzie nikt spoza grupy nic nie postawi.
 - **Bez konta.** Projekty zostają w przeglądarce. Bazę eksportujesz do pliku `.baseplan.json` i wysyłasz ekipie.
+- **Własne klawisze.** Wybór elementów, wyburzanie, łóżko, obrót, piętra i ruch w 3D do zmiany w zakładce Skróty.
 - **Polski i angielski.** Przełącznik PL / EN w menu i w edytorze; bez wyboru język bierze się z przeglądarki.
 
 ## Sterowanie
+
+Klawisze można zmienić w zakładce **Skróty** w edytorze (zapis w przeglądarce). Domyślne:
 
 | Klawisz | Plan 2D | Widok 3D |
 | --- | --- | --- |

@@ -54,6 +54,7 @@ import {
   type MaterialId,
   type PartId,
   type PlacedItem,
+  wallMissingPillars,
 } from '@/lib/builder';
 
 const Builder3D = dynamic(() => import('@/components/Builder3D'), {
@@ -1145,6 +1146,8 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                         ? t.editor.hatchHint
                         : (activeDef.part === 'floor' || activeDef.part === 'tri_floor') && currentFloor > 0
                           ? t.editor.floorHint
+                          : activeDef.shape === 'wall' && previewItem && wallMissingPillars(activeDef, previewItem, placedItems)
+                            ? t.editor.wallHint
                         : t.editor.placingHint(itemFullLabel(activeDef, t), keyName(binds.rotate))}
                   </span>
                 )}

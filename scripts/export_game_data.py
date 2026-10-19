@@ -917,6 +917,104 @@ def export_roads(env, map_dir, name, road_assets):
     return True
 
 
+# ---------------------------------------------------------------- strefy bez budowania
+#
+# UseableHousingUtils.IsPendingPositionValid:
+#  - SafezoneVolume z No_Buildables (Level.hierarchy; kula: skala = średnica, prostopadłościan: skala = rozmiar)
+#  - stare węzły SAFEZONE z Environment/Nodes.dat (wersja < 8 jest konwertowana na wolumeny przy wczytaniu)
+#  - LevelPlayers.checkCanBuild: odległość od spawnu graczy < Prevent_Building_Near_Spawnpoint_Radius (domyślnie 16 m)
+
+def read_safezones(map_dir):
+    out = []
+    path = os.path.join(map_dir, "Level.hierarchy")
+    if os.path.exists(path):
+        text = read_text(path)
+        for block in text.split('"Type" "')[1:]:
+            if not block.startswith("SDG.Unturned.SafezoneVolume"):
+                continue
+            if re.search(r'"No_Buildables"\s*"false"', block):
+                continue
+            def vec(label, keys):
+                m = re.search('"%s"\\s*\\{(.*?)\\}' % label, block, re.S)
+                vals = dict(re.findall(r'"(\w)"\s*"([-\d.eE]+)"', m.group(1))) if m else {}
+                return [float(vals.get(k, 0)) for k in keys]
+            shape = re.search(r'"Shape"\s*"(\w+)"', block)
+            out.append({"shape": (shape.group(1).lower() if shape else "box"), "p": vec("Position", "XYZ"),
+                        "r": vec("Rotation", "XYZW"), "s": vec("Scale", "XYZ")})
+    nodes = os.path.join(map_dir, "Environment", "Nodes.dat")
+    if os.path.exists(nodes):
+        r = Reader(open(nodes, "rb").read())
+        ver = r.take("B")[0]
+        if 0 < ver < 8:
+            try:
+                for _ in range(r.take("B")[0]):
+                    p = r.take("3f")
+                    kind = r.take("B")[0]
+                    if kind == 0:  # LOCATION (nazwa: bajt długości + UTF-8)
+                        length = r.take("B")[0]
+                        r.o += length
+                    elif kind == 1:  # SAFEZONE
+                        radius = r.take("f")[0]
+                        height = r.take("?")[0] if ver > 1 else False
+                        r.take("?") if ver > 4 else None
+                        no_build = r.take("?")[0] if ver > 4 else True
+                        if no_build:
+                            # SafezoneNode: promień = lerp(32, 1024, znormalizowany) / 2
+                            real = (32 + (1024 - 32) * radius) / 2
+                            out.append({"shape": "cylinder" if height else "sphere", "p": list(p), "r": [0, 0, 0, 1], "s": [real * 2] * 3})
+                    elif kind == 2:  # PURCHASE
+                        r.take("f"); r.take("H"); r.take("I")
+                    elif kind in (3, 4):  # ARENA, DEADZONE
+                        r.take("f")
+                        if kind == 4 and ver > 6:
+                            r.take("B")
+                    elif kind == 5:  # AIRDROP
+                        r.take("H")
+                    elif kind == 6:  # EFFECT
+                        if ver > 2:
+                            r.take("B")
+                        r.take("f")
+                        if ver > 2:
+                            r.take("3f")
+                        r.take("H"); r.take("?")
+                        if ver > 3:
+                            r.take("?")
+            except struct.error:
+                pass
+    return out
+
+
+def read_spawns(map_dir):
+    path = os.path.join(map_dir, "Spawns", "Players.dat")
+    if not os.path.exists(path):
+        return []
+    r = Reader(open(path, "rb").read())
+    ver = r.take("B")[0]
+    if 1 < ver < 3:
+        r.take("Q")
+    out = []
+    for _ in range(r.take("B")[0]):
+        p = r.take("3f")
+        r.take("B")
+        if ver > 3:
+            r.take("?")
+        out.append([round(v, 2) for v in p])
+    return out
+
+
+def no_build_info(map_dir):
+    config_path = os.path.join(map_dir, "Config.json")
+    config = read_text(config_path) if os.path.exists(config_path) else ""
+    m = re.search(r'"Prevent_Building_Near_Spawnpoint_Radius"\s*:\s*([-\d.]+)', config)
+    under = re.search(r'"Use_Underground_Whitelist"\s*:\s*true', config) is not None
+    return {
+        "safezones": read_safezones(map_dir),
+        "spawns": read_spawns(map_dir),
+        "spawnRadius": float(m.group(1)) if m else 16.0,
+        "undergroundBlocked": under,
+    }
+
+
 def export_maps_terrain(unturned):
     """Tylko tekstury terenu: dopisuje "terrain" do istniejących meta.json (bez eksportu modeli i obiektów)."""
     import UnityPy
@@ -934,6 +1032,7 @@ def export_maps_terrain(unturned):
             meta = json.load(f)
         meta["terrain"] = export_terrain(env, os.path.join(maps_dir, name), name, meta["extent"], materials)
         meta["roads"] = export_roads(env, os.path.join(maps_dir, name), name, road_assets)
+        meta["noBuild"] = no_build_info(os.path.join(maps_dir, name))
         with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(meta, f, indent=1)
 
@@ -955,6 +1054,7 @@ def export_maps(unturned):
                 export_map_scene(env, os.path.join(maps_dir, name), name, scenery)
                 meta["terrain"] = export_terrain(env, os.path.join(maps_dir, name), name, meta["extent"], materials)
                 meta["roads"] = export_roads(env, os.path.join(maps_dir, name), name, road_assets)
+                meta["noBuild"] = no_build_info(os.path.join(maps_dir, name))
                 with open(os.path.join(PUBLIC, "maps", name, "meta.json"), "w", encoding="utf-8") as f:
                     json.dump(meta, f, indent=1)
         except Exception as e:  # mapa w innym formacie: pomijamy

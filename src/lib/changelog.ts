@@ -33,6 +33,10 @@ export const CHANGELOG: Release[] = [
         en: 'New keys: crouch (C) and prone (Z), rebindable in the Keys tab.',
       },
       {
+        pl: 'Zasady budowania z gry: ściana wymaga filarów na obu końcach (murek słupków), zakaz budowy w strefach bezpiecznych, przy punktach odrodzenia i pod ziemią, podłoga musi mieć grunt najwyżej 10 m pod sobą.',
+        en: 'Building rules from the game: walls need pillars at both ends (ramparts need posts), no building in safezones, near spawn points or underground, floors need ground within 10 m below.',
+      },
+      {
         pl: 'W 3D ziemia ma prawdziwe tekstury z gry (trawa, ziemia, żwir, piasek, śnieg) mieszane tak jak w Unturned. Ostra z bliska, bez rozmytych plam z mapy satelitarnej.',
         en: 'In 3D the ground uses the real game textures (grass, dirt, gravel, sand, snow) blended like in Unturned. Sharp up close, no blurry blotches from the satellite map.',
       },

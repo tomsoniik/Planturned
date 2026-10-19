@@ -31,6 +31,13 @@ export interface MapMeta extends MapInfo {
   terrain?: { layers: { tex: string; size: number }[]; splats: number } | null;
   /** Czy jest roads.json (drogi z Paths.dat). */
   roads?: boolean;
+  /** Strefy bez budowania: safezone (kula/prostopadłościan/walec, skala = rozmiar), spawny graczy i ich promień, zakaz budowy pod terenem. */
+  noBuild?: {
+    safezones: { shape: string; p: number[]; r: number[]; s: number[] }[];
+    spawns: number[][];
+    spawnRadius: number;
+    undergroundBlocked: boolean;
+  };
 }
 
 export interface MapData {

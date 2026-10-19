@@ -461,7 +461,7 @@ export function computePlacement({ def, items, cursor, floor, turn }: PlacementI
     }
   }
 
-  return { preview, valid: !groundOnly && isValid(def, preview, items), snapPoint };
+  return { preview, valid: !groundOnly && isValid(def, preview, items) && !wallMissingPillars(def, preview, items), snapPoint };
 }
 
 export function pointInPolygon(p: Point, poly: Point[]) {
@@ -531,7 +531,26 @@ function isValid(def: BuildItem, preview: PlacedItem, items: PlacedItem[]) {
   });
 }
 
-export const isPlacementValid = (def: BuildItem, preview: PlacedItem, items: PlacedItem[]) => isValid(def, preview, items);
+/**
+ * HousingConnections.ValidateWallPlacement (Requires_Pillars domyślnie włączone): ściana potrzebuje filarów na obu końcach,
+ * pełnej wysokości (filar, nie słupek); murek wystarczy słupek albo filar. Inaczej gra zgłasza "brak filaru".
+ */
+export function wallMissingPillars(def: BuildItem, preview: PlacedItem, items: PlacedItem[]) {
+  if (def.shape !== 'wall') return false;
+  const full = def.part !== 'rampart';
+  const floor = preview.floor || 0;
+  const r = (preview.rotation * Math.PI) / 180;
+  const ends = [-30, 30].map((o) => ({ x: preview.x + o * Math.cos(r), y: preview.y + o * Math.sin(r) }));
+  return !ends.every((e) =>
+    items.some((it) => {
+      const d = findDef(it.itemId);
+      return !!d && d.shape === 'pillar' && (it.floor || 0) === floor && (!full || d.part === 'pillar') && Math.hypot(it.x - e.x, it.y - e.y) < 2;
+    }),
+  );
+}
+
+export const isPlacementValid = (def: BuildItem, preview: PlacedItem, items: PlacedItem[]) =>
+  isValid(def, preview, items) && !wallMissingPillars(def, preview, items);
 
 // --- Celowanie w 3D jak w grze (HousingConnections.FindEmptyWallSlot / FindEmptyPillarSlot) ---
 
@@ -775,6 +794,8 @@ export function computePaste({ clip, items, cursor, floor, turn }: {
   const { dx, dy, snapPoint } = snapGroupDelta(moved, items, { x: cursor.x - ref.x, y: cursor.y - ref.y });
   const out: PlacedItem[] = [];
   const invalid = new Set<string>();
+  // filary z wklejanej kopii też podpierają ściany z tej kopii
+  const support = [...items, ...moved.map((i) => ({ ...i, x: round3(i.x + dx), y: round3(i.y + dy) }))];
   moved.forEach((i) => {
     const def = findDef(i.itemId);
     if (!def) return;
@@ -784,7 +805,7 @@ export function computePaste({ clip, items, cursor, floor, turn }: {
       return !!d && isDuplicate(p, def, o, d);
     })) return;
     const groundOnly = (def.part === 'floor' || def.part === 'tri_floor') && (p.floor || 0) > 0;
-    if (groundOnly || !isValid(def, p, items)) invalid.add(i.id);
+    if (groundOnly || !isValid(def, p, items) || wallMissingPillars(def, p, support)) invalid.add(i.id);
     out.push(p);
   });
   return { items: out, invalid, valid: out.length > 0 && invalid.size === 0, snapPoint };

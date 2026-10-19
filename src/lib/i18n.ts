@@ -23,7 +23,7 @@ export function langFromAcceptLanguage(header: string | null): Lang {
   return 'en';
 }
 
-export type AimReason = 'mapLimit' | 'noBuildZone' | 'skyFloor' | 'floorGroundOnly';
+export type AimReason = 'mapLimit' | 'noBuildZone' | 'skyFloor' | 'floorGroundOnly' | 'safezone' | 'spawn' | 'missingGround' | 'underground' | 'missingPillar';
 export type AimWarn = 'oxygen';
 export type SidebarTabId = 'blocks' | 'map' | 'color' | 'hotkeys';
 export type PartGroupId = 'slabs' | 'walls' | 'pillars' | 'stairs';
@@ -116,6 +116,7 @@ const pl = {
     zoomIn: 'Przybliż',
     hatchHint: 'Klapę stawia się w dachu z otworem',
     floorHint: 'Podłogi tylko na parterze, wyżej stawiaj dachy',
+    wallHint: 'Ściana potrzebuje filarów na obu końcach (murek: słupków)',
     demolishHint: 'Wyburzanie: kliknij element',
     placingHint: (name: string, key: string) => `${name}, ${key} obraca`,
     pasteHint: (n: number, key: string) => `Wklejanie ${n} el.: ${key} obraca, klik wstawia (Shift: kolejna kopia), Esc anuluje`,
@@ -190,6 +191,11 @@ const pl = {
       noBuildZone: 'strefa zakazu budowy',
       skyFloor: 'w skybase podłogę zastępuje dach',
       floorGroundOnly: 'podłoga tylko na ziemi',
+      safezone: 'strefa bezpieczna, tu nie można budować',
+      spawn: 'za blisko punktu odrodzenia graczy',
+      missingGround: 'brak gruntu pod podłogą (do 10 m)',
+      underground: 'pod ziemią nie można budować',
+      missingPillar: 'ściana potrzebuje filarów na obu końcach',
     } satisfies Record<AimReason, string>,
     warns: { oxygen: 'powyżej granicy tlenu' } satisfies Record<AimWarn, string>,
   },
@@ -316,6 +322,7 @@ const en: Dict = {
     zoomIn: 'Zoom in',
     hatchHint: 'Hatches go into a roof with a hole',
     floorHint: 'Floors only on the ground floor; use roofs higher up',
+    wallHint: 'A wall needs pillars at both ends (rampart: posts)',
     demolishHint: 'Demolish: click a piece',
     placingHint: (name: string, key: string) => `${name}, ${key} rotates`,
     pasteHint: (n: number, key: string) => `Pasting ${n} pcs: ${key} rotates, click places (Shift: another copy), Esc cancels`,
@@ -390,6 +397,11 @@ const en: Dict = {
       noBuildZone: 'no-build zone',
       skyFloor: 'on a skybase a roof replaces the floor',
       floorGroundOnly: 'floors only on the ground',
+      safezone: "safezone, building isn't allowed here",
+      spawn: 'too close to a player spawn point',
+      missingGround: 'no ground under the floor (within 10 m)',
+      underground: "can't build underground",
+      missingPillar: 'the wall needs pillars at both ends',
     },
     warns: { oxygen: 'above the oxygen limit' },
   },

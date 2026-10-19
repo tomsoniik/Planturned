@@ -13,6 +13,7 @@ import {
   findSlabSlotByRay,
   findSlotByRay,
   isPlacementValid,
+  wallMissingPillars,
   isRoofLayer,
   type BuildItem,
   type PlacedItem,
@@ -737,6 +738,14 @@ export interface SceneLimits {
   oxygenY: number | null;
   /** Czy punkt sceny leży w strefie zakazu budowy (PlayerClipVolume). */
   inClip: (x: number, y: number, z: number) => boolean;
+  /** SafezoneVolume z No_Buildables. */
+  inSafezone: (x: number, y: number, z: number) => boolean;
+  /** LevelPlayers.checkCanBuild: za blisko spawnu graczy. */
+  nearSpawn: (x: number, y: number, z: number) => boolean;
+  /** Wysokość terenu w układzie sceny (null bez mapy). */
+  groundY: ((x: number, z: number) => number) | null;
+  /** Use_Underground_Whitelist: pod terenem nie wolno budować. */
+  undergroundBlocked: boolean;
 }
 
 const EMPTY_AIM: Aim = { preview: null, valid: false, targetId: null, surface: null };
@@ -774,6 +783,38 @@ function AimController({
   const { camera, scene } = useThree();
   const aimRef = useRef<Aim>(EMPTY_AIM);
   const lastKey = useRef('');
+  const downRay = useMemo(() => new THREE.Raycaster(), []);
+
+  /** Zasady z gry dla punktu stawiania (UseableHousingUtils, HousingConnections). */
+  const gameRule = (def: BuildItem, preview: PlacedItem, surface: number): AimReason | undefined => {
+    const px = preview.x * SCALE, pz = preview.y * SCALE;
+    const base = surface * H;
+    if (limits.inSafezone(px, base + 1, pz)) return 'safezone';
+    if (limits.nearSpawn(px, base + 1, pz)) return 'spawn';
+    if (wallMissingPillars(def, preview, items)) return 'missingPillar';
+    if (!limits.groundY) return undefined;
+    const floorPart = def.part === 'floor' || def.part === 'tri_floor';
+    if (floorPart) {
+      // IsFloorAboveGround: teren albo duży obiekt mapy najwyżej 10 m pod środkiem podłogi
+      let ground = limits.groundY(px, pz);
+      downRay.set(new THREE.Vector3(px, base + 1, pz), new THREE.Vector3(0, -1, 0));
+      downRay.far = 11;
+      const objs: THREE.Object3D[] = [];
+      scene.traverse((o) => (o as THREE.Mesh).isMesh && o.userData.mapObject && !o.userData.tree && objs.push(o));
+      const hit = downRay.intersectObjects(objs, false)[0];
+      if (hit) ground = Math.max(ground, hit.point.y);
+      if (ground < base - 10) return 'missingGround';
+    } else if (limits.undergroundBlocked && def.shape !== 'bed' && def.shape !== 'hatch') {
+      // UndergroundAllowlist: element w całości pod terenem
+      const r = (preview.rotation * Math.PI) / 180;
+      const pts = def.shape === 'wall'
+        ? [-3, 0, 3].map((o) => [px + o * Math.cos(r), pz + o * Math.sin(r)])
+        : [[px, pz]];
+      const topY = def.shape === 'wall' || def.shape === 'pillar' ? base + H : base;
+      if (pts.every(([x, z]) => topY < limits.groundY!(x, z))) return 'underground';
+    }
+    return undefined;
+  };
   const raycaster = useMemo(() => new THREE.Raycaster(), []);
   const center = useMemo(() => new THREE.Vector2(0, 0), []);
 
@@ -797,6 +838,7 @@ function AimController({
         let warn: AimWarn | undefined;
         if (top > limits.limitY) reason = 'mapLimit';
         else if (limits.inClip(slot.x * SCALE, surface * H + 1, slot.y * SCALE)) reason = 'noBuildZone';
+        else reason = gameRule(activeDef, slot, surface);
         if (!reason && limits.oxygenY !== null && top > limits.oxygenY) warn = 'oxygen';
         next = { preview: slot, valid: isPlacementValid(activeDef, slot, items) && !reason, targetId: null, surface, reason, warn };
       }
@@ -832,6 +874,7 @@ function AimController({
         else if (floorPart && level > 0) reason = 'floorGroundOnly';
         else if (top > limits.limitY) reason = 'mapLimit';
         else if (limits.inClip(px, surface * H + 1, pz)) reason = 'noBuildZone';
+        else if (res.preview) reason = gameRule(activeDef, res.preview, level);
         if (!reason && limits.oxygenY !== null && top > limits.oxygenY) warn = 'oxygen';
         next = { preview: res.preview, valid: res.valid && !reason, targetId: null, surface, reason, warn };
       }
@@ -968,7 +1011,34 @@ export default function Builder3D({
       half: new THREE.Vector3(v.s[0] / 2, v.s[1] / 2, v.s[2] / 2),
     }));
     const tmp = new THREE.Vector3();
+    const nb = meta?.noBuild;
+    const safezones = (nb?.safezones ?? []).map((v) => ({
+      shape: v.shape,
+      p: new THREE.Vector3(v.p[0], v.p[1], v.p[2]),
+      inv: new THREE.Quaternion(v.r[0], v.r[1], v.r[2], v.r[3]).invert(),
+      half: new THREE.Vector3(v.s[0] / 2, v.s[1] / 2, v.s[2] / 2),
+    }));
+    const spawnR2 = (nb?.spawnRadius ?? 16) ** 2;
+    const world = (x: number, y: number, z: number) => [site!.x + x, y + baseWorld, site!.z - z] as const;
     return {
+      inSafezone: (x, y, z) => {
+        if (!site || safezones.length === 0) return false;
+        const [wx, wy, wz] = world(x, y, z);
+        return safezones.some((s) => {
+          tmp.set(wx - s.p.x, wy - s.p.y, wz - s.p.z);
+          if (s.shape === 'sphere') return tmp.length() <= s.half.x;
+          if (s.shape === 'cylinder') return Math.hypot(tmp.x, tmp.z) <= s.half.x;
+          tmp.applyQuaternion(s.inv);
+          return Math.abs(tmp.x) <= s.half.x && Math.abs(tmp.y) <= s.half.y && Math.abs(tmp.z) <= s.half.z;
+        });
+      },
+      nearSpawn: (x, y, z) => {
+        if (!site || !nb) return false;
+        const [wx, wy, wz] = world(x, y, z);
+        return nb.spawns.some((sp) => (sp[0] - wx) ** 2 + (sp[1] - wy) ** 2 + (sp[2] - wz) ** 2 < spawnR2);
+      },
+      groundY: site && activeMap ? (x, z) => activeMap.heightAt(site.x + x, site.z - z) - baseWorld : null,
+      undergroundBlocked: !!nb?.undergroundBlocked,
       limitY: (meta?.heightLimit ?? 1024) - baseWorld,
       oxygenY: oxygenWorld === null ? null : oxygenWorld - baseWorld,
       inClip: (x, y, z) => {

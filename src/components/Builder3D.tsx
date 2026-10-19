@@ -759,6 +759,9 @@ function structureMeshes(scene: THREE.Scene) {
   return out;
 }
 
+/** Promień do sprawdzania gruntu pod podłogą (wspólny, poza Reactem). */
+const groundProbe = new THREE.Raycaster();
+
 function AimController({
   containerRef,
   activeDef,
@@ -783,7 +786,6 @@ function AimController({
   const { camera, scene } = useThree();
   const aimRef = useRef<Aim>(EMPTY_AIM);
   const lastKey = useRef('');
-  const downRay = useMemo(() => new THREE.Raycaster(), []);
 
   /** Zasady z gry dla punktu stawiania (UseableHousingUtils, HousingConnections). */
   const gameRule = (def: BuildItem, preview: PlacedItem, surface: number): AimReason | undefined => {
@@ -797,11 +799,11 @@ function AimController({
     if (floorPart) {
       // IsFloorAboveGround: teren albo duży obiekt mapy najwyżej 10 m pod środkiem podłogi
       let ground = limits.groundY(px, pz);
-      downRay.set(new THREE.Vector3(px, base + 1, pz), new THREE.Vector3(0, -1, 0));
-      downRay.far = 11;
+      groundProbe.set(new THREE.Vector3(px, base + 1, pz), new THREE.Vector3(0, -1, 0));
+      groundProbe.far = 11;
       const objs: THREE.Object3D[] = [];
       scene.traverse((o) => (o as THREE.Mesh).isMesh && o.userData.mapObject && !o.userData.tree && objs.push(o));
-      const hit = downRay.intersectObjects(objs, false)[0];
+      const hit = groundProbe.intersectObjects(objs, false)[0];
       if (hit) ground = Math.max(ground, hit.point.y);
       if (ground < base - 10) return 'missingGround';
     } else if (limits.undergroundBlocked && def.shape !== 'bed' && def.shape !== 'hatch') {

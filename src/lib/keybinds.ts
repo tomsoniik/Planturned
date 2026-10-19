@@ -9,7 +9,7 @@ export const KEYBIND_ACTIONS = [
   'slot1', 'slot2', 'slot3', 'slot4', 'slot5', 'slot6', 'slot7', 'slot8', 'slot9',
   'demolish', 'bed', 'rotate', 'deleteSelected',
   'floorUp', 'floorDown',
-  'forward', 'back', 'left', 'right', 'up', 'down', 'sprint', 'toggleFly',
+  'forward', 'back', 'left', 'right', 'up', 'down', 'sprint', 'crouch', 'prone', 'toggleFly',
 ] as const;
 export type KeybindAction = (typeof KEYBIND_ACTIONS)[number];
 export type Keybinds = Record<KeybindAction, string>;
@@ -30,6 +30,9 @@ export const DEFAULT_KEYBINDS: Keybinds = {
   up: 'Space',
   down: 'KeyQ',
   sprint: 'ShiftLeft',
+  // w grze kucanie to X, ale tu X to wyburzanie
+  crouch: 'KeyC',
+  prone: 'KeyZ',
   toggleFly: 'KeyF',
 };
 

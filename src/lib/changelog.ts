@@ -18,8 +18,20 @@ export const CHANGELOG: Release[] = [
   {
     version: '0.4.0',
     date: '2026-10-19',
-    title: { pl: 'Teren i drogi jak w grze', en: 'Ground and roads like in the game' },
+    title: { pl: 'Teren, drogi i ruch jak w grze', en: 'Ground, roads and movement like in the game' },
     changes: [
+      {
+        pl: 'Chodzenie w 3D według zasad z Unturned: prędkości chodu, biegu, kucania i czołgania, skok, grawitacja, zsuwanie się ze stromych zboczy, pływanie.',
+        en: '3D walking follows the Unturned rules: walk, sprint, crouch and prone speeds, jump, gravity, sliding off steep slopes, swimming.',
+      },
+      {
+        pl: 'Zdrowie i tlen przy chodzeniu: obrażenia i złamane nogi po upadku z wysokości, tlen pod wodą i wysoko nad mapą.',
+        en: 'Health and oxygen while walking: fall damage and broken legs, oxygen underwater and high above the map.',
+      },
+      {
+        pl: 'Nowe klawisze: kucanie (C) i czołganie (Z), do zmiany w zakładce Skróty.',
+        en: 'New keys: crouch (C) and prone (Z), rebindable in the Keys tab.',
+      },
       {
         pl: 'W 3D ziemia ma prawdziwe tekstury z gry (trawa, ziemia, żwir, piasek, śnieg) mieszane tak jak w Unturned. Ostra z bliska, bez rozmytych plam z mapy satelitarnej.',
         en: 'In 3D the ground uses the real game textures (grass, dirt, gravel, sand, snow) blended like in Unturned. Sharp up close, no blurry blotches from the satellite map.',

@@ -372,7 +372,7 @@ function RoadMesh({ geometry, url }: { geometry: THREE.BufferGeometry; url: stri
   useEffect(() => () => geometry.dispose(), [geometry]);
   if (!tex) return null;
   return (
-    <mesh geometry={geometry} receiveShadow userData={{ terrain: true }}>
+    <mesh geometry={geometry} receiveShadow userData={{ terrain: true, road: true }}>
       <meshStandardMaterial map={tex} roughness={0.95} />
     </mesh>
   );

@@ -43,7 +43,8 @@ function InstancedType({ group, origin }: { group: Group; origin: { x: number; y
       args={[geometry, material, group.rows.length]}
       castShadow
       receiveShadow
-      userData={{ mapObject: true }}
+      // drzewa: w grze kolizja tylko na pniu, więc nie służą za podłoże przy chodzeniu
+      userData={{ mapObject: true, tree: group.kind === 'tree' }}
     />
   );
 }

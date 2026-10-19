@@ -23,6 +23,11 @@ import { DEFAULT_SCENE, type SceneSettings } from '@/lib/scene';
 import { itemLabel, type AimReason, type AimWarn } from '@/lib/i18n';
 import { useT } from './I18nProvider';
 import { keyLabel, useKeybinds } from '@/lib/keybinds';
+import {
+  AIR_ACCEL, AIR_DECEL, EYES, EYES_LERP, FALL_DAMAGE_MAX, FALL_DAMAGE_SPEED, GRAVITY, HEIGHT, JUMP_SPEED, MAX_SLOPE_DEG,
+  RADIUS, SLIDE_ACCEL, SPEED, SWIM_BODY_DEPTH, SWIM_MULTIPLIER, SWIM_SURFACE_OFFSET, SWIM_UP_SPEED, TERMINAL_VELOCITY, TICK,
+  breathAtHeight, oxygenTick, type OxygenState, type Stance, type Vitals,
+} from '@/lib/playerPhysics';
 import { Meadow, SkyAndLight, meadowHeight } from './Scenery';
 import MapObjects from './MapObjects';
 import { GameRoads, useGroundMaterial } from './GameGround';
@@ -366,18 +371,37 @@ function markLockFailed() {
   lockState.listeners.forEach((fn) => fn());
 }
 
-const EYE = 1.7;
+
+/** Woda i tlen w układzie sceny: poziom wody (null = brak), przesunięcie sceny względem świata gry. */
+interface WalkEnv {
+  waterY: number | null;
+  waterWorld: number;
+  baseWorld: number;
+  legacyOxygen: boolean;
+}
+
+export interface WalkStatus {
+  health: number;
+  oxygen: number;
+  legsBroken: boolean;
+  stance: Stance;
+  dead: boolean;
+}
 
 function PlayerCamera({
   containerRef,
   start,
   walk,
   groundAt,
+  env,
+  onStatus,
 }: {
   containerRef: React.RefObject<HTMLDivElement | null>;
   start: [number, number, number];
   walk: boolean;
   groundAt: (x: number, z: number) => number;
+  env: WalkEnv;
+  onStatus: (s: WalkStatus) => void;
 }) {
   const { camera, scene } = useThree();
   const keys = useRef<Record<string, boolean>>({});
@@ -389,7 +413,57 @@ function PlayerCamera({
   }, [binds]);
   const pitch = useRef(0);
   const yaw = useRef(0);
-  const velocityY = useRef(0);
+  const envRef = useRef(env);
+  const onStatusRef = useRef(onStatus);
+  useEffect(() => {
+    envRef.current = env;
+    onStatusRef.current = onStatus;
+  }, [env, onStatus]);
+  const toggles = useRef<('crouch' | 'prone')[]>([]);
+  const phys = useRef({
+    vel: new THREE.Vector3(),
+    stance: 'stand' as Stance,
+    eyes: EYES.stand,
+    grounded: true,
+    vitals: { health: 100, oxygen: 100, legsBroken: false } as Vitals,
+    ox: { lastBreath: 0, lastSuffocate: 0 } as OxygenState,
+    tick: 0,
+    tickAcc: 0,
+    dead: 0,
+    lastReport: 0,
+  });
+  const resetVitals = () => {
+    const p = phys.current;
+    p.vitals = { health: 100, oxygen: 100, legsBroken: false };
+    p.vel.set(0, 0, 0);
+    p.stance = 'stand';
+    p.dead = 0;
+  };
+  const report = () => {
+    const p = phys.current;
+    const now = performance.now();
+    if (now - p.lastReport < 100) return;
+    p.lastReport = now;
+    onStatusRef.current({ ...p.vitals, stance: p.stance, dead: p.dead > 0 });
+  };
+  // ?debug w adresie: stan kamery i postaci do testów (window.__planturned)
+  useEffect(() => {
+    if (!window.location.search.includes('debug')) return;
+    const probe = () => {
+      const p = camera.position;
+      const ray = new THREE.Raycaster(new THREE.Vector3(p.x, p.y - phys.current.eyes + 0.5, p.z), new THREE.Vector3(0, -1, 0), 0, 80);
+      const hits: THREE.Object3D[] = [];
+      scene.traverse((o) => (o as THREE.Mesh).isMesh && hits.push(o));
+      return ray.intersectObjects(hits, false).slice(0, 3).map((h) => ({ y: h.point.y, data: h.object.userData, name: h.object.type }));
+    };
+    (window as unknown as { __planturned: unknown }).__planturned = { camera, phys: phys.current, groundAt, probe };
+  }, [camera, groundAt, scene]);
+  // Wejście w chodzenie: pełne zdrowie, stopy na wysokości oczu kamery
+  useEffect(() => {
+    if (!walk) return;
+    resetVitals();
+    phys.current.eyes = EYES.stand;
+  }, [walk]);
   const initialized = useRef(false);
   const down = useMemo(() => new THREE.Raycaster(), []);
   const ahead = useMemo(() => new THREE.Raycaster(), []);
@@ -418,6 +492,8 @@ function PlayerCamera({
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
       keys.current[e.code] = true;
       if (e.code === bindsRef.current.up && walk) e.preventDefault();
+      if (walk && !e.repeat && e.code === bindsRef.current.crouch) toggles.current.push('crouch');
+      if (walk && !e.repeat && e.code === bindsRef.current.prone) toggles.current.push('prone');
     };
     const keyUp = (e: KeyboardEvent) => {
       keys.current[e.code] = false;
@@ -469,41 +545,175 @@ function PlayerCamera({
       return;
     }
 
-    // Chodzenie: ruch po płaszczyźnie, grawitacja, kolizje ze strukturami.
+    // Chodzenie jak w grze (lib/playerPhysics: PlayerMovement, PlayerStance, PlayerLife)
+    const p = phys.current;
+    const env = envRef.current;
+    if (p.dead > 0) {
+      p.dead -= delta;
+      if (p.dead <= 0) {
+        // powrót do miejsca startu z pełnym zdrowiem
+        resetVitals();
+        pos.set(start[0], groundAt(start[0], start[2]) + EYES.stand, start[2]);
+      }
+      report();
+      return;
+    }
+
+    // Promienie tylko na struktury, obiekty mapy i drogi; wysokość terenu daje groundAt (bez siatki 74 tys. trójkątów)
     const meshes: THREE.Object3D[] = [];
     scene.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh && (o.userData.itemId || o.userData.terrain || o.userData.mapObject)) meshes.push(o);
+      if ((o as THREE.Mesh).isMesh && (o.userData.itemId || o.userData.road || o.userData.mapObject)) meshes.push(o);
     });
-    const speed = (k[b.sprint] ? 7.5 : 4.5) * delta;
+    const solids = meshes.filter((m) => !m.userData.road);
+    const floors = meshes.filter((m) => !m.userData.tree);
+
+    // Kucanie i czołganie przełączane klawiszem (nie w wodzie)
+    for (const toggle of toggles.current.splice(0)) {
+      if (p.stance === 'swim') continue;
+      p.stance = p.stance === toggle ? 'stand' : toggle;
+    }
+
+    let feet = pos.y - p.eyes;
+    const waterY = env.waterY;
+    const bodyUnder = waterY !== null && feet + SWIM_BODY_DEPTH < waterY;
+    const eyesUnder = waterY !== null && pos.y < waterY;
+    if (bodyUnder) p.stance = 'swim';
+    else if (p.stance === 'swim') p.stance = 'stand';
+
     const forward = new THREE.Vector3(-Math.sin(yaw.current), 0, -Math.cos(yaw.current));
     const right = new THREE.Vector3(-forward.z, 0, forward.x);
-    const step = new THREE.Vector3();
-    if (k[b.forward]) step.add(forward);
-    if (k[b.back]) step.sub(forward);
-    if (k[b.left]) step.sub(right);
-    if (k[b.right]) step.add(right);
-    if (step.lengthSq() > 0) {
-      step.normalize().multiplyScalar(speed);
-      const feet = pos.y - EYE;
-      ahead.set(new THREE.Vector3(pos.x, feet + 0.6, pos.z), step.clone().normalize());
-      ahead.far = speed + 0.35;
-      const blocked = ahead.intersectObjects(meshes.filter((m) => !m.userData.terrain), false).length > 0;
-      if (!blocked) pos.add(step);
+    const wish = new THREE.Vector3();
+    if (k[b.forward]) wish.add(forward);
+    if (k[b.back]) wish.sub(forward);
+    if (k[b.left]) wish.sub(right);
+    if (k[b.right]) wish.add(right);
+    if (wish.lengthSq() > 0) wish.normalize();
+    // bieg tylko do przodu, na stojąco i bez złamanych nóg
+    if (p.stance === 'stand' || p.stance === 'sprint') {
+      p.stance = k[b.sprint] && k[b.forward] && !p.vitals.legsBroken ? 'sprint' : 'stand';
+    }
+    const speed = SPEED[p.stance] * (p.stance === 'swim' ? SWIM_MULTIPLIER : 1);
+    const v = p.vel;
+    let vyStart: number | null = null;
+
+    // Grunt pod stopami: najwyższa powierzchnia do 0.5 m nad stopami (stopnie, drogi) albo teren
+    const groundUnder = (x: number, y: number, z: number) => {
+      down.set(new THREE.Vector3(x, y + 0.5, z), new THREE.Vector3(0, -1, 0));
+      down.far = 80;
+      const hit = down.intersectObjects(floors, false)[0];
+      const terrain = groundAt(x, z);
+      return hit && hit.point.y > terrain ? { y: hit.point.y, terrain: false } : { y: terrain, terrain: true };
+    };
+    const g = groundUnder(pos.x, feet, pos.z);
+    const wasGrounded = p.grounded;
+    // PlayerLife.onLanded: przy przejściu z powietrza na ziemię szybciej niż 22 m/s obrażenia = min(101, |v|) i złamane nogi
+    const land = (vy: number) => {
+      if (vy < -FALL_DAMAGE_SPEED && p.stance !== 'swim') {
+        p.vitals.health = Math.max(0, p.vitals.health - Math.round(Math.min(FALL_DAMAGE_MAX, -vy)));
+        p.vitals.legsBroken = true;
+      }
+    };
+    p.grounded = p.stance !== 'swim' && feet <= g.y + 0.05 && v.y <= 0;
+    if (p.grounded && !wasGrounded) land(v.y);
+
+    if (p.stance === 'swim') {
+      if (eyesUnder) {
+        // pod wodą: ruch w stronę patrzenia, spacja w górę
+        const look = new THREE.Vector3();
+        camera.getWorldDirection(look);
+        const dir = new THREE.Vector3();
+        if (k[b.forward]) dir.add(look);
+        if (k[b.back]) dir.sub(look);
+        if (k[b.left]) dir.sub(right);
+        if (k[b.right]) dir.add(right);
+        if (dir.lengthSq() > 0) dir.normalize();
+        v.copy(dir.multiplyScalar(speed));
+        if (k[b.up]) v.y = SWIM_UP_SPEED;
+      } else {
+        // na powierzchni: ciało 1.275 m pod lustrem wody
+        v.set(wish.x * speed, (waterY! - SWIM_SURFACE_OFFSET - feet) / 8, wish.z * speed);
+      }
+    } else if (p.grounded) {
+      // zbocze stromsze niż 59°: zsuwanie zamiast chodzenia
+      const e = 1;
+      const n = g.terrain
+        ? new THREE.Vector3(groundAt(pos.x - e, pos.z) - groundAt(pos.x + e, pos.z), 2 * e, groundAt(pos.x, pos.z - e) - groundAt(pos.x, pos.z + e)).normalize()
+        : new THREE.Vector3(0, 1, 0);
+      const steep = (Math.acos(Math.min(1, n.y)) * 180) / Math.PI > MAX_SLOPE_DEG;
+      if (steep) {
+        v.x += n.x * SLIDE_ACCEL * delta;
+        v.z += n.z * SLIDE_ACCEL * delta;
+        v.y = 0;
+      } else {
+        v.set(wish.x * speed, 0, wish.z * speed);
+        if (k[b.up] && (p.stance === 'stand' || p.stance === 'sprint') && !p.vitals.legsBroken) {
+          v.y = JUMP_SPEED;
+          p.grounded = false;
+        }
+      }
+    } else {
+      vyStart = v.y;
+      v.y = Math.max(v.y - GRAVITY * delta, -TERMINAL_VELOCITY);
+      // sterowanie w powietrzu: przyspieszenie 8 * prędkość, wyhamowanie 2 m/s^2
+      const h = new THREE.Vector2(v.x, v.z);
+      const target = speed;
+      const maxMag = h.length() > target ? Math.max(target, h.length() - AIR_DECEL * delta) : target;
+      h.add(new THREE.Vector2(wish.x, wish.z).multiplyScalar(speed * AIR_ACCEL * delta));
+      if (h.length() > maxMag) h.setLength(maxMag);
+      v.x = h.x;
+      v.z = h.y;
     }
 
-    // Grunt pod stopami: najwyższa powierzchnia poniżej kolan albo teren.
-    down.set(new THREE.Vector3(pos.x, pos.y - EYE + 0.8, pos.z), new THREE.Vector3(0, -1, 0));
-    down.far = 60;
-    const hit = down.intersectObjects(meshes, false)[0];
-    const ground = Math.max(hit ? hit.point.y : -Infinity, groundAt(pos.x, pos.z));
-
-    velocityY.current -= 22 * delta;
-    if (k[b.up] && pos.y - EYE <= ground + 0.05) velocityY.current = 7;
-    pos.y += velocityY.current * delta;
-    if (pos.y - EYE < ground) {
-      pos.y = ground + EYE;
-      velocityY.current = 0;
+    // Ruch poziomy z kolizjami: promienie na wysokości kolan i klatki, ślizganie po ścianie
+    const height = HEIGHT[p.stance];
+    const blocked = (dx: number, dz: number) => {
+      const d = Math.hypot(dx, dz);
+      if (d < 1e-5) return false;
+      const dir = new THREE.Vector3(dx / d, 0, dz / d);
+      for (const hgt of [0.55, Math.max(0.6, height - 0.3)]) {
+        ahead.set(new THREE.Vector3(pos.x, feet + hgt, pos.z), dir);
+        ahead.far = d + RADIUS;
+        if (ahead.intersectObjects(solids, false).length > 0) return true;
+      }
+      return false;
+    };
+    const dx = v.x * delta, dz = v.z * delta;
+    if (!blocked(dx, dz)) {
+      pos.x += dx;
+      pos.z += dz;
+    } else if (!blocked(dx, 0)) {
+      pos.x += dx;
+      v.z = 0;
+    } else if (!blocked(0, dz)) {
+      pos.z += dz;
+      v.x = 0;
+    } else {
+      v.x = v.z = 0;
     }
+
+    // Ruch pionowy i lądowanie (PlayerLife.onLanded: > 22 m/s = obrażenia i złamane nogi)
+    const g2 = groundUnder(pos.x, feet, pos.z);
+    feet += ((vyStart ?? v.y) + v.y) / 2 * delta;
+    if (feet <= g2.y) {
+      if (!p.grounded) land(v.y);
+      feet = g2.y;
+      if (v.y < 0) v.y = 0;
+      if (p.stance !== 'swim') p.grounded = true;
+    }
+
+    p.eyes += (EYES[p.stance] - p.eyes) * Math.min(1, EYES_LERP * delta);
+    pos.y = feet + p.eyes;
+
+    // Tlen w tikach symulacji gry (co 0.08 s)
+    p.tickAcc += delta;
+    while (p.tickAcc >= TICK) {
+      p.tickAcc -= TICK;
+      p.tick++;
+      const breath = eyesUnder ? -1 : breathAtHeight(feet + env.baseWorld, env.waterWorld, env.legacyOxygen);
+      oxygenTick(p.tick, breath, p.vitals, p.ox);
+    }
+    if (p.vitals.health <= 0 && p.dead <= 0) p.dead = 3;
+    report();
   });
 
   return null;
@@ -772,6 +982,19 @@ export default function Builder3D({
       },
     };
   }, [activeMap, site, lift]);
+  // Woda i tlen dla chodzenia: poziom wody w układzie sceny, przesunięcie sceny względem świata gry
+  const walkEnv = useMemo(() => {
+    const meta = activeMap?.meta;
+    const baseWorld = (site && activeMap ? site.elevation : 0) + lift;
+    const sea = meta?.seaLevel ?? null;
+    return {
+      waterY: sea === null ? null : sea - baseWorld,
+      waterWorld: sea ?? 0,
+      baseWorld,
+      legacyOxygen: meta ? meta.oxygen !== false : true,
+    };
+  }, [activeMap, site, lift]);
+  const [walkStatus, setWalkStatus] = useState<WalkStatus | null>(null);
   const groundAt = useMemo(() => {
     if (site && activeMap) return (x: number, z: number) => activeMap.heightAt(site.x + x, site.z - z) - site.elevation - lift;
     return (x: number, z: number) => meadowHeight(x, z) - lift;
@@ -793,7 +1016,7 @@ export default function Builder3D({
         <SkyAndLight time={scene.time} focus={start} extend={sky ? lift * 1.6 + 260 : 0} />
         {night && <pointLight position={[start[0], start[1] + 7, start[2]]} intensity={70} distance={60} color="#ffb070" />}
 
-        <PlayerCamera containerRef={containerRef} start={start} walk={walk} groundAt={groundAt} />
+        <PlayerCamera containerRef={containerRef} start={start} walk={walk} groundAt={groundAt} env={walkEnv} onStatus={setWalkStatus} />
         <AimController
           containerRef={containerRef}
           activeDef={activeDef}
@@ -866,6 +1089,29 @@ export default function Builder3D({
         {sky && <span className={styles.modeMap}>Skybase {scene.skyHeight} m</span>}
         {site && <span className={styles.modeMap}>{site.map}</span>}
       </div>
+
+      {/* Zdrowie i tlen: tylko przy chodzeniu (fizyka z gry) */}
+      {walk && walkStatus && (
+        <div className={styles.vitals} data-ui>
+          <div className={styles.vital}>
+            <span>{t.view3d.health}</span>
+            <span className={styles.bar} data-kind="health"><span style={{ width: `${walkStatus.health}%` }} /></span>
+            <strong>{walkStatus.health}</strong>
+          </div>
+          <div className={styles.vital}>
+            <span>{t.view3d.oxygen}</span>
+            <span className={styles.bar} data-kind="oxygen"><span style={{ width: `${walkStatus.oxygen}%` }} /></span>
+            <strong>{walkStatus.oxygen}</strong>
+          </div>
+          {(walkStatus.legsBroken || t.view3d.stances[walkStatus.stance]) && (
+            <div className={styles.vitalTags}>
+              {t.view3d.stances[walkStatus.stance] && <span>{t.view3d.stances[walkStatus.stance]}</span>}
+              {walkStatus.legsBroken && <span data-bad>{t.view3d.legsBroken}</span>}
+            </div>
+          )}
+        </div>
+      )}
+      {walk && walkStatus?.dead && <div className={styles.deathNote}>{t.view3d.dead}</div>}
 
       {/* Stan celownika: tylko gdy trzymasz element, skróty są w zakładce Skróty */}
       {activeDef && !isDemolish && (

@@ -33,6 +33,7 @@ import { useI18n, useT } from '@/components/I18nProvider';
 import LangSwitch from '@/components/LangSwitch';
 import MapPicker from '@/components/MapPicker';
 import SiteUnderlay from '@/components/SiteUnderlay';
+import PlanCanvas, { layerOf } from '@/components/PlanCanvas';
 import {
   BED,
   BED_CLAIM_RADIUS,
@@ -42,7 +43,6 @@ import {
   computePaste,
   computePlacement,
   findDef,
-  isRoofLayer,
   itemsForMaterial,
   getPolygonVertices,
   newItemId,
@@ -105,15 +105,6 @@ const renderInterior = (def: BuildItem) => {
   return null;
 };
 
-/** Kolejność warstw w rzucie: płyty, ściany, filary, dachy na wierzchu. */
-const layerOf = (def: BuildItem) => {
-  if (isRoofLayer(def)) return 30;
-  if (def.shape === 'hatch') return 35;
-  if (def.shape === 'wall') return 20;
-  if (def.shape === 'pillar') return 25;
-  if (def.shape === 'bed') return 15;
-  return 10;
-};
 
 /** Obrys elementu do trafiania kursorem (jak w rzucie: ściana 60x5, filar 10x10...), z małym zapasem. */
 const hitPolygon = (item: PlacedItem, def: BuildItem) => {
@@ -124,49 +115,6 @@ const hitPolygon = (item: PlacedItem, def: BuildItem) => {
   return [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]].map(([x, y]) => ({ x: item.x + x * c - y * s, y: item.y + x * s + y * c }));
 };
 
-const RenderedItem = React.memo(({
-  item, def, currentFloor, showBedAreas, isSelected, hoverMark = false,
-}: {
-  item: PlacedItem;
-  def: BuildItem;
-  currentFloor: number;
-  showBedAreas: boolean;
-  isSelected: boolean;
-  hoverMark?: boolean;
-}) => {
-  const itemFloor = item.floor || 0;
-  if (itemFloor > currentFloor) return null; // wyższe piętra ukryte
-
-  const isLowerFloor = itemFloor < currentFloor;
-
-  return (
-    <>
-      {def.shape === 'bed' && showBedAreas && !isLowerFloor && (
-        <div
-          className={styles.claim}
-          style={{ left: item.x, top: item.y, width: BED_CLAIM_RADIUS * 2, height: BED_CLAIM_RADIUS * 2 }}
-        />
-      )}
-      <div
-        className={`${styles.placedItem} ${shapeClassFor(def)} ${isSelected ? styles.selected : ''} ${hoverMark ? styles.hoverMark : ''}`}
-        data-part={def.part}
-        data-material={def.material}
-        style={{
-          left: item.x,
-          top: item.y,
-          transform: itemTransform(def, item.rotation),
-          transformOrigin: def.shape === 'triangle' ? '50% 66.666%' : '50% 50%',
-          '--c': item.customColor || def.color,
-          opacity: isLowerFloor ? 0.22 : undefined,
-          zIndex: hoverMark ? 900 : layerOf(def) + itemFloor * 40,
-        } as React.CSSProperties}
-      >
-        {renderInterior(def)}
-      </div>
-    </>
-  );
-});
-RenderedItem.displayName = 'RenderedItem';
 
 const isTypingTarget = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
@@ -655,23 +603,28 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
     [placedItems, currentFloor],
   );
 
-  const memoizedPlacedItems = useMemo(() => placedItems.map(item => {
-    if (dragState?.isDragging && dragState.initialItems.some(i => i.id === item.id)) return null;
-    const def = findDef(item.itemId);
-    if (!def) return null;
-    return (
-      <RenderedItem
-        key={item.id}
-        item={item}
-        def={def}
-        currentFloor={currentFloor}
-        showBedAreas={showBedAreas}
-        isSelected={selectedItemId === item.id || selectedItemIds.includes(item.id)}
-      />
-    );
-  }), [placedItems, selectedItemId, selectedItemIds, currentFloor, showBedAreas, dragState]);
-  const hoverItem = hoverId ? placedItems.find(i => i.id === hoverId) : undefined;
-  const hoverDef = hoverItem ? findDef(hoverItem.itemId) : undefined;
+  const selectedSet = useMemo(
+    () => new Set(selectedItemId ? [...selectedItemIds, selectedItemId] : selectedItemIds),
+    [selectedItemId, selectedItemIds],
+  );
+  // Przeciągane elementy rysuje osobna warstwa płótna z przesunięciem.
+  // Zależność od samej tablicy (nie od dx/dy), żeby plan nie przebudowywał się przy każdym ruchu.
+  const draggedItems = dragState?.isDragging ? dragState.initialItems : null;
+  const canvasItems = useMemo(() => {
+    if (!draggedItems) return placedItems;
+    const ids = new Set(draggedItems.map(i => i.id));
+    return placedItems.filter(i => !ids.has(i.id));
+  }, [placedItems, draggedItems]);
+  const canvasHover = useMemo(
+    () => (hoverId && !dragState && (isRemoverActive || selectedColor !== '')
+      ? { id: hoverId, mode: isRemoverActive ? 'remove' as const : 'paint' as const }
+      : null),
+    [hoverId, dragState, isRemoverActive, selectedColor],
+  );
+  const canvasDrag = useMemo(
+    () => (dragState?.isDragging ? { items: dragState.initialItems, dx: dragState.dx, dy: dragState.dy } : null),
+    [dragState],
+  );
 
   if (notFound) {
     return (
@@ -1065,41 +1018,28 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                   transform: `translate3d(${((pan.x % gridMajor) + gridMajor) % gridMajor}px, ${((pan.y % gridMajor) + gridMajor) % gridMajor}px, 0)`,
                 }}
               />
+              {project?.site && showUnderlay && (
+                <div
+                  className={styles.canvas}
+                  style={{ transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${scale})` }}
+                >
+                  <SiteUnderlay site={project.site} />
+                </div>
+              )}
+              <PlanCanvas
+                items={canvasItems}
+                currentFloor={currentFloor}
+                showBedAreas={showBedAreas}
+                selectedIds={selectedSet}
+                hover={canvasHover}
+                drag={canvasDrag}
+                pan={pan}
+                scale={scale}
+              />
               <div
                 className={styles.canvas}
                 style={{ transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${scale})` }}
               >
-                {project?.site && showUnderlay && <SiteUnderlay site={project.site} />}
-                {memoizedPlacedItems}
-                {hoverItem && hoverDef && !dragState && (isRemoverActive || selectedColor !== '') && (
-                  <RenderedItem
-                    item={hoverItem}
-                    def={hoverDef}
-                    currentFloor={currentFloor}
-                    showBedAreas={false}
-                    isSelected={false}
-                    hoverMark
-                  />
-                )}
-
-                {dragState?.isDragging && (
-                  <div style={{ transform: `translate3d(${dragState.dx}px, ${dragState.dy}px, 0)` }}>
-                    {dragState.initialItems.map(item => {
-                      const def = findDef(item.itemId);
-                      if (!def) return null;
-                      return (
-                        <RenderedItem
-                          key={`drag-${item.id}`}
-                          item={item}
-                          def={def}
-                          currentFloor={currentFloor}
-                          showBedAreas={showBedAreas}
-                          isSelected
-                        />
-                      );
-                    })}
-                  </div>
-                )}
 
                 {activeDef && previewItem && (
                   <>

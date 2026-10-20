@@ -32,6 +32,14 @@ export const CHANGELOG: Release[] = [
         pl: '/skybase: teleport na wysokość, gdzie pod limitem mapy mieści się jedno piętro, i dach startowy pod tobą, od którego budujesz dalej.',
         en: '/skybase: teleports you to the height where one floor fits under the map limit and puts a starter roof under you to build from.',
       },
+      {
+        pl: 'Przenoszenie bazy w 3D: celujesz w bazę i wciskasz G. Cała połączona baza wisi w celowniku, R obraca, klik odkłada, Esc wraca na stare miejsce.',
+        en: 'Moving a base in 3D: aim at it and press G. The whole connected base hangs at the crosshair, R rotates, a click drops it, Esc puts it back.',
+      },
+      {
+        pl: 'Budowle: lista baz w projekcie (zakładka w 2D i w menu Esc) z liczbą elementów i wysokością. W 2D przybliża i zaznacza, w 3D przenosi albo teleportuje, w obu usuwa.',
+        en: 'Builds: a list of the bases in the project (a tab in 2D and in the Esc menu) with piece counts and height. In 2D it zooms and selects, in 3D it moves or teleports, both can delete.',
+      },
     ],
   },
   {

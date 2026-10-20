@@ -18,7 +18,7 @@ import styles from './KeybindsPanel.module.css';
 const GROUPS: { id: 'build' | 'plan' | 'view3d'; actions: KeybindAction[] }[] = [
   { id: 'build', actions: ['demolish', 'bed', 'rotate', 'deleteSelected'] },
   { id: 'plan', actions: ['floorUp', 'floorDown'] },
-  { id: 'view3d', actions: ['forward', 'back', 'left', 'right', 'up', 'down', 'sprint', 'crouch', 'prone', 'toggleFly', 'map', 'inventory', 'chat'] },
+  { id: 'view3d', actions: ['forward', 'back', 'left', 'right', 'up', 'down', 'sprint', 'crouch', 'prone', 'toggleFly', 'map', 'inventory', 'chat', 'grab'] },
 ];
 
 /** Zakładka Skróty: klawisze do zmiany i lista stałych skrótów. */

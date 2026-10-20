@@ -919,3 +919,43 @@ export function computeMaterials(items: PlacedItem[]) {
 }
 
 export const newItemId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+// --- Bazy: grupy połączonych elementów ---
+
+/**
+ * Podział elementów na bazy: elementy są w jednej bazie, gdy stoją obok siebie (do 61 j., czyli sąsiednia płyta)
+ * na sąsiednich poziomach. Kolejność: od największej bazy.
+ */
+export function baseGroups(items: PlacedItem[]): PlacedItem[][] {
+  const parent = items.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const cell = (v: number) => Math.floor(v / 64);
+  const grid = new Map<string, number[]>();
+  items.forEach((it, i) => {
+    const key = `${cell(it.x)},${cell(it.y)}`;
+    const list = grid.get(key);
+    if (list) list.push(i);
+    else grid.set(key, [i]);
+  });
+  items.forEach((a, i) => {
+    const cx = cell(a.x), cy = cell(a.y);
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        grid.get(`${cx + dx},${cy + dy}`)?.forEach((j) => {
+          if (j <= i) return;
+          const b = items[j];
+          if (Math.abs((a.floor || 0) - (b.floor || 0)) > 1.05 || Math.hypot(a.x - b.x, a.y - b.y) > 61) return;
+          parent[find(i)] = find(j);
+        });
+      }
+    }
+  });
+  const groups = new Map<number, PlacedItem[]>();
+  items.forEach((it, i) => {
+    const r = find(i);
+    const g = groups.get(r);
+    if (g) g.push(it);
+    else groups.set(r, [it]);
+  });
+  return [...groups.values()].sort((a, b) => b.length - a.length);
+}

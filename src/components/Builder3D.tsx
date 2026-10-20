@@ -774,7 +774,8 @@ function PlayerCamera({
       if (c.kind === 'tp') {
         const x = c.x - ox, z = oz - c.z;
         p.vel.set(0, 0, 0);
-        camera.position.set(x, groundAt(x, z) + (walk ? p.eyes + 0.5 : 12), z);
+        if (c.y !== undefined) camera.position.set(x, c.y - envRef.current.baseWorld + 8, z + 18);
+        else camera.position.set(x, groundAt(x, z) + (walk ? p.eyes + 0.5 : 12), z);
       } else if (c.kind === 'height') {
         p.vel.set(0, 0, 0);
         camera.position.y = groundAt(camera.position.x, camera.position.z) + Math.max(c.above, p.eyes);
@@ -1061,6 +1062,8 @@ interface Aim {
   above: number | null;
   /** Podgląd wklejania w 3D. */
   paste: PasteResult | null;
+  /** Element w celowniku (podpowiedź o chwytaniu bazy). */
+  lookId: string | null;
   reason?: AimReason;
   warn?: AimWarn;
 }
@@ -1081,7 +1084,7 @@ export interface SceneLimits {
   undergroundBlocked: boolean;
 }
 
-const EMPTY_AIM: Aim = { preview: null, valid: false, targetId: null, surface: null, above: null, paste: null };
+const EMPTY_AIM: Aim = { preview: null, valid: false, targetId: null, surface: null, above: null, paste: null, lookId: null };
 
 /** Siatki postawionych struktur (do celowania i kolizji). */
 function structureMeshes(scene: THREE.Scene) {
@@ -1156,7 +1159,7 @@ function AimController({
   groundAt: (x: number, z: number) => number;
   turn: number;
   /** Wklejanie w 3D: schowek i liczba obrotów o 90°. */
-  paste: { clip: PlacedItem[]; turn: number } | null;
+  paste: { clip: PlacedItem[]; turn: number; move?: boolean } | null;
   onAim: (aim: Aim) => void;
   onPlace: (item: Omit<PlacedItem, 'id'>) => void;
   onDelete: (id: string) => void;
@@ -1219,9 +1222,11 @@ function AimController({
     const ray = raycaster.ray;
     let next: Aim = EMPTY_AIM;
     const structureHit = raycaster.intersectObjects(structureMeshes(scene), false).find((h) => h.distance < 90);
+    const lookId = structureHit ? hitItemId(structureHit) : null;
+    if (useView3D.getState().lookId !== lookId) useView3D.setState({ lookId });
 
     if (!activeDef && !paste) {
-      // nic w ręku
+      next = { ...EMPTY_AIM, lookId };
     } else if (activeDef?.shape === 'remover' && !paste) {
       next = { ...EMPTY_AIM, targetId: structureHit ? hitItemId(structureHit) : null };
     } else {
@@ -1317,7 +1322,7 @@ function AimController({
 
     aimRef.current = next;
     const p = next.preview;
-    const key = `${next.targetId}|${next.valid}|${next.surface}|${next.reason}|${next.warn}|${p ? `${p.itemId},${p.x},${p.y},${p.rotation},${p.floor}` : ''}|${pasteCache.current.key}`;
+    const key = `${next.targetId}|${next.lookId}|${next.valid}|${next.surface}|${next.reason}|${next.warn}|${p ? `${p.itemId},${p.x},${p.y},${p.rotation},${p.floor}` : ''}|${pasteCache.current.key}`;
     if (key !== lastKey.current) {
       lastKey.current = key;
       onAim(next);
@@ -1380,8 +1385,8 @@ interface Builder3DProps {
   selectedItemIds: string[];
   scene?: SceneSettings;
   site?: Site;
-  /** Wklejanie schowka w 3D (Ctrl+V): grupa i liczba obrotów o 90°. */
-  paste?: { clip: PlacedItem[]; turn: number } | null;
+  /** Wklejanie schowka w 3D (Ctrl+V) albo przenoszenie bazy (G, move): grupa i liczba obrotów o 90°. */
+  paste?: { clip: PlacedItem[]; turn: number; move?: boolean } | null;
   onPlaceItem: (item: Omit<PlacedItem, 'id'>) => void;
   onDeleteItem: (id: string) => void;
   onPaste?: (items: PlacedItem[]) => void;
@@ -1551,6 +1556,12 @@ export default function Builder3D({
   );
 
   const origin = useMemo(() => (site && activeMap ? { x: site.x, z: site.z } : null), [site, activeMap]);
+  // Przenoszona baza wisi w celowniku: na starym miejscu jej nie ma i nie koliduje sama ze sobą
+  const shownItems = useMemo(() => {
+    if (!paste?.move) return placedItems;
+    const moving = new Set(paste.clip.map((i) => i.id));
+    return placedItems.filter((i) => !moving.has(i.id));
+  }, [placedItems, paste]);
 
   const ghostDef = aim.preview ? findDef(aim.preview.itemId) : undefined;
   const ghostModel = ghostDef?.gameId !== undefined ? models.get(ghostDef.gameId) : undefined;
@@ -1572,7 +1583,7 @@ export default function Builder3D({
         <AimController
           containerRef={containerRef}
           activeDef={activeDef}
-          items={placedItems}
+          items={shownItems}
           limits={limits}
           groundAt={groundAt}
           turn={turn}
@@ -1604,7 +1615,7 @@ export default function Builder3D({
         )}
 
         <Structures
-          items={placedItems}
+          items={shownItems}
           models={models}
           selected={selectedItemIds}
           targetId={targeting ? aim.targetId : null}
@@ -1662,9 +1673,16 @@ export default function Builder3D({
       )}
       {walk && walkStatus?.dead && <div className={styles.deathNote}>{t.view3d.dead}</div>}
 
+      {!activeDef && !paste && aim.lookId && (
+        <div className={styles.aimStatus} data-ui>
+          <kbd>{keyLabel(binds.grab, { space: t.keys.space, shift: t.keys.shift })}</kbd>
+          <span>{t.hud.grabHint}</span>
+        </div>
+      )}
+
       {paste && (
         <div className={styles.aimStatus} data-ui data-bad={!aim.valid || undefined}>
-          <strong>{t.hud.pasting(paste.clip.length)}</strong>
+          <strong>{paste.move ? t.hud.moving(paste.clip.length) : t.hud.pasting(paste.clip.length)}</strong>
           {aim.paste ? (aim.valid ? t.view3d.fits : t.view3d.collides) : t.view3d.aimAtGrid}
           <span>{t.hud.pasteKeys(keyLabel(binds.rotate, { space: t.keys.space, shift: t.keys.shift }))}</span>
         </div>

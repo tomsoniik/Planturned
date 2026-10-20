@@ -26,7 +26,7 @@ export function langFromAcceptLanguage(header: string | null): Lang {
 
 export type AimReason = 'mapLimit' | 'noBuildZone' | 'safezone' | 'spawn' | 'missingGround' | 'underground' | 'missingPillar' | 'roofSupport';
 export type AimWarn = 'oxygen';
-export type SidebarTabId = 'blocks' | 'map' | 'color' | 'hotkeys';
+export type SidebarTabId = 'blocks' | 'bases' | 'map' | 'color' | 'hotkeys';
 export type PartGroupId = 'slabs' | 'walls' | 'pillars' | 'stairs';
 
 const pl = {
@@ -92,7 +92,7 @@ const pl = {
     confirmClear: 'Wyczyścić cały projekt? Możesz to cofnąć przez Ctrl Z.',
     pasteSame: 'Te elementy już tu stoją',
     pasteOverlap: 'Kopia nachodzi na istniejące elementy',
-    tabs: { blocks: 'Klocki', map: 'Teren', color: 'Kolor', hotkeys: 'Skróty' } satisfies Record<SidebarTabId, string>,
+    tabs: { blocks: 'Klocki', bases: 'Budowle', map: 'Teren', color: 'Kolor', hotkeys: 'Skróty' } satisfies Record<SidebarTabId, string>,
     groups: {
       slabs: 'Podłogi i dachy',
       walls: 'Ściany',
@@ -158,6 +158,7 @@ const pl = {
       map: 'Mapa',
       inventory: 'Ekwipunek',
       chat: 'Czat i komendy',
+      grab: 'Przenieś bazę w celowniku',
     } satisfies Record<Exclude<KeybindAction, `slot${number}`>, string>,
     fixed: [
       [['Esc'], 'odłóż element, odznacz; w 3D menu'],
@@ -177,6 +178,19 @@ const pl = {
     nav: 'Changelog',
     title: 'Changelog',
     sub: 'Co nowego w Planturned.',
+  },
+  bases: {
+    empty: 'Nic tu jeszcze nie stoi. Każda grupa połączonych elementów pojawi się tu jako osobna baza.',
+    name: (n: number) => `Baza ${n}`,
+    ground: 'na ziemi',
+    above: (m: string) => `${m} m nad ziemią`,
+    show: 'Pokaż',
+    move: 'Przenieś',
+    teleport: 'Teleportuj',
+    remove: 'Usuń',
+    confirmDelete: (n: number) => `Usunąć bazę (${n} el.)? Ctrl Z cofa.`,
+    hint2d: 'Pokaż przybliża plan do bazy i ją zaznacza.',
+    hint3d: 'Przenieś: baza wisi w celowniku, R obraca, klik odkłada, Esc anuluje. W grze: celujesz w bazę i G.',
   },
   view3d: {
     lockFailed: 'Przeglądarka nie oddała kursora: obracaj kamerę prawym przyciskiem, stawiaj lewym',
@@ -218,11 +232,13 @@ const pl = {
     chatHint: 'Tab uzupełnia, Enter wykonuje, Esc zamyka',
     menuTitle: 'Pauza',
     resume: 'Wróć do gry',
-    sections: { scene: 'Scena', map: 'Mapa', keys: 'Klawisze' },
+    sections: { scene: 'Scena', map: 'Mapa', bases: 'Budowle', keys: 'Klawisze' },
     to2d: 'Widok 2D',
     projects: 'Projekty',
     commandsHint: (key: string) => `Czat i komendy: ${key} albo /. Lista komend: /help`,
     pasting: (n: number) => `Wklejanie: ${n} el.`,
+    moving: (n: number) => `Przenoszenie bazy: ${n} el.`,
+    grabHint: 'przenieś bazę',
     pasteKeys: (key: string) => `${key} obraca, klik wstawia, Esc anuluje`,
     map: 'Mapa',
     mapHint: 'Klik na mapie teleportuje. Kropki to spawny z gry.',
@@ -372,7 +388,7 @@ const en: Dict = {
     confirmClear: 'Clear the whole project? You can undo it with Ctrl Z.',
     pasteSame: 'These pieces are already here',
     pasteOverlap: 'The copy overlaps existing pieces',
-    tabs: { blocks: 'Pieces', map: 'Terrain', color: 'Color', hotkeys: 'Keys' },
+    tabs: { blocks: 'Pieces', bases: 'Builds', map: 'Terrain', color: 'Color', hotkeys: 'Keys' },
     groups: { slabs: 'Floors and roofs', walls: 'Walls', pillars: 'Pillars', stairs: 'Stairs and ramps' },
     results: 'Results',
     material: 'Material',
@@ -433,6 +449,7 @@ const en: Dict = {
       map: 'Map',
       inventory: 'Inventory',
       chat: 'Chat and commands',
+      grab: 'Move the base at the crosshair',
     },
     fixed: [
       [['Esc'], 'drop the piece, deselect; in 3D the menu'],
@@ -452,6 +469,19 @@ const en: Dict = {
     nav: 'Changelog',
     title: 'Changelog',
     sub: "What's new in Planturned.",
+  },
+  bases: {
+    empty: 'Nothing here yet. Each group of connected pieces shows up here as a separate base.',
+    name: (n: number) => `Base ${n}`,
+    ground: 'on the ground',
+    above: (m: string) => `${m} m above the ground`,
+    show: 'Show',
+    move: 'Move',
+    teleport: 'Teleport',
+    remove: 'Delete',
+    confirmDelete: (n: number) => `Delete the base (${n} pcs)? Ctrl Z undoes.`,
+    hint2d: 'Show zooms the plan to the base and selects it.',
+    hint3d: 'Move: the base hangs at the crosshair, R rotates, click drops, Esc cancels. In game: aim at the base and press G.',
   },
   view3d: {
     lockFailed: "The browser didn't release the cursor: rotate the camera with the right button, place with the left",
@@ -493,11 +523,13 @@ const en: Dict = {
     chatHint: 'Tab completes, Enter runs, Esc closes',
     menuTitle: 'Paused',
     resume: 'Back to game',
-    sections: { scene: 'Scene', map: 'Map', keys: 'Keys' },
+    sections: { scene: 'Scene', map: 'Map', bases: 'Builds', keys: 'Keys' },
     to2d: '2D view',
     projects: 'Projects',
     commandsHint: (key: string) => `Chat and commands: ${key} or /. Command list: /help`,
     pasting: (n: number) => `Pasting: ${n} pcs`,
+    moving: (n: number) => `Moving the base: ${n} pcs`,
+    grabHint: 'move the base',
     pasteKeys: (key: string) => `${key} rotates, click places, Esc cancels`,
     map: 'Map',
     mapHint: 'Click the map to teleport. Dots are game spawns.',

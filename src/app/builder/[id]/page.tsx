@@ -9,6 +9,7 @@ import {
   ArrowCounterClockwise,
   ArrowLeft,
   Bed,
+  Buildings,
   Cube,
   DownloadSimple,
   GridFour,
@@ -37,6 +38,7 @@ import MapPicker from '@/components/MapPicker';
 import SiteUnderlay from '@/components/SiteUnderlay';
 import PlanCanvas, { layerOf } from '@/components/PlanCanvas';
 import KeybindsPanel from '@/components/KeybindsPanel';
+import BasesPanel, { baseWorld, type BaseInfo } from '@/components/BasesPanel';
 import { Chat, Hotbar, Inventory, MapScreen, PauseMenu, type ChatMessage } from '@/components/Hud3D';
 import hud from '@/components/Hud3D.module.css';
 import { SLOT_ACTIONS, keyLabel, useKeybinds } from '@/lib/keybinds';
@@ -46,6 +48,7 @@ import {
   BED,
   BED_CLAIM_RADIUS,
   BUILD_ITEMS,
+  baseGroups,
   FLOORS,
   LEVEL_HEIGHT,
   MATERIALS,
@@ -84,6 +87,7 @@ type SidebarTab = SidebarTabId;
 
 const TABS: { id: SidebarTab; Icon: typeof Cube }[] = [
   { id: 'blocks', Icon: Cube },
+  { id: 'bases', Icon: Buildings },
   { id: 'map', Icon: MapTrifold },
   { id: 'color', Icon: PaintBucket },
   { id: 'hotkeys', Icon: Keyboard },
@@ -346,6 +350,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
 
   const selectItem = (itemId: string | null) => {
     setPaste(null);
+    setMoving(null);
     setActiveItem(prev => (prev === itemId ? null : itemId));
     setTurn(0);
   };
@@ -399,6 +404,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   const selectSlot = (i: number) => {
     setSlot(i);
     setPaste(null);
+    setMoving(null);
     setActiveItem(hotbar[i] ?? null);
     setTurn(0);
   };
@@ -562,6 +568,28 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
     setSelectedItemId(null);
   };
 
+  // --- Bazy (grupy połączonych elementów) ---
+  /** Przenoszona baza (G albo menu Budowle): wisi w celowniku do kliknięcia. */
+  const [moving, setMoving] = useState<PlacedItem[] | null>(null);
+  const startMove = (items: PlacedItem[]) => {
+    setActiveItem(null);
+    setMoving(items);
+    setPaste({ turn: 0 });
+  };
+  const deleteBase = (b: BaseInfo) => {
+    if (!window.confirm(t.bases.confirmDelete(b.items.length))) return;
+    const ids = new Set(b.items.map(i => i.id));
+    commitAction(placedItems.filter(i => !ids.has(i.id)));
+    setSelectedItemIds(prev => prev.filter(i => !ids.has(i)));
+  };
+  /** 2D: plan przybliżony do bazy, jej najniższe piętro, cała baza zaznaczona. */
+  const showBase = (b: BaseInfo) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (rect) setPan({ x: rect.width / 2 - b.cx * scale, y: rect.height / 2 - b.cy * scale });
+    setCurrentFloor(Math.min(...b.items.map(planFloor)));
+    setSelectedItemIds(b.items.map(i => i.id));
+  };
+
   // Skróty klawiszowe (2D i 3D)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -586,6 +614,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
         }
         if (e.key === 'Escape' && paste && view.overlay === 'none') {
           setPaste(null);
+          setMoving(null);
           return;
         }
         if (e.key === 'Escape') {
@@ -596,6 +625,17 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
           return;
         }
         if (view.overlay !== 'none') return;
+        if (!mod && e.code === binds.grab) {
+          // G: baza w celowniku wisi przy celowniku; drugi raz G albo Esc odkłada ją na stare miejsce
+          if (moving) {
+            setMoving(null);
+            setPaste(null);
+          } else if (view.lookId) {
+            const group = baseGroups(placedItems).find(g => g.some(i => i.id === view.lookId));
+            if (group) startMove(group);
+          }
+          return;
+        }
         if (!mod && (e.code === binds.chat || e.key === '/')) {
           e.preventDefault();
           setChatOpen(c => ({ seed: c.seed + 1, initial: e.key === '/' ? '/' : '' }));
@@ -1245,6 +1285,17 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
               </>
             )}
 
+            {tab === 'bases' && (
+              <BasesPanel
+                items={placedItems}
+                site={project?.site}
+                map={activeMapData}
+                hint={t.bases.hint2d}
+                onShow={showBase}
+                onDelete={deleteBase}
+              />
+            )}
+
             {tab === 'hotkeys' && <KeybindsPanel />}
           </div>
 
@@ -1289,9 +1340,20 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                 commitAction(placedItemsRef.current.filter(i => i.id !== itemId));
                 setSelectedItemIds(prev => prev.filter(i => i !== itemId));
               }}
-              paste={paste && clipboard.length > 0 ? { clip: clipboard, turn: paste.turn } : null}
+              paste={
+                paste && moving
+                  ? { clip: moving, turn: paste.turn, move: true }
+                  : paste && clipboard.length > 0 ? { clip: clipboard, turn: paste.turn } : null
+              }
               onPaste={(items) => {
-                commitAction([...placedItemsRef.current, ...items.map(i => ({ ...i, id: newItemId() }))]);
+                if (moving) {
+                  // przeniesienie: te same elementy (te same id) w nowym miejscu
+                  const ids = new Set(moving.map(i => i.id));
+                  commitAction([...placedItemsRef.current.filter(i => !ids.has(i.id)), ...items]);
+                  setMoving(null);
+                } else {
+                  commitAction([...placedItemsRef.current, ...items.map(i => ({ ...i, id: newItemId() }))]);
+                }
                 setPaste(null);
               }}
             />
@@ -1388,6 +1450,29 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                             sendSceneCommand({ kind: 'tp', x, z });
                             closeOverlay();
                           }}
+                        />
+                      ),
+                    },
+                    {
+                      id: 'bases',
+                      label: t.hud.sections.bases,
+                      content: (
+                        <BasesPanel
+                          items={placedItems}
+                          site={project?.site}
+                          map={activeMapData}
+                          hint={t.bases.hint3d}
+                          onMove={(b) => {
+                            startMove(b.items);
+                            closeOverlay();
+                          }}
+                          onTeleport={(b) => {
+                            if (!project?.site) return;
+                            const w = baseWorld(b, project.site);
+                            sendSceneCommand({ kind: 'tp', x: w.x, z: w.z, y: w.y });
+                            closeOverlay();
+                          }}
+                          onDelete={deleteBase}
                         />
                       ),
                     },

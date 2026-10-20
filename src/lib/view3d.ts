@@ -11,12 +11,15 @@ interface View3DState {
   /** Kiedy nakładka się zmieniła (performance.now): Esc tuż po otwarciu menu nie zamyka go od razu. */
   changedAt: number;
   setOverlay: (o: Overlay) => void;
+  /** Element w celowniku (do chwytania bazy klawiszem). */
+  lookId: string | null;
 }
 
 export const useView3D = create<View3DState>((set) => ({
   overlay: 'none',
   changedAt: 0,
   setOverlay: (overlay) => set({ overlay, changedAt: performance.now() }),
+  lookId: null,
 }));
 
 // --- Kursor (pointer lock) ---
@@ -46,7 +49,8 @@ export function unlockPointer() {
 // --- Komendy do sceny (z czatu) ---
 
 export type SceneCommand =
-  | { kind: 'tp'; x: number; z: number }
+  /** y: wysokość świata, przy której stanąć (np. baza w powietrzu); bez niej nad terenem. */
+  | { kind: 'tp'; x: number; z: number; y?: number }
   | { kind: 'fly'; on: boolean }
   /** Kamera na tej wysokości nad terenem (m). */
   | { kind: 'height'; above: number }

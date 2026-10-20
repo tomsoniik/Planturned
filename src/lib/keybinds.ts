@@ -11,7 +11,7 @@ export const KEYBIND_ACTIONS = [
   'demolish', 'bed', 'rotate', 'deleteSelected',
   'floorUp', 'floorDown',
   'forward', 'back', 'left', 'right', 'up', 'down', 'sprint', 'crouch', 'prone', 'toggleFly',
-  'map', 'inventory', 'chat',
+  'map', 'inventory', 'chat', 'grab',
 ] as const;
 export type KeybindAction = (typeof KEYBIND_ACTIONS)[number];
 export type Keybinds = Record<KeybindAction, string>;
@@ -39,6 +39,7 @@ export const DEFAULT_KEYBINDS: Keybinds = {
   map: 'KeyM',
   inventory: 'KeyE',
   chat: 'KeyT',
+  grab: 'KeyG',
 };
 
 export const SLOT_ACTIONS: KeybindAction[] = ['slot1', 'slot2', 'slot3', 'slot4', 'slot5', 'slot6', 'slot7', 'slot8', 'slot9'];

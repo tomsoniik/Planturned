@@ -49,7 +49,9 @@ export type SceneCommand =
   | { kind: 'tp'; x: number; z: number }
   | { kind: 'fly'; on: boolean }
   /** Kamera na tej wysokości nad terenem (m). */
-  | { kind: 'height'; above: number };
+  | { kind: 'height'; above: number }
+  /** Dach startowy skybase'a pod graczem, piętro pod limitem budowania mapy. */
+  | { kind: 'skybase'; itemId: string };
 
 /** Pozycja kamery w układzie świata gry (x, wysokość, z) i obrót (yaw sceny, rad) albo null, gdy scena nie działa. */
 export type CameraProbe = () => [number, number, number, number] | null;

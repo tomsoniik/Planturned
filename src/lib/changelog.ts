@@ -16,6 +16,25 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.8.0',
+    date: '2026-10-20',
+    title: { pl: 'Dachy jak w grze i /skybase', en: 'Roofs like in the game and /skybase' },
+    changes: [
+      {
+        pl: 'Dach (też z otworem, schody i rampa) przyczepia się tylko do krawędzi podłogi, dachu albo góry pełnej ściany, jak w Unturned. Same filary albo murek nie wystarczą, w powietrzu ani na gołym terenie się nie da.',
+        en: 'A roof (also holes, stairs and ramps) only attaches to the edge of a floor, a roof or the top of a full wall, like in Unturned. Pillars alone or a rampart are not enough, and it cannot float or sit on bare ground.',
+      },
+      {
+        pl: 'Podłogi i dachy w 3D przyczepiają się do krawędzi tak jak w grze, także do krawędzi ścian.',
+        en: 'In 3D floors and roofs snap to edges the way the game does, including wall edges.',
+      },
+      {
+        pl: '/skybase: teleport na wysokość, gdzie pod limitem mapy mieści się jedno piętro, i dach startowy pod tobą, od którego budujesz dalej.',
+        en: '/skybase: teleports you to the height where one floor fits under the map limit and puts a starter roof under you to build from.',
+      },
+    ],
+  },
+  {
     version: '0.7.0',
     date: '2026-10-20',
     title: { pl: 'Sandbox na całej mapie', en: 'Sandbox on the whole map' },

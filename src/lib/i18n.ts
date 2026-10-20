@@ -24,8 +24,8 @@ export function langFromAcceptLanguage(header: string | null): Lang {
   return 'en';
 }
 
-export type AimReason = 'mapLimit' | 'noBuildZone' | 'safezone' | 'spawn' | 'missingGround' | 'underground' | 'missingPillar';
-export type AimWarn = 'oxygen' | 'noSupport';
+export type AimReason = 'mapLimit' | 'noBuildZone' | 'safezone' | 'spawn' | 'missingGround' | 'underground' | 'missingPillar' | 'roofSupport';
+export type AimWarn = 'oxygen';
 export type SidebarTabId = 'blocks' | 'map' | 'color' | 'hotkeys';
 export type PartGroupId = 'slabs' | 'walls' | 'pillars' | 'stairs';
 
@@ -118,6 +118,7 @@ const pl = {
     hatchHint: 'Klapę stawia się w dachu z otworem',
     floorHint: 'Podłogi tylko na parterze, wyżej stawiaj dachy',
     wallHint: 'Ściana potrzebuje filarów na obu końcach (murek: słupków)',
+    roofHint: 'Dach przyczepia się do krawędzi podłogi, dachu albo góry ściany',
     demolishHint: 'Wyburzanie: kliknij element',
     placingHint: (name: string, key: string) => `${name}, ${key} obraca`,
     pasteHint: (n: number, key: string) => `Wklejanie ${n} el.: ${key} obraca, klik wstawia (Shift: kolejna kopia), Esc anuluje`,
@@ -200,8 +201,9 @@ const pl = {
       missingGround: 'brak gruntu pod podłogą (do 10 m)',
       underground: 'pod ziemią nie można budować',
       missingPillar: 'ściana potrzebuje filarów na obu końcach',
+      roofSupport: 'dach przyczepia się do krawędzi płyty albo góry ściany',
     } satisfies Record<AimReason, string>,
-    warns: { oxygen: 'powyżej granicy tlenu', noSupport: 'w grze dach potrzebuje podparcia' } satisfies Record<AimWarn, string>,
+    warns: { oxygen: 'powyżej granicy tlenu' } satisfies Record<AimWarn, string>,
   },
   hud: {
     inventory: 'Ekwipunek',
@@ -231,7 +233,8 @@ const pl = {
     desc: {
       help: 'lista komend',
       time: 'pora dnia',
-      sky: 'kamera na tej wysokości nad terenem (budowa skybase)',
+      sky: 'kamera na tej wysokości nad terenem',
+      skybase: 'start skybase\'a: piętro pod limitem mapy, dach startowy pod tobą',
       ground: 'kamera przy ziemi',
       spawn: 'teleport na spawn z gry (numer albo losowy)',
       fly: 'latanie',
@@ -255,6 +258,7 @@ const pl = {
     ground: 'Kamera przy ziemi',
     spawn: (n: number, all: number) => `Spawn ${n} z ${all}`,
     noSpawns: 'Ta mapa nie ma spawnów w plikach gry',
+    skybase: (name: string) => `Skybase: ${name} pod tobą, buduj od jego krawędzi`,
     fly: 'Latanie',
     walk: 'Chodzenie',
     tp: (x: number, z: number) => `Teleport: X ${x}, Z ${z}`,
@@ -389,6 +393,7 @@ const en: Dict = {
     hatchHint: 'Hatches go into a roof with a hole',
     floorHint: 'Floors only on the ground floor; use roofs higher up',
     wallHint: 'A wall needs pillars at both ends (rampart: posts)',
+    roofHint: 'A roof attaches to the edge of a floor, a roof or the top of a wall',
     demolishHint: 'Demolish: click a piece',
     placingHint: (name: string, key: string) => `${name}, ${key} rotates`,
     pasteHint: (n: number, key: string) => `Pasting ${n} pcs: ${key} rotates, click places (Shift: another copy), Esc cancels`,
@@ -471,8 +476,9 @@ const en: Dict = {
       missingGround: 'no ground under the floor (within 10 m)',
       underground: "can't build underground",
       missingPillar: 'the wall needs pillars at both ends',
+      roofSupport: 'a roof attaches to a slab edge or the top of a wall',
     },
-    warns: { oxygen: 'above the oxygen limit', noSupport: 'in the game a roof needs support' },
+    warns: { oxygen: 'above the oxygen limit' },
   },
   hud: {
     inventory: 'Inventory',
@@ -502,7 +508,8 @@ const en: Dict = {
     desc: {
       help: 'command list',
       time: 'time of day',
-      sky: 'camera at this height above the ground (skybase building)',
+      sky: 'camera at this height above the ground',
+      skybase: 'start a skybase: one floor below the map limit, a starter roof under you',
       ground: 'camera near the ground',
       spawn: 'teleport to a game spawn (number or random)',
       fly: 'flying',
@@ -526,6 +533,7 @@ const en: Dict = {
     ground: 'Camera near the ground',
     spawn: (n: number, all: number) => `Spawn ${n} of ${all}`,
     noSpawns: 'This map has no spawns in the game files',
+    skybase: (name: string) => `Skybase: ${name} under you, build from its edges`,
     fly: 'Flying',
     walk: 'Walking',
     tp: (x: number, z: number) => `Teleport: X ${x}, Z ${z}`,

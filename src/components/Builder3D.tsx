@@ -1272,27 +1272,27 @@ function AimController({
           const slab = findSlabSlotByRay(def, items, ray3, turn);
           if (slab?.preview) {
             next = judge(def, slab.preview, (slab.preview.floor || 0) + (roofLike ? 1 : 0), slab.valid);
-          } else {
-            // Wolne stawianie: podłoga w punkcie trafienia na gruncie, obrót z kierunku patrzenia (jak w grze);
-            // dach w punkcie trafienia albo w powietrzu (w grze potrzebuje podparcia, tu ostrzeżenie)
-            const point = roofLike ? nearest?.point ?? airPoint() : nearest?.point ?? null;
-            if (point) {
-              const triangle = def.shape === 'triangle';
-              const yaw = THREE.MathUtils.degToRad(yawDeg);
-              if (triangle) point.add(new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)).multiplyScalar(TRI_FORWARD));
-              const floor = roundLevel(point.y / H - (roofLike ? 1 : 0));
-              const preview: PlacedItem = {
-                id: 'preview',
-                itemId: def.id,
-                x: Math.round((point.x / SCALE) * 100) / 100,
-                y: Math.round((point.z / SCALE) * 100) / 100,
-                floor,
-                rotation: Math.round(normalizeAngle(-yawDeg + (triangle ? 0 : turn * 90)) * 10) / 10,
-              };
-              const onStructure = !roofLike && nearest && !nearest.ground;
-              const aim = judge(def, preview, floor + (roofLike ? 1 : 0), isPlacementValid(def, preview, items), roofLike ? 'noSupport' : undefined);
-              next = onStructure ? { ...aim, valid: false, reason: 'missingGround' } : aim;
-            }
+          } else if (roofLike) {
+            // Dach tylko przy krawędzi płyty albo ściany (FindEmptyFloorSlot z isRoof); bez niej gra nic nie pokazuje
+            next = { ...EMPTY_AIM, reason: 'roofSupport' };
+          } else if (nearest) {
+            // Wolna podłoga: w punkcie trafienia na gruncie, obrót z kierunku patrzenia (jak w grze)
+            const point = nearest.point.clone();
+            const triangle = def.shape === 'triangle';
+            const yaw = THREE.MathUtils.degToRad(yawDeg);
+            if (triangle) point.add(new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)).multiplyScalar(TRI_FORWARD));
+            const floor = roundLevel(point.y / H);
+            const preview: PlacedItem = {
+              id: 'preview',
+              itemId: def.id,
+              x: Math.round((point.x / SCALE) * 100) / 100,
+              y: Math.round((point.z / SCALE) * 100) / 100,
+              floor,
+              rotation: Math.round(normalizeAngle(-yawDeg + (triangle ? 0 : turn * 90)) * 10) / 10,
+            };
+            const aim = judge(def, preview, floor, isPlacementValid(def, preview, items));
+            // DoesHitCountAsTerrain: na strukturze bez krawędzi podłoga nie stanie
+            next = nearest.ground ? aim : { ...aim, valid: false, reason: 'missingGround' };
           }
         } else if (def.shape === 'bed' && nearest) {
           // Łóżko (barykada): w punkcie trafienia, obrócone jak gracz
@@ -1323,6 +1323,26 @@ function AimController({
       onAim(next);
     }
   });
+
+  // /skybase: gracz na wysokości, na której pod limitem mapy mieści się jedno piętro, i jeden dach startowy pod nim
+  useEffect(
+    () =>
+      onSceneCommand((c) => {
+        if (c.kind !== 'skybase') return;
+        const surface = Math.floor(((limits.limitY - H) / H) * 1000) / 1000;
+        const yawDeg = THREE.MathUtils.radToDeg(new THREE.Euler(0, 0, 0, 'YXZ').setFromQuaternion(camera.quaternion).y);
+        const { x, z } = camera.position;
+        onPlace({
+          itemId: c.itemId,
+          x: Math.round((x / SCALE) * 100) / 100,
+          y: Math.round((z / SCALE) * 100) / 100,
+          floor: roundLevel(surface - 1),
+          rotation: Math.round(normalizeAngle(-yawDeg) * 10) / 10,
+        });
+        camera.position.set(x, surface * H + TOP + EYES.stand, z);
+      }),
+    [camera, limits, onPlace],
+  );
 
   useEffect(() => {
     const handle = (e: MouseEvent) => {

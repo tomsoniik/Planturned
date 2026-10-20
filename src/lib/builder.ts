@@ -475,15 +475,7 @@ export function computePlacement({ def, items, cursor, floor, turn, free = false
 
     const c = center as PlacedItem | null;
     if (c) at(c.floor || 0);
-    const besideEdge = (e: { x: number; y: number; angle: number }): PlacedItem => {
-      const baseEdges = getBaseEdges(shape);
-      const chosen = baseEdges[turn % baseEdges.length];
-      const R = normalizeAngle(normalizeAngle(e.angle + 180) - chosen.angle);
-      const rad = (R * Math.PI) / 180;
-      const bx = chosen.x * Math.cos(rad) - chosen.y * Math.sin(rad);
-      const by = chosen.x * Math.sin(rad) + chosen.y * Math.cos(rad);
-      return { ...base, x: round3(e.x - bx), y: round3(e.y - by), rotation: R };
-    };
+    const besideEdge = (e: { x: number; y: number; angle: number }): PlacedItem => ({ ...base, ...slabBesideEdge(shape, e, turn) });
     if (c && isValid(def, { ...base, x: c.x, y: c.y, rotation: c.rotation }, items)) {
       preview = { ...base, x: c.x, y: c.y, rotation: c.rotation };
     } else if (edges.length > 0) {
@@ -503,7 +495,49 @@ export function computePlacement({ def, items, cursor, floor, turn, free = false
     }
   }
 
-  return { preview, valid: !groundOnly && isValid(def, preview, items) && !wallMissingPillars(def, preview, items), snapPoint };
+  return { preview, valid: !groundOnly && isPlacementValid(def, preview, items), snapPoint };
+}
+
+/**
+ * Płyta przyłożona krawędzią do krawędzi `e` (kąt = kierunek na zewnątrz, czyli tam, gdzie leży nowa płyta);
+ * R wybiera, którą swoją krawędzią płyta przylega (jak obrót w grze).
+ */
+function slabBesideEdge(shape: SlabShape, e: { x: number; y: number; angle: number }, turn: number) {
+  const baseEdges = getBaseEdges(shape);
+  const chosen = baseEdges[turn % baseEdges.length];
+  const R = normalizeAngle(normalizeAngle(e.angle + 180) - chosen.angle);
+  const rad = (R * Math.PI) / 180;
+  const bx = chosen.x * Math.cos(rad) - chosen.y * Math.sin(rad);
+  const by = chosen.x * Math.sin(rad) + chosen.y * Math.cos(rad);
+  return { x: round3(e.x - bx), y: round3(e.y - by), rotation: R };
+}
+
+/**
+ * HousingEdge.CanAttachRoof: dach (także otwór, schody, rampa) musi przylegać choć jedną krawędzią do krawędzi,
+ * przy której coś jest: płyta (podłoga albo dach) na tej samej wysokości, góra pełnej ściany (murek się nie liczy)
+ * albo ściana stojąca na tej krawędzi. Same filary krawędzi nie tworzą.
+ */
+export function roofSupported(def: BuildItem, preview: PlacedItem, items: PlacedItem[]) {
+  if (!isRoofLayer(def)) return true;
+  const level = slabLevel(preview, def);
+  const edges = getEdges(def.shape as SlabShape, preview.x, preview.y, preview.rotation);
+  const near = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y) < 1.5;
+  return items.some((item) => {
+    if (item.id === preview.id) return false;
+    const d = findDef(item.itemId);
+    if (!d || Math.hypot(item.x - preview.x, item.y - preview.y) > 80) return false;
+    if (isSlab(d)) {
+      if (!sameLevel(slabLevel(item, d), level)) return false;
+      const other = getEdges(d.shape as SlabShape, item.x, item.y, item.rotation);
+      return edges.some((e) => other.some((o) => near(e, o)));
+    }
+    if (d.shape === 'wall') {
+      const f = item.floor || 0;
+      const onTop = d.part !== 'rampart' && sameLevel(f + 1, level);
+      return (onTop || sameLevel(f, level)) && edges.some((e) => near(e, item));
+    }
+    return false;
+  });
 }
 
 export function pointInPolygon(p: Point, poly: Point[]) {
@@ -593,7 +627,7 @@ export function wallMissingPillars(def: BuildItem, preview: PlacedItem, items: P
 }
 
 export const isPlacementValid = (def: BuildItem, preview: PlacedItem, items: PlacedItem[]) =>
-  isValid(def, preview, items) && !wallMissingPillars(def, preview, items);
+  isValid(def, preview, items) && !wallMissingPillars(def, preview, items) && roofSupported(def, preview, items);
 
 // --- Celowanie w 3D jak w grze (HousingConnections.FindEmptyWallSlot / FindEmptyPillarSlot) ---
 
@@ -697,16 +731,18 @@ export function findSlabSlotByRay(def: BuildItem, items: PlacedItem[], ray: AimR
     const key = `${Math.round(x)},${Math.round(y)},${level.toFixed(2)}`;
     if (!edges.has(key)) edges.set(key, { x, y, level, angle });
   };
+  // Krawędzie jak HousingEdge: tworzą je płyty (na swojej wysokości) i ściany (dół i góra).
+  // Dachy tylko tam, gdzie CanAttachRoof: góra murka się nie liczy.
   items.forEach((item) => {
     const d = findDef(item.itemId);
     if (!d || Math.hypot(item.x * m - ray.origin.x, item.y * m - ray.origin.z) > reach) return;
     if (isSlab(d)) {
-      // podłogi przedłużają podłogi (na terenie), dachy przedłużają dachy i górę ścian
-      if (isFloorPart(d) === roofLike) return;
       const level = slabLevel(item, d);
       getEdges(d.shape as SlabShape, item.x, item.y, item.rotation).forEach((e) => add(e.x, e.y, level, e.angle));
-    } else if (roofLike && d.shape === 'wall') {
-      add(item.x, item.y, (item.floor || 0) + 1, normalizeAngle(item.rotation - 90));
+    } else if (d.shape === 'wall') {
+      const f = item.floor || 0;
+      add(item.x, item.y, f, normalizeAngle(item.rotation - 90));
+      if (!roofLike || d.part !== 'rampart') add(item.x, item.y, f + 1, normalizeAngle(item.rotation - 90));
     }
   });
 
@@ -728,9 +764,15 @@ export function findSlabSlotByRay(def: BuildItem, items: PlacedItem[], ray: AimR
       if (cos < SLOT_COSINE) continue;
       const score = (1 - cos) * d2;
       if (score >= bestScore) continue;
-      const res = computePlacement({ def, items, cursor: { x: tx, y: ty }, floor, turn, free: true });
-      if (!res.preview || !res.valid || Math.hypot(res.preview.x - tx, res.preview.y - ty) > SIDE * 0.75) continue;
-      best = res;
+      // płyta po tej stronie krawędzi (FindEmptyFloorSlot: zajęte strony odpadają)
+      const preview: PlacedItem = {
+        id: 'preview',
+        itemId: def.id,
+        floor,
+        ...slabBesideEdge(def.shape as SlabShape, { x: e.x, y: e.y, angle: side === 1 ? e.angle : normalizeAngle(e.angle + 180) }, turn),
+      };
+      if (!isPlacementValid(def, preview, items)) continue;
+      best = { preview, valid: true, snapPoint: { x: e.x, y: e.y } };
       bestScore = score;
     }
   });
@@ -852,7 +894,7 @@ export function computePaste({ clip, items, cursor, floor, turn, free = false }:
       return !!d && isDuplicate(p, def, o, d);
     })) return;
     const groundOnly = !free && isFloorPart(def) && (p.floor || 0) > 0;
-    if (groundOnly || !isValid(def, p, items) || wallMissingPillars(def, p, support)) invalid.add(i.id);
+    if (groundOnly || !isValid(def, p, items) || wallMissingPillars(def, p, support) || !roofSupported(def, p, support)) invalid.add(i.id);
     out.push(p);
   });
   return { items: out, invalid, valid: out.length > 0 && invalid.size === 0, snapPoint };

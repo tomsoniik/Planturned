@@ -66,6 +66,8 @@ import {
   type MaterialId,
   type PartId,
   type PlacedItem,
+  isRoofLayer,
+  roofSupported,
   wallMissingPillars,
 } from '@/lib/builder';
 
@@ -451,6 +453,14 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
             else fail(t.commands.noScene);
             if (height < h) info(t.commands.skyClamped(maxSkyHeight));
           }
+          break;
+        }
+        case 'skybase': {
+          // dach startowy z materiału, który masz wybrany (domyślnie klon)
+          const roof = findDef(`${material}_roof`) ?? findDef('maple_roof')!;
+          sendSceneCommand({ kind: 'fly', on: true });
+          if (sendSceneCommand({ kind: 'skybase', itemId: roof.id })) info(t.commands.skybase(itemFullLabel(roof, t)));
+          else fail(t.commands.noScene);
           break;
         }
         case 'ground':
@@ -1527,6 +1537,8 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                           ? t.editor.floorHint
                           : activeDef.shape === 'wall' && previewItem && wallMissingPillars(activeDef, previewItem, placedItems)
                             ? t.editor.wallHint
+                          : isRoofLayer(activeDef) && previewItem && !roofSupported(activeDef, previewItem, placedItems)
+                            ? t.editor.roofHint
                         : t.editor.placingHint(itemFullLabel(activeDef, t), keyName(binds.rotate))}
                   </span>
                 )}

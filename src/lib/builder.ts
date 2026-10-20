@@ -5,8 +5,9 @@
   (Bundles/Items/Structures/*.dat i modele z core.masterbundle, patrz scripts/export_game_data.py).
   Ikony: SilKsPlugins/UnturnedImages (folder vanilla), zapisane w public/unturned/items/<id>.png.
 
-  Układ planu: 1 pole podłogi = 60 jednostek = 6 m (10 jednostek na metr). Poziom (floor) 0..3,
-  wysokość poziomu w grze 4,5 m. Warstwy:
+  Układ planu: 1 pole podłogi = 60 jednostek = 6 m (10 jednostek na metr). Poziom (floor): wysokość / 4,5 m
+  względem punktu odniesienia projektu. W 2D to pełne piętra 0..N, w 3D (sandbox) poziom bierze się z terenu
+  albo wysokości, na której stawiasz, więc bywa ułamkowy; poziomy porównujemy z tolerancją. Warstwy:
     - płyty: podłogi (poziom L) oraz dachy, otwory, schody i rampy (Construct Roof, fizycznie na L+1)
     - ściany i ich warianty stoją na krawędziach płyt
     - filary i słupki stoją w narożnikach płyt
@@ -233,6 +234,14 @@ export const isRoofLayer = (def?: BuildItem) =>
   def?.part === 'roof' || def?.part === 'tri_roof' || def?.part === 'hole' || def?.part === 'tri_hole' ||
   def?.part === 'stairs' || def?.part === 'ramp';
 export const isSlab = (def?: BuildItem) => def?.shape === 'square' || def?.shape === 'triangle';
+export const isFloorPart = (def?: BuildItem) => def?.part === 'floor' || def?.part === 'tri_floor';
+
+/** Ten sam poziom (tolerancja ok. 9 cm: poziomy z terenu są ułamkowe). */
+export const sameLevel = (a: number, b: number) => Math.abs(a - b) < 0.02;
+/** Poziom zaokrąglony do 1/1000 (4,5 mm), żeby zapis był krótki i stały. */
+export const roundLevel = (v: number) => Math.round(v * 1000) / 1000;
+/** Piętro w planie 2D: najbliższy pełny poziom. */
+export const planFloor = (item: PlacedItem) => Math.round(item.floor || 0);
 /** Fizyczny poziom płyty: dach z poziomu L leży tam, gdzie podłoga z L+1. */
 export const slabLevel = (item: PlacedItem, def: BuildItem) => (item.floor || 0) + (isRoofLayer(def) ? 1 : 0);
 
@@ -341,6 +350,11 @@ export interface PlacementInput {
   floor: number;
   /** Licznik wciśnięć R. */
   turn: number;
+  /**
+   * 3D (sandbox): poziomy dokładne, podłoga na dowolnej wysokości (grunt sprawdza widok 3D).
+   * 2D: poziomy porównywane po zaokrągleniu do pięter, podłogi tylko na parterze.
+   */
+  free?: boolean;
 }
 
 export interface PlacementResult {
@@ -351,12 +365,15 @@ export interface PlacementResult {
 
 const SNAP_DIST = 30;
 
-export function computePlacement({ def, items, cursor, floor, turn }: PlacementInput): PlacementResult {
+export function computePlacement({ def, items, cursor, floor, turn, free = false }: PlacementInput): PlacementResult {
   if (def.shape === 'remover') return { preview: null, valid: false, snapPoint: null };
 
-  const base = { id: 'preview', itemId: def.id, floor };
-  // W grze podłogi stawia się tylko na terenie; wyższe kondygnacje to dachy poziomu niżej.
-  const groundOnly = (def.part === 'floor' || def.part === 'tri_floor') && floor > 0;
+  let base = { id: 'preview', itemId: def.id, floor };
+  // Element przyczepiony do płyty bierze jej dokładny poziom (w 2D płyta mogła powstać w 3D na terenie).
+  const at = (level: number) => (base = { ...base, floor: level });
+  const same = free ? sameLevel : (a: number, b: number) => Math.round(a) === Math.round(b);
+  // W 2D podłogi stawia się tylko na parterze; wyższe kondygnacje to dachy poziomu niżej. W 3D decyduje grunt.
+  const groundOnly = !free && isFloorPart(def) && floor > 0;
   const freeRotation = def.shape === 'triangle' ? (turn * 60) % 360 : def.shape === 'wall' ? (turn * 90) % 360 : (turn * 90) % 360;
 
   // Płyty, na których stoją ściany/filary na tym poziomie, oraz sąsiednie płyty tej samej warstwy.
@@ -374,7 +391,7 @@ export function computePlacement({ def, items, cursor, floor, turn }: PlacementI
     let best: PlacedItem | null = null;
     let bestDist = SNAP_DIST;
     anchors.forEach(({ item, def: d }) => {
-      if (d.part !== 'hole' || (item.floor || 0) !== floor) return;
+      if (d.part !== 'hole' || !same(item.floor || 0, floor)) return;
       const dist = Math.hypot(item.x - cursor.x, item.y - cursor.y);
       if (dist < bestDist) {
         bestDist = dist;
@@ -385,13 +402,15 @@ export function computePlacement({ def, items, cursor, floor, turn }: PlacementI
     if (!hole) {
       return { preview: { ...base, x: cursor.x, y: cursor.y, rotation: 0 }, valid: false, snapPoint: null };
     }
+    at(hole.floor || 0);
     preview = { ...base, x: hole.x, y: hole.y, rotation: hole.rotation };
   } else if (def.shape === 'wall' || def.shape === 'pillar') {
     // Krawędzie / narożniki płyt, na których element stoi (fizyczny poziom == floor).
-    let best: { x: number; y: number; angle: number } | null = null;
+    let best: { x: number; y: number; angle: number; level: number } | null = null;
     let bestDist = SNAP_DIST;
     anchors.forEach(({ item, def: d }) => {
-      if (slabLevel(item, d) !== floor) return;
+      const level = slabLevel(item, d);
+      if (!same(level, floor)) return;
       const shape = d.shape as SlabShape;
       const vertices = getPolygonVertices(shape, item.x, item.y, item.rotation);
       if (def.shape === 'pillar') {
@@ -399,7 +418,7 @@ export function computePlacement({ def, items, cursor, floor, turn }: PlacementI
           const dist = Math.hypot(v.x - cursor.x, v.y - cursor.y);
           if (dist < bestDist) {
             bestDist = dist;
-            best = { ...v, angle: 0 };
+            best = { ...v, angle: 0, level };
           }
         });
         return;
@@ -410,12 +429,13 @@ export function computePlacement({ def, items, cursor, floor, turn }: PlacementI
         const dist = distToSegment(cursor, p1, p2);
         if (dist < bestDist) {
           bestDist = dist;
-          best = edge;
+          best = { ...edge, level };
         }
       });
     });
-    const target = best as { x: number; y: number; angle: number } | null;
+    const target = best as { x: number; y: number; angle: number; level: number } | null;
     if (target) {
+      at(target.level);
       snapPoint = target;
       preview = def.shape === 'pillar'
         ? { ...base, x: target.x, y: target.y, rotation: 0 }
@@ -426,33 +446,35 @@ export function computePlacement({ def, items, cursor, floor, turn }: PlacementI
   } else {
     // Płyty: podłogi, dachy, schody, rampy, trójkąty.
     const shape = def.shape as SlabShape;
-    const ownSlab = floor + (isRoofLayer(def) ? 1 : 0);
-    const edges: { e: { x: number; y: number; angle: number }; dist: number }[] = [];
+    const roofOffset = isRoofLayer(def) ? 1 : 0;
+    const ownSlab = floor + roofOffset;
+    const edges: { e: { x: number; y: number; angle: number }; dist: number; level: number }[] = [];
     let center: PlacedItem | null = null;
     let centerDist = 20;
 
     anchors.forEach(({ item, def: d }) => {
       const s = slabLevel(item, d);
       // Dach nad pomieszczeniem: środek nad podłogą z tego samego poziomu.
-      if (isRoofLayer(def) && s === floor && d.shape === def.shape) {
+      if (isRoofLayer(def) && same(s, floor) && d.shape === def.shape) {
         const dist = Math.hypot(item.x - cursor.x, item.y - cursor.y);
         if (dist < centerDist) {
           centerDist = dist;
           center = item;
         }
       }
-      if (s !== ownSlab) return;
+      if (!same(s, ownSlab)) return;
       const dShape = d.shape as SlabShape;
       const vertices = getPolygonVertices(dShape, item.x, item.y, item.rotation);
       // Kursor na istniejącej płycie: każda jej krawędź jest kandydatem (wybierzemy najbliższą wolną).
       const onTop = pointInPolygon(cursor, vertices);
       getEdges(dShape, item.x, item.y, item.rotation).forEach((e, i) => {
         const dist = distToSegment(cursor, vertices[i], vertices[(i + 1) % vertices.length]);
-        if (dist < SNAP_DIST || onTop) edges.push({ e, dist });
+        if (dist < SNAP_DIST || onTop) edges.push({ e, dist, level: s - roofOffset });
       });
     });
 
     const c = center as PlacedItem | null;
+    if (c) at(c.floor || 0);
     const besideEdge = (e: { x: number; y: number; angle: number }): PlacedItem => {
       const baseEdges = getBaseEdges(shape);
       const chosen = baseEdges[turn % baseEdges.length];
@@ -467,9 +489,13 @@ export function computePlacement({ def, items, cursor, floor, turn }: PlacementI
     } else if (edges.length > 0) {
       // Najbliższa krawędź z wolnym miejscem obok (zajęte, np. wewnętrzne, pomijamy jak gra).
       edges.sort((a, b) => a.dist - b.dist);
-      const free = edges.find(({ e }) => isValid(def, besideEdge(e), items)) ?? edges[0];
-      preview = besideEdge(free.e);
-      snapPoint = free.e;
+      const open = edges.find(({ e, level }) => {
+        at(level);
+        return isValid(def, besideEdge(e), items);
+      }) ?? edges[0];
+      at(open.level);
+      preview = besideEdge(open.e);
+      snapPoint = open.e;
     } else if (c) {
       preview = { ...base, x: c.x, y: c.y, rotation: c.rotation };
     } else {
@@ -527,18 +553,19 @@ function isValid(def: BuildItem, preview: PlacedItem, items: PlacedItem[]) {
     const dist = Math.hypot(item.x - preview.x, item.y - preview.y);
     if (dist > 80) return false;
 
+    const sameFloor = sameLevel(item.floor || 0, preview.floor || 0);
     if (def.shape === 'bed' || d.shape === 'bed') {
-      return def.shape === 'bed' && d.shape === 'bed' && (item.floor || 0) === (preview.floor || 0) && dist < 15;
+      return def.shape === 'bed' && d.shape === 'bed' && sameFloor && dist < 15;
     }
     if (def.shape === 'hatch' || d.shape === 'hatch') {
-      return def.shape === 'hatch' && d.shape === 'hatch' && (item.floor || 0) === (preview.floor || 0) && dist < 5;
+      return def.shape === 'hatch' && d.shape === 'hatch' && sameFloor && dist < 5;
     }
-    if (def.shape === 'wall' && d.shape === 'wall' && (item.floor || 0) === (preview.floor || 0)) {
+    if (def.shape === 'wall' && d.shape === 'wall' && sameFloor) {
       return wallsClash(preview, item);
     }
     const sameGroup =
-      (isSlab(def) && isSlab(d) && slabLevel(item, d) === level) ||
-      (def.shape === d.shape && (def.shape === 'wall' || def.shape === 'pillar') && (item.floor || 0) === (preview.floor || 0));
+      (isSlab(def) && isSlab(d) && sameLevel(slabLevel(item, d), level)) ||
+      (def.shape === d.shape && (def.shape === 'wall' || def.shape === 'pillar') && sameFloor);
     if (!sameGroup) return false;
     return polygonsIntersect(
       getPolygonVertices(def.shape, preview.x, preview.y, preview.rotation),
@@ -560,7 +587,7 @@ export function wallMissingPillars(def: BuildItem, preview: PlacedItem, items: P
   return !ends.every((e) =>
     items.some((it) => {
       const d = findDef(it.itemId);
-      return !!d && d.shape === 'pillar' && (it.floor || 0) === floor && (!full || d.part === 'pillar') && Math.hypot(it.x - e.x, it.y - e.y) < 2;
+      return !!d && d.shape === 'pillar' && sameLevel(it.floor || 0, floor) && (!full || d.part === 'pillar') && Math.hypot(it.x - e.x, it.y - e.y) < 2;
     }),
   );
 }
@@ -590,10 +617,11 @@ export function findSlotByRay(def: BuildItem, items: PlacedItem[], ray: AimRay, 
   if (def.shape !== 'wall' && def.shape !== 'pillar') return null;
   const isWall = def.shape === 'wall';
   const m = 1 / UNITS_PER_METER;
-  const spots = new Map<string, { x: number; y: number; level: number; rotation: number }>();
-  const add = (x: number, y: number, level: number, rotation: number) => {
-    const key = `${Math.round(x)},${Math.round(y)},${level}`;
-    if (!spots.has(key)) spots.set(key, { x, y, level, rotation });
+  // ground: krawędź podłogi stojącej na terenie, pod nią nic nie wisi (jak dawny poziom 0)
+  const spots = new Map<string, { x: number; y: number; level: number; rotation: number; ground: boolean }>();
+  const add = (x: number, y: number, level: number, rotation: number, ground = false) => {
+    const key = `${Math.round(x)},${Math.round(y)},${level.toFixed(2)}`;
+    if (!spots.has(key)) spots.set(key, { x, y, level, rotation, ground });
   };
   const reach = SLOT_RANGE + SIDE * m;
 
@@ -603,8 +631,9 @@ export function findSlotByRay(def: BuildItem, items: PlacedItem[], ray: AimRay, 
     if (isSlab(d)) {
       const level = slabLevel(item, d);
       const shape = d.shape as SlabShape;
-      if (isWall) getEdges(shape, item.x, item.y, item.rotation).forEach((e) => add(e.x, e.y, level, normalizeAngle(e.angle + 90)));
-      else getPolygonVertices(shape, item.x, item.y, item.rotation).forEach((v) => add(v.x, v.y, level, 0));
+      const ground = isFloorPart(d);
+      if (isWall) getEdges(shape, item.x, item.y, item.rotation).forEach((e) => add(e.x, e.y, level, normalizeAngle(e.angle + 90), ground));
+      else getPolygonVertices(shape, item.x, item.y, item.rotation).forEach((v) => add(v.x, v.y, level, 0, ground));
     } else if (d.shape === 'wall') {
       // Ściana tworzy krawędź u dołu i u góry (na niej można postawić kolejną).
       const f = item.floor || 0;
@@ -621,14 +650,14 @@ export function findSlotByRay(def: BuildItem, items: PlacedItem[], ray: AimRay, 
   });
 
   const occupied = (x: number, y: number, floor: number) =>
-    items.some((o) => (o.floor || 0) === floor && findDef(o.itemId)?.shape === def.shape && Math.hypot(o.x - x, o.y - y) < 2);
+    items.some((o) => sameLevel(o.floor || 0, floor) && findDef(o.itemId)?.shape === def.shape && Math.hypot(o.x - x, o.y - y) < 2);
 
   let best: PlacedItem | null = null;
   let bestScore = SLOT_RANGE * SLOT_RANGE;
   spots.forEach((s) => {
     // Ściana/filar stojący na krawędzi albo wiszący pod nią.
-    for (const floor of [s.level, s.level - 1]) {
-      if (floor < 0 || occupied(s.x, s.y, floor)) continue;
+    for (const floor of s.ground ? [s.level] : [s.level, s.level - 1]) {
+      if (occupied(s.x, s.y, floor)) continue;
       const dx = s.x * m - ray.origin.x;
       const dy = floor * LEVEL_HEIGHT + SLOT_TOP + HALF_WALL_HEIGHT - ray.origin.y;
       const dz = s.y * m - ray.origin.z;
@@ -665,15 +694,16 @@ export function findSlabSlotByRay(def: BuildItem, items: PlacedItem[], ray: AimR
   const reach = SLOT_RANGE + SIDE * m;
   const edges = new Map<string, { x: number; y: number; level: number; angle: number }>();
   const add = (x: number, y: number, level: number, angle: number) => {
-    const key = `${Math.round(x)},${Math.round(y)},${level}`;
+    const key = `${Math.round(x)},${Math.round(y)},${level.toFixed(2)}`;
     if (!edges.has(key)) edges.set(key, { x, y, level, angle });
   };
   items.forEach((item) => {
     const d = findDef(item.itemId);
     if (!d || Math.hypot(item.x * m - ray.origin.x, item.y * m - ray.origin.z) > reach) return;
     if (isSlab(d)) {
+      // podłogi przedłużają podłogi (na terenie), dachy przedłużają dachy i górę ścian
+      if (isFloorPart(d) === roofLike) return;
       const level = slabLevel(item, d);
-      if (!roofLike && level !== 0) return;
       getEdges(d.shape as SlabShape, item.x, item.y, item.rotation).forEach((e) => add(e.x, e.y, level, e.angle));
     } else if (roofLike && d.shape === 'wall') {
       add(item.x, item.y, (item.floor || 0) + 1, normalizeAngle(item.rotation - 90));
@@ -685,7 +715,6 @@ export function findSlabSlotByRay(def: BuildItem, items: PlacedItem[], ray: AimR
   const offset = 1.5 * UNITS_PER_METER; // HALF_EDGE_LENGTH * 0.5
   edges.forEach((e) => {
     const floor = roofLike ? e.level - 1 : e.level;
-    if (floor < 0) return;
     const rad = (e.angle * Math.PI) / 180;
     for (const side of [1, -1]) {
       const tx = e.x + Math.cos(rad) * offset * side;
@@ -699,7 +728,7 @@ export function findSlabSlotByRay(def: BuildItem, items: PlacedItem[], ray: AimR
       if (cos < SLOT_COSINE) continue;
       const score = (1 - cos) * d2;
       if (score >= bestScore) continue;
-      const res = computePlacement({ def, items, cursor: { x: tx, y: ty }, floor, turn });
+      const res = computePlacement({ def, items, cursor: { x: tx, y: ty }, floor, turn, free: true });
       if (!res.preview || !res.valid || Math.hypot(res.preview.x - tx, res.preview.y - ty) > SIDE * 0.75) continue;
       best = res;
       bestScore = score;
@@ -717,7 +746,7 @@ const round3 = (v: number) => Math.round(v * 1000) / 1000;
 
 /** Ten sam element w tym samym miejscu (np. wspólna ściana albo filar na styku kopii z oryginałem). */
 function isDuplicate(a: PlacedItem, da: BuildItem, b: PlacedItem, db: BuildItem) {
-  if (da.shape !== db.shape || da.part !== db.part || (a.floor || 0) !== (b.floor || 0)) return false;
+  if (da.shape !== db.shape || da.part !== db.part || !sameLevel(a.floor || 0, b.floor || 0)) return false;
   if (Math.hypot(a.x - b.x, a.y - b.y) > 1) return false;
   const sym = SYMMETRY[da.shape] ?? 360;
   const diff = normalizeAngle(a.rotation - b.rotation) % sym;
@@ -760,7 +789,7 @@ export function snapGroupDelta(
         for (let i = -1; i <= 1; i++) {
           for (let j = -1; j <= 1; j++) {
             buckets.get(`${bx + i},${by + j}`)?.forEach((g) => {
-              if (g.level !== level) return;
+              if (!sameLevel(g.level, level)) return;
               const da = normalizeAngle(o.angle - g.angle - 180);
               if (da > 1 && da < 359) return;
               const dist = Math.hypot(o.x - g.x, o.y - g.y);
@@ -790,12 +819,14 @@ export interface PasteResult {
  * zachowuje odstępy pięter, obraca się o 90° na każde R i dosuwa krawędzią do istniejących płyt.
  * Elementy pokrywające się 1:1 z istniejącymi (wspólna ściana, filar) są pomijane.
  */
-export function computePaste({ clip, items, cursor, floor, turn }: {
+export function computePaste({ clip, items, cursor, floor, turn, free = false }: {
   clip: PlacedItem[];
   items: PlacedItem[];
   cursor: Point;
   floor: number;
   turn: number;
+  /** 3D: grupa na dowolnej wysokości, poziomy dokładne. */
+  free?: boolean;
 }): PasteResult {
   const minFloor = Math.min(...clip.map((i) => i.floor || 0));
   // Punkt zaczepienia: płyta z najniższego piętra, inaczej pierwszy element.
@@ -804,7 +835,7 @@ export function computePaste({ clip, items, cursor, floor, turn }: {
   const turnAround = rotator(0, 0, rot);
   const moved = clip.map((i) => {
     const p = turnAround(i.x - ref.x, i.y - ref.y);
-    return { ...i, x: ref.x + p.x, y: ref.y + p.y, rotation: normalizeAngle(i.rotation + rot), floor: (i.floor || 0) - minFloor + floor };
+    return { ...i, x: ref.x + p.x, y: ref.y + p.y, rotation: normalizeAngle(i.rotation + rot), floor: roundLevel((i.floor || 0) - minFloor + floor) };
   });
 
   const { dx, dy, snapPoint } = snapGroupDelta(moved, items, { x: cursor.x - ref.x, y: cursor.y - ref.y });
@@ -820,7 +851,7 @@ export function computePaste({ clip, items, cursor, floor, turn }: {
       const d = findDef(o.itemId);
       return !!d && isDuplicate(p, def, o, d);
     })) return;
-    const groundOnly = (def.part === 'floor' || def.part === 'tri_floor') && (p.floor || 0) > 0;
+    const groundOnly = !free && isFloorPart(def) && (p.floor || 0) > 0;
     if (groundOnly || !isValid(def, p, items) || wallMissingPillars(def, p, support)) invalid.add(i.id);
     out.push(p);
   });

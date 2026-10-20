@@ -8,7 +8,7 @@
   Wygląd odtwarza dawne style CSS elementów (builder.module.css).
 */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BED_CLAIM_RADIUS, TRI_H, TRI_R, findDef, isRoofLayer, type BuildItem, type PlacedItem } from '@/lib/builder';
+import { BED_CLAIM_RADIUS, TRI_H, TRI_R, findDef, isRoofLayer, planFloor, type BuildItem, type PlacedItem } from '@/lib/builder';
 
 /** Kolejność warstw w rzucie: płyty, ściany, filary, dachy na wierzchu. */
 export const layerOf = (def: BuildItem) => {
@@ -309,7 +309,7 @@ function buildScene(items: PlacedItem[], floor: number, showBedAreas: boolean, c
   const claimPath = new Path2D();
   let anyClaim = false;
   for (const item of items) {
-    const f = item.floor || 0;
+    const f = planFloor(item);
     if (f > floor) continue;
     const def = findDef(item.itemId);
     if (!def) continue;
@@ -406,7 +406,7 @@ export default function PlanCanvas({ items, currentFloor, showBedAreas, selected
     if (selectedIds.size === 0) return null;
     const path = new Path2D();
     for (const item of items) {
-      if (!selectedIds.has(item.id) || (item.floor || 0) !== currentFloor) continue;
+      if (!selectedIds.has(item.id) || planFloor(item) !== currentFloor) continue;
       const def = findDef(item.itemId);
       if (def) path.addPath(boxPath(def, 2), itemMatrix(item));
     }

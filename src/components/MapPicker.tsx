@@ -1,31 +1,39 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { loadMap, loadMapIndex, mapOverviewUrl, type MapData, type MapInfo, type Site } from '@/lib/terrain';
+import { loadMap, loadMapIndex, type MapData, type MapInfo, type Site } from '@/lib/terrain';
 import { useT } from './I18nProvider';
+import MapView from './MapView';
 import styles from './MapPicker.module.css';
-
-const round = (v: number, step: number) => Math.round(v / step) * step;
 
 interface Props {
   site?: Site;
   onChange: (site: Site | undefined) => void;
   showUnderlay: boolean;
   onToggleUnderlay: () => void;
+  /** Widok 3D: klik w spawn albo mapę teleportuje zamiast przenosić punkt startu, na mapie widać gracza. */
+  onTeleport?: (x: number, z: number) => void;
 }
 
-/** Wybór mapy z gry i miejsca bazy (wycinek terenu pod plan 2D i scenę 3D). */
-export default function MapPicker({ site, onChange, showUnderlay, onToggleUnderlay }: Props) {
+/** Punkt startu projektu na spawnie z gry (teren pod nim to poziom 0 bazy). */
+export function siteAtSpawn(data: MapData, index: number): Site {
+  const spawns = data.meta.noBuild?.spawns ?? [];
+  const sp = spawns[index] ?? [0, 0, 0];
+  const x = Math.round(sp[0] * 10) / 10, z = Math.round(sp[2] * 10) / 10;
+  return { map: data.meta.id, x, z, elevation: Math.round(data.heightAt(x, z) * 4) / 4 };
+}
+
+/** Wybór mapy z gry. Start na spawnie z gry; inny spawn przenosi punkt startu (w 3D: teleport). */
+export default function MapPicker({ site, onChange, showUnderlay, onToggleUnderlay, onTeleport }: Props) {
   const t = useT();
   const [maps, setMaps] = useState<MapInfo[] | null>(null);
-  const [selected, setSelected] = useState<string | null>(site?.map ?? null);
   const [data, setData] = useState<MapData | null>(null);
 
   useEffect(() => {
     loadMapIndex().then(setMaps);
   }, []);
 
-  const current = selected ?? site?.map ?? null;
+  const current = site?.map ?? null;
   useEffect(() => {
     if (!current) return;
     let alive = true;
@@ -49,91 +57,53 @@ export default function MapPicker({ site, onChange, showUnderlay, onToggleUnderl
 
   const meta = data && data.meta.id === current ? data.meta : null;
 
-  const placeAt = (x: number, z: number) => {
-    if (!current || !data) return;
-    onChange({ map: current, x: round(x, 1), z: round(z, 1), elevation: round(data.heightAt(x, z), 0.25) });
+  // nowa mapa: start na pierwszym spawnie z gry
+  const pickMap = (id: string) => {
+    if (id === current) return;
+    loadMap(id).then((d) => onChange(siteAtSpawn(d, 0)));
   };
-
-  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!meta) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const u = (e.clientX - rect.left) / rect.width;
-    const v = (e.clientY - rect.top) / rect.height;
-    placeAt((u - 0.5) * meta.extent, (0.5 - v) * meta.extent);
-  };
-
-  const marker = site && meta && site.map === meta.id
-    ? { left: `${(site.x / meta.extent + 0.5) * 100}%`, top: `${(0.5 - site.z / meta.extent) * 100}%` }
-    : null;
-  const ground = site && data && site.map === data.meta.id ? data.heightAt(site.x, site.z) : null;
 
   return (
     <div className={styles.wrap}>
       <div className={styles.maps} role="group" aria-label={t.map.mapGroup}>
         {maps.map((m) => (
-          <button key={m.id} data-on={current === m.id || undefined} onClick={() => setSelected(m.id)}>
+          <button key={m.id} data-on={current === m.id || undefined} onClick={() => pickMap(m.id)}>
             {m.name}
             <span>{(m.size / 1024).toFixed(m.size < 1024 ? 1 : 0)} km</span>
           </button>
         ))}
       </div>
 
-      {current && (
+      {meta && data && site && (
         <>
-          <p className={styles.hint}>{t.map.pickHint}</p>
-          <div className={styles.overview} onClick={handleClick} role="button" aria-label={t.map.pickAria}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={mapOverviewUrl(current)} alt={t.map.mapAlt(current)} draggable={false} />
-            {marker && <span className={styles.marker} style={marker} />}
+          <p className={styles.hint}>{onTeleport ? t.hud.mapHint : t.map.spawnHint}</p>
+          <MapView
+            meta={meta}
+            site={site}
+            live={!!onTeleport}
+            onPick={onTeleport}
+            onSpawn={(i) => {
+              const sp = meta.noBuild?.spawns[i];
+              if (onTeleport && sp) onTeleport(sp[0], sp[2]);
+              else if (!onTeleport) onChange(siteAtSpawn(data, i));
+            }}
+          />
+          <div className={styles.fields}>
+            <p className={styles.hint}>
+              {t.map.startAt(site.x.toFixed(0), site.z.toFixed(0), site.elevation.toFixed(1))}
+              {meta.seaLevel != null && t.map.water(meta.seaLevel.toFixed(1))}
+            </p>
+            <div className={styles.actions}>
+              <button className="btn btn-ghost" onClick={() => onChange(undefined)}>{t.map.noMap}</button>
+            </div>
+            {!onTeleport && (
+              <label className={styles.toggle}>
+                <input type="checkbox" checked={showUnderlay} onChange={onToggleUnderlay} />
+                {t.map.underlay}
+              </label>
+            )}
           </div>
         </>
-      )}
-
-      {site && (
-        <div className={styles.fields}>
-          <label>
-            {t.map.east}
-            <input
-              className="input"
-              type="number"
-              value={site.x}
-              onChange={(e) => onChange({ ...site, x: Number(e.target.value) })}
-            />
-          </label>
-          <label>
-            {t.map.north}
-            <input
-              className="input"
-              type="number"
-              value={site.z}
-              onChange={(e) => onChange({ ...site, z: Number(e.target.value) })}
-            />
-          </label>
-          <label className={styles.full}>
-            {t.map.elevation}
-            <input
-              className="input"
-              type="number"
-              step={0.25}
-              value={site.elevation}
-              onChange={(e) => onChange({ ...site, elevation: Number(e.target.value) })}
-            />
-          </label>
-          {ground !== null && (
-            <p className={styles.hint}>
-              {t.map.terrainHere(ground.toFixed(1))}
-              {data?.meta.seaLevel != null && t.map.water(data.meta.seaLevel.toFixed(1))}
-            </p>
-          )}
-          <div className={styles.actions}>
-            <button className="btn btn-ghost" onClick={() => placeAt(site.x, site.z)}>{t.map.toTerrain}</button>
-            <button className="btn btn-ghost" onClick={() => onChange(undefined)}>{t.map.noMap}</button>
-          </div>
-          <label className={styles.toggle}>
-            <input type="checkbox" checked={showUnderlay} onChange={onToggleUnderlay} />
-            {t.map.underlay}
-          </label>
-        </div>
       )}
     </div>
   );

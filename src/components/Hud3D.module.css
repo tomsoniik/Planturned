@@ -338,6 +338,29 @@
   background: var(--accent-soft);
 }
 
+/* --- Mapa (M) --- */
+.mapScreen {
+  display: flex;
+  flex-direction: column;
+  width: min(calc(100vh - 120px), calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.35);
+  animation: rise 0.22s var(--ease);
+}
+
+.mapHint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.mapBody {
+  min-height: 0;
+  padding: 12px;
+}
+
 /* --- Czat --- */
 .chat {
   position: absolute;

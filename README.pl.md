@@ -24,7 +24,7 @@ Nagranie pokazuje prawdziwą sesję w aplikacji: nowy projekt, 6 podłóg, ścia
 - **Piętra.** Do czterech poziomów; niższe widać pod spodem jako tło.
 - **Widok 3D jak w grze.** Oryginalne modele struktur z plików Unturned. Pełny ekran z paskiem 9 slotów i ekwipunkiem (`E`), latanie albo chodzenie, stawianie i wyburzanie z celownika.
 - **Komendy na czacie.** `T` albo `/` otwiera czat: `/time night`, `/sky 150`, `/tp <x> <z>`, `/give metal_wall 3` i inne (`/help`). `Esc` otwiera menu ze sceną, mapą i klawiszami.
-- **Prawdziwe mapy.** Russia, Washington, PEI, Germany, Yukon i inne: teren, satelita, budynki i drzewa w skali 1:1. Skybase na wybranej wysokości.
+- **Prawdziwe mapy jako sandbox.** Russia, Washington, PEI, Germany, Yukon i inne: teren, satelita, budynki i drzewa w skali 1:1, oświetlenie z plików mapy. Start na spawnie z gry, budowanie gdziekolwiek: na ziemi i w powietrzu naraz. `M` pokazuje mapę z twoją pozycją, `Ctrl C` / `Ctrl V` w 3D kopiuje bazę w inne miejsce.
 - **Limity z gry.** Maksymalna wysokość budowania, granica tlenu i strefy zakazu budowy dla każdej mapy ([docs/sky-limits.md](docs/sky-limits.md)).
 - **Zasięg claimu łóżka.** Okrąg pokazuje, gdzie nikt spoza grupy nic nie postawi.
 - **Bez konta.** Projekty zostają w przeglądarce. Bazę eksportujesz do pliku `.baseplan.json` i wysyłasz ekipie.
@@ -40,6 +40,8 @@ Klawisze można zmienić w zakładce **Skróty** w edytorze (zapis w przeglądar
 | `1`-`9` | slot paska | slot paska (kółko: następny slot) |
 | `E` | | ekwipunek: elementy do slotów paska |
 | `T`, `/` | | czat z komendami, `/help` pokazuje listę |
+| `M` | | mapa z twoją pozycją, klik teleportuje |
+| `Ctrl C` / `Ctrl V` | kopiuj / wklej | kopiuj całą bazę / wklej w celowniku |
 | `X` / `B` | wyburzanie / łóżko | wyburzanie / łóżko |
 | `R` | obrót | obrót |
 | `LPM` | postaw, zaznacz, przeciągnij | postaw albo wyburz w celowniku |

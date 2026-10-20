@@ -1,9 +1,11 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import { Sky, Stars } from '@react-three/drei';
 import * as THREE from 'three';
 import type { TimeOfDay } from '@/lib/scene';
+import type { ResolvedLighting } from '@/lib/lighting';
 
 // --- Szum wartości (deterministyczny, bez zależności) ---
 
@@ -76,16 +78,60 @@ export const TIME_LOOK: Record<TimeOfDay, TimeLook> = {
   },
 };
 
-/** Niebo, światło i mgła dla wybranej pory dnia. */
+const SHADOW_STEP = 8; // co ile metrów obszar cieni przesuwa się za kamerą (bez migotania krawędzi)
+
+/** Gradient nieba jak skybox Unturned: kolor nieba u góry, równika przy horyzoncie, ziemi na dole. */
+function SkyDome({ sky, equator, ground }: { sky: THREE.Color; equator: THREE.Color; ground: THREE.Color }) {
+  const material = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        side: THREE.BackSide,
+        depthWrite: false,
+        fog: false,
+        uniforms: { uSky: { value: new THREE.Color() }, uEquator: { value: new THREE.Color() }, uGround: { value: new THREE.Color() } },
+        vertexShader: 'varying vec3 vDir; void main() { vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+        fragmentShader: `uniform vec3 uSky; uniform vec3 uEquator; uniform vec3 uGround; varying vec3 vDir;
+          void main() {
+            float y = vDir.y;
+            vec3 c = y > 0.0 ? mix(uEquator, uSky, pow(smoothstep(0.0, 1.0, y), 0.6)) : mix(uEquator, uGround, smoothstep(0.0, 0.3, -y));
+            gl_FragColor = vec4(c, 1.0);
+            #include <colorspace_fragment>
+          }`,
+      }),
+    [],
+  );
+  useLayoutEffect(() => {
+    material.uniforms.uSky.value.copy(sky);
+    material.uniforms.uEquator.value.copy(equator);
+    material.uniforms.uGround.value.copy(ground);
+  }, [material, sky, equator, ground]);
+  useEffect(() => () => material.dispose(), [material]);
+  const ref = useRef<THREE.Mesh>(null);
+  // kopuła idzie za kamerą, więc horyzont jest zawsze w nieskończoności
+  useFrame(({ camera }) => ref.current?.position.copy(camera.position));
+  return (
+    <mesh ref={ref} material={material} renderOrder={-1} frustumCulled={false}>
+      <sphereGeometry args={[4000, 32, 16]} />
+    </mesh>
+  );
+}
+
+/**
+ * Niebo, światło i mgła. Z `lighting` (mapa z gry) wszystko jak w Unturned: kolory i kierunek słońca z Lighting.dat,
+ * otoczenie trójkolorowe (niebo, równik, ziemia), mgła wykładnicza i siła cienia z pory dnia; bez mapy wygląd łąki.
+ * Natężenia razy pi: three.js dzieli rozproszone światło przez pi, Unity nie.
+ */
 export function SkyAndLight({
   time,
   focus,
   extend = 0,
+  lighting,
 }: {
   time: TimeOfDay;
   focus: [number, number, number];
-  /** Minimalny zasięg mgły (skybase: ziemia daleko w dole ma być widoczna). */
+  /** Minimalny zasięg mgły (widok z wysoka: ziemia daleko w dole ma być widoczna). */
   extend?: number;
+  lighting?: ResolvedLighting | null;
 }) {
   const look = TIME_LOOK[time];
   const fogFar = Math.max(look.fog[1], extend);
@@ -93,14 +139,66 @@ export function SkyAndLight({
   const sunPos = useMemo(() => new THREE.Vector3(...look.sun).normalize().multiplyScalar(400), [look]);
   const light = useRef<THREE.DirectionalLight>(null);
 
-  // Cień liczony wokół bazy: światło i jego cel przesuwają się razem z punktem focus.
-  useLayoutEffect(() => {
+  // Cień liczony wokół kamery: światło i jego cel przesuwają się skokami za nią
+  const offset = useMemo(
+    () => (lighting ? lighting.sunDir.clone().multiplyScalar(-400) : new THREE.Vector3(...look.sun)),
+    [lighting, look],
+  );
+  useFrame(({ camera, gl }) => {
+    // Gra nie ma mapowania tonów: kolory z Lighting.dat idą prosto na ekran
+    const toneMapping = lighting ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
+    if (gl.toneMapping !== toneMapping) gl.toneMapping = toneMapping;
     const l = light.current;
     if (!l) return;
-    l.position.set(focus[0] + look.sun[0], focus[1] + look.sun[1], focus[2] + look.sun[2]);
-    l.target.position.set(focus[0], focus[1], focus[2]);
+    const fx = lighting ? Math.round(camera.position.x / SHADOW_STEP) * SHADOW_STEP : focus[0];
+    const fy = lighting ? Math.round(camera.position.y / SHADOW_STEP) * SHADOW_STEP : focus[1];
+    const fz = lighting ? Math.round(camera.position.z / SHADOW_STEP) * SHADOW_STEP : focus[2];
+    if (l.target.position.x === fx && l.target.position.y === fy && l.target.position.z === fz && l.userData.offset === offset) return;
+    l.userData.offset = offset;
+    l.position.set(fx + offset.x, fy + offset.y, fz + offset.z);
+    l.target.position.set(fx, fy, fz);
     l.target.updateMatrixWorld();
-  }, [focus, look]);
+  });
+
+  const shadowProps = {
+    castShadow: true,
+    'shadow-mapSize': [2048, 2048] as [number, number],
+    'shadow-camera-left': -80,
+    'shadow-camera-right': 80,
+    'shadow-camera-top': 80,
+    'shadow-camera-bottom': -80,
+    'shadow-camera-far': 900,
+    'shadow-bias': -0.0004,
+  };
+
+  if (lighting) {
+    // Trilight z Unity: półkula daje niebo/ziemię, równik dokładamy tym, czego półkula nie daje przy horyzoncie
+    const hemiMid = lighting.ambientSky.clone().add(lighting.ambientGround).multiplyScalar(0.5);
+    const equator = new THREE.Color(
+      Math.max(0, lighting.ambientEquator.r - hemiMid.r),
+      Math.max(0, lighting.ambientEquator.g - hemiMid.g),
+      Math.max(0, lighting.ambientEquator.b - hemiMid.b),
+    );
+    // poniżej ~0.0012 obiekty mapy (wczytywane do 480 m) wyskakiwałyby z pustki na horyzoncie
+    const density = Math.max(lighting.fogDensity, extend > 0 ? 0.0005 : 0.0012);
+    return (
+      <>
+        <color attach="background" args={[lighting.skyEquator]} />
+        <fogExp2 attach="fog" args={[lighting.fogColor, density]} />
+        <SkyDome sky={lighting.skySky} equator={lighting.skyEquator} ground={lighting.skyGround} />
+        {time === 'night' && <Stars radius={400} depth={80} count={5000} factor={5} saturation={0} fade speed={0.3} />}
+        <hemisphereLight args={[lighting.ambientSky, lighting.ambientGround, Math.PI]} />
+        <ambientLight color={equator} intensity={Math.PI} />
+        <directionalLight
+          ref={light}
+          intensity={lighting.sunIntensity * Math.PI}
+          color={lighting.sunColor}
+          {...shadowProps}
+          shadow-intensity={lighting.shadows}
+        />
+      </>
+    );
+  }
 
   return (
     <>
@@ -120,19 +218,7 @@ export function SkyAndLight({
       )}
       <ambientLight intensity={look.ambient} />
       <hemisphereLight args={look.hemi} />
-      <directionalLight
-        ref={light}
-        intensity={look.sunIntensity}
-        color={look.sunColor}
-        castShadow
-        shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-80}
-        shadow-camera-right={80}
-        shadow-camera-top={80}
-        shadow-camera-bottom={-80}
-        shadow-camera-far={600}
-        shadow-bias={-0.0004}
-      />
+      <directionalLight ref={light} intensity={look.sunIntensity} color={look.sunColor} {...shadowProps} />
     </>
   );
 }

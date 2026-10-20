@@ -10,7 +10,9 @@ import { BED, HOTBAR_SIZE, MATERIALS, REMOVER, findDef, itemsForMaterial, type B
 import { itemLabel, type PartGroupId } from '@/lib/i18n';
 import { SLOT_ACTIONS, keyLabel, useKeybinds } from '@/lib/keybinds';
 import { suggest } from '@/lib/commands';
+import type { MapMeta, Site } from '@/lib/terrain';
 import { useT } from './I18nProvider';
+import MapView from './MapView';
 import styles from './Hud3D.module.css';
 
 const PART_GROUPS: { id: PartGroupId; parts: PartId[] }[] = [
@@ -402,6 +404,48 @@ export function Chat({
           <p className={styles.chatHint}>{t.hud.chatHint}</p>
         </>
       )}
+    </div>
+  );
+}
+
+// --- Mapa (M) ---
+
+/** Pełna mapa z gry pod M: strzałka gracza, baza, spawny; klik teleportuje. */
+export function MapScreen({
+  meta,
+  site,
+  onTeleport,
+  onClose,
+}: {
+  meta: MapMeta;
+  site?: Site;
+  onTeleport: (x: number, z: number) => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+  return (
+    <div className={styles.backdrop} data-ui onMouseDown={(e) => e.target === e.currentTarget && onClose()} onContextMenu={(e) => e.preventDefault()}>
+      <section className={styles.mapScreen} role="dialog" aria-label={t.hud.map}>
+        <header className={styles.invHead}>
+          <h2>{t.hud.map}</h2>
+          <p className={styles.mapHint}>{t.hud.mapHint}</p>
+          <button className="icon-btn" onClick={onClose} aria-label={t.hud.resume}>
+            <X size={16} weight="bold" />
+          </button>
+        </header>
+        <div className={styles.mapBody}>
+          <MapView
+            meta={meta}
+            site={site}
+            live
+            onPick={onTeleport}
+            onSpawn={(i) => {
+              const sp = meta.noBuild?.spawns[i];
+              if (sp) onTeleport(sp[0], sp[2]);
+            }}
+          />
+        </div>
+      </section>
     </div>
   );
 }

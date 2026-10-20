@@ -103,18 +103,15 @@ const NONE = new Int32Array(0);
 
 /**
  * Budynki, skały i drzewa z mapy gry w promieniu `radius` od `center` (punkt sceny), 1:1 z plików poziomu.
- * `lift`: skybase opuszcza świat o tę wysokość.
  * Typ, który raz się pojawił, zostaje zamontowany (przy wyjściu z zasięgu ma 0 instancji), więc przesuwanie
  * obszaru nie tworzy siatek od nowa.
  */
 export default function MapObjects({
   site,
-  lift,
   radius,
   center,
 }: {
   site: Site;
-  lift: number;
   radius: number;
   center: [number, number];
 }) {
@@ -128,7 +125,7 @@ export default function MapObjects({
     };
   }, [site.map]);
 
-  const origin = useMemo(() => ({ x: site.x, y: site.elevation + lift, z: site.z }), [site.x, site.z, site.elevation, lift]);
+  const origin = useMemo(() => ({ x: site.x, y: site.elevation, z: site.z }), [site.x, site.z, site.elevation]);
 
   // macierze wszystkich instancji mapy, pogrupowane po typie (raz na mapę i miejsce bazy)
   const types = useMemo(() => {

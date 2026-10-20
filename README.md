@@ -24,7 +24,7 @@ The recording is a real session in the app (with the Polish UI): a new project, 
 - **Floors.** Up to four levels; the ones below show through as a backdrop.
 - **3D view like in the game.** Original structure models from the Unturned files. Full screen with a 9-slot hotbar and an inventory (`E`), fly or walk, place and demolish from the crosshair.
 - **Chat commands.** `T` or `/` opens the chat: `/time night`, `/sky 150`, `/tp <x> <z>`, `/give metal_wall 3` and more (`/help`). `Esc` opens the menu with the scene, map and keys.
-- **Real maps.** Russia, Washington, PEI, Germany, Yukon and more: terrain, satellite, buildings and trees at 1:1 scale. Skybases at any height.
+- **Real maps as a sandbox.** Russia, Washington, PEI, Germany, Yukon and more: terrain, satellite, buildings and trees at 1:1 scale, lighting from the map files. You start at a game spawn and build anywhere: on the ground and in the sky at once. `M` shows the map with your position, `Ctrl C` / `Ctrl V` in 3D copies the base to another spot.
 - **Limits from the game.** Max build height, the oxygen line and no-build zones for each map ([docs/sky-limits.md](docs/sky-limits.md), in Polish).
 - **Bed claim radius.** A circle shows where nobody outside your group can build.
 - **No account.** Projects stay in your browser. Export a base to a `.baseplan.json` file and send it to your crew.
@@ -40,6 +40,8 @@ Keys can be changed in the editor's **Keys** tab (saved in your browser). Defaul
 | `1`-`9` | hotbar slot | hotbar slot (wheel: next slot) |
 | `E` | | inventory: put pieces in the hotbar slots |
 | `T`, `/` | | chat with commands, `/help` lists them |
+| `M` | | map with your position, click teleports |
+| `Ctrl C` / `Ctrl V` | copy / paste | copy the whole base / paste it at the crosshair |
 | `X` / `B` | demolish / bed | demolish / bed |
 | `R` | rotate | rotate |
 | `LMB` | place, select, drag | place or demolish at the crosshair |

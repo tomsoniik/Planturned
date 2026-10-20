@@ -21,6 +21,7 @@ Tworzy (pliki z gry, tylko do użytku lokalnego, są w .gitignore):
 
 Same tekstury terenu (bez modeli): python scripts/export_game_data.py --terrain
 Same modele obiektów i drzew map:  python scripts/export_game_data.py --scenery
+Samo oświetlenie i spawny map:     python scripts/export_game_data.py --lighting
 
 Formaty plików mapy według kodu gry (U3-SDK: LevelObjects.cs, LevelGround.cs, River.cs, Level.cs).
 """
@@ -1124,6 +1125,72 @@ def no_build_info(map_dir):
     }
 
 
+def read_lighting(map_dir):
+    """
+    Environment/Lighting.dat (LevelLighting.load, wersja >= 5): położenie słońca i kolory dla pór dnia
+    (świt, południe, zmierzch, północ). Kolory sRGB 0-255 w kolejności ELightingColor, liczby w kolejności ELightingSingle.
+    """
+    path = os.path.join(map_dir, "Environment", "Lighting.dat")
+    if not os.path.exists(path):
+        return None
+    r = Reader(open(path, "rb").read())
+    b = r.take("B")[0]
+    azimuth, bias, fade, _time = r.take("4f")
+    r.take("B")  # księżyc
+    if b < 5:
+        return None
+    r.take("2f")  # poziom morza, śniegu
+    if b > 6:
+        r.take("B")
+    if b > 10:
+        r.take("B")
+    if b >= 8:
+        r.take("2f")
+    if b >= 11:
+        r.take("2f")
+    times = []
+    for _ in range(4):
+        if b > 8:
+            cols = [list(r.take("3B")) for _ in range(12 if b > 9 else 11)]
+            if b <= 9:
+                cols.append(cols[3])
+            singles = list(r.take("5f"))
+        else:
+            cols = [list(r.take("3B")) for _ in range(10 if b >= 6 else 9)]
+            if b < 6:
+                cols.append(cols[2])
+            cols += [cols[0], cols[3]]
+            singles = list(r.take("4f")) + [0.25]
+        if b < 12:
+            singles[1] = min(singles[1], 0.33)
+        names = ["sun", "sea", "fog", "skySky", "skyEquator", "skyGround", "ambientSky", "ambientEquator", "ambientGround", "clouds", "rays", "particles"]
+        times.append({
+            "colors": dict(zip(names, cols)),
+            "intensity": round(singles[0], 4),
+            "fog": round(singles[1], 4),
+            "clouds": round(singles[2], 4),
+            "shadows": round(singles[3], 4),
+            "rays": round(singles[4], 4),
+        })
+    return {"azimuth": round(azimuth, 3), "bias": round(bias, 4), "fade": round(fade, 4), "times": times}
+
+
+def export_maps_lighting(unturned):
+    """Tylko oświetlenie i strefy: dopisuje "lighting" i "noBuild" do istniejących meta.json."""
+    maps_dir = os.path.join(unturned, "Maps")
+    for name in sorted(os.listdir(maps_dir)):
+        meta_path = os.path.join(PUBLIC, "maps", name, "meta.json")
+        if not os.path.exists(meta_path):
+            continue
+        with open(meta_path, encoding="utf-8") as f:
+            meta = json.load(f)
+        meta["lighting"] = read_lighting(os.path.join(maps_dir, name))
+        meta["noBuild"] = no_build_info(os.path.join(maps_dir, name))
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump(meta, f, indent=1)
+        print(f"  {name}: oświetlenie {'tak' if meta['lighting'] else 'brak'}, spawny {len(meta['noBuild']['spawns'])}")
+
+
 def export_maps_terrain(unturned):
     """Tylko tekstury terenu: dopisuje "terrain" do istniejących meta.json (bez eksportu modeli i obiektów)."""
     import UnityPy
@@ -1164,6 +1231,7 @@ def export_maps(unturned):
                 meta["terrain"] = export_terrain(env, os.path.join(maps_dir, name), name, meta["extent"], materials)
                 meta["roads"] = export_roads(env, os.path.join(maps_dir, name), name, road_assets)
                 meta["noBuild"] = no_build_info(os.path.join(maps_dir, name))
+                meta["lighting"] = read_lighting(os.path.join(maps_dir, name))
                 with open(os.path.join(PUBLIC, "maps", name, "meta.json"), "w", encoding="utf-8") as f:
                     json.dump(meta, f, indent=1)
         except Exception as e:  # mapa w innym formacie: pomijamy
@@ -1180,6 +1248,11 @@ def export_maps(unturned):
 def main():
     unturned = find_unturned()
     print(f"Unturned: {unturned}")
+    if "--lighting" in FLAGS:
+        print("Tylko oświetlenie map...")
+        export_maps_lighting(unturned)
+        print("Gotowe.")
+        return
     if "--scenery" in FLAGS:
         print("Tylko modele obiektów i drzew...")
         export_scenery_models(unturned)

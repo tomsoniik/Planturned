@@ -16,6 +16,37 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.7.0',
+    date: '2026-10-20',
+    title: { pl: 'Sandbox na całej mapie', en: 'Sandbox on the whole map' },
+    changes: [
+      {
+        pl: 'Start na spawnie z gry zamiast wybierania miejsca. Budujesz gdziekolwiek na mapie, na ziemi i w powietrzu naraz, bez trybu Na ziemi / Skybase.',
+        en: 'You start at a game spawn instead of picking a spot. Build anywhere on the map, on the ground and in the sky at once, with no On ground / Skybase mode.',
+      },
+      {
+        pl: 'Stawianie jak w grze: wolna podłoga ląduje na terenie w miejscu celownika i obraca się z kamerą, bez globalnej siatki. Dachy w powietrzu stawiasz na wysokości pod kamerą (/sky 150).',
+        en: 'Placing like in the game: a free floor lands on the ground at the crosshair and turns with the camera, with no global grid. Roofs in the air go at the height below the camera (/sky 150).',
+      },
+      {
+        pl: 'Ctrl C kopiuje w 3D całą bazę (albo zaznaczenie), Ctrl V pokazuje ją w celowniku, R obraca, klik wstawia w dowolnym miejscu mapy.',
+        en: 'In 3D Ctrl C copies the whole base (or the selection), Ctrl V shows it at the crosshair, R rotates, a click places it anywhere on the map.',
+      },
+      {
+        pl: 'Mapa pod M: twoja pozycja i kierunek, baza, spawny z gry. Klik teleportuje. Ta sama mapa jest w menu Esc.',
+        en: 'Map on M: your position and heading, the base, game spawns. A click teleports. The same map is in the Esc menu.',
+      },
+      {
+        pl: 'Oświetlenie z plików mapy (Lighting.dat): kolory słońca, nieba, otoczenia i mgły oraz siła cienia dla każdej pory dnia. Budowle nie rzucają cienia, jak w Unturned.',
+        en: 'Lighting from the map files (Lighting.dat): sun, sky, ambient and fog colors and shadow strength for each time of day. Structures cast no shadows, like in Unturned.',
+      },
+      {
+        pl: 'Nowe komendy: /spawn, a /sky i /ground przenoszą kamerę na wysokość nad terenem. Stare skybase\'y same przechodzą na swoją wysokość.',
+        en: 'New command /spawn; /sky and /ground move the camera to a height above the ground. Old skybases move to their height on their own.',
+      },
+    ],
+  },
+  {
     version: '0.6.0',
     date: '2026-10-20',
     title: { pl: 'Widok 3D jak w grze', en: '3D view like in the game' },

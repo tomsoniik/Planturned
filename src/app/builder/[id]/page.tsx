@@ -28,7 +28,7 @@ import {
 import styles from '../builder.module.css';
 import { useAppStore } from '@/store/useAppStore';
 import { exportProject, getProject, updateProject, type Project } from '@/lib/projects';
-import type { Site } from '@/lib/terrain';
+import { loadMap, type MapData, type Site } from '@/lib/terrain';
 import { DEFAULT_SCENE, SKY_HEIGHTS, type SceneSettings, type TimeOfDay } from '@/lib/scene';
 import { itemFullLabel, itemLabel, type PartGroupId, type SidebarTabId } from '@/lib/i18n';
 import { useI18n, useT } from '@/components/I18nProvider';
@@ -37,7 +37,7 @@ import MapPicker from '@/components/MapPicker';
 import SiteUnderlay from '@/components/SiteUnderlay';
 import PlanCanvas, { layerOf } from '@/components/PlanCanvas';
 import KeybindsPanel from '@/components/KeybindsPanel';
-import { Chat, Hotbar, Inventory, PauseMenu, type ChatMessage } from '@/components/Hud3D';
+import { Chat, Hotbar, Inventory, MapScreen, PauseMenu, type ChatMessage } from '@/components/Hud3D';
 import hud from '@/components/Hud3D.module.css';
 import { SLOT_ACTIONS, keyLabel, useKeybinds } from '@/lib/keybinds';
 import { cameraPosition, lockPointer, sendSceneCommand, unlockPointer, useView3D, type Overlay } from '@/lib/view3d';
@@ -47,6 +47,7 @@ import {
   BED_CLAIM_RADIUS,
   BUILD_ITEMS,
   FLOORS,
+  LEVEL_HEIGHT,
   MATERIALS,
   REMOVER,
   computePaste,
@@ -56,6 +57,8 @@ import {
   getPolygonVertices,
   newItemId,
   normalizeHotbar,
+  planFloor,
+  roundLevel,
   pointInPolygon,
   snapGroupDelta,
   type BuildItem,
@@ -262,11 +265,32 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
       setNotFound(true);
       return;
     }
+    // Dawny tryb skybase opuszczał świat pod bazą; w sandboxie elementy po prostu wiszą na swojej wysokości
+    if (p.scene?.mode === 'sky') {
+      const lift = p.scene.skyHeight / LEVEL_HEIGHT;
+      const items = p.items.map(i => ({ ...i, floor: roundLevel((i.floor || 0) + lift) }));
+      const scene = { ...p.scene, mode: 'ground' as const };
+      updateProject(id, { items, scene });
+      Object.assign(p, { items, scene });
+    }
     setProject(p);
     setPlacedItems(p.items);
     lastSavedRef.current = JSON.stringify(p.items);
     if (window.innerWidth < 900) setIsSidebarCollapsed(true);
   }, [id]);
+
+  // Dane mapy projektu (spawny dla /spawn i mapy pod M)
+  const siteMap = project?.site?.map;
+  const [mapData, setMapData] = useState<MapData | null>(null);
+  useEffect(() => {
+    if (!siteMap) return;
+    let alive = true;
+    loadMap(siteMap).then(d => alive && setMapData(d)).catch(() => alive && setMapData(null));
+    return () => {
+      alive = false;
+    };
+  }, [siteMap]);
+  const activeMapData = mapData && mapData.meta.id === siteMap ? mapData : null;
 
   // Autozapis (debounce)
   useEffect(() => {
@@ -294,8 +318,11 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
 
   // Piętra w 2D: presety Parter-3, lista rośnie, gdy w 3D zbudowano wyżej.
   const floorsList = useMemo(() => {
-    const top = placedItems.reduce((m, i) => Math.max(m, i.floor || 0), 0);
-    return Array.from({ length: Math.max(FLOORS.length, top + 2) }, (_, i) => i);
+    // elementy z 3D stoją na wysokości terenu albo wysoko (skybase): piętro = najbliższy pełny poziom.
+    // Lista: parter i 3 piętra, piętra z elementami oraz jedno nad najwyższym (bez setek pustych przycisków).
+    const levels = placedItems.map(planFloor);
+    const set = new Set([...FLOORS, ...levels, Math.max(FLOORS.length - 1, ...levels) + 1]);
+    return [...set].sort((a, b) => a - b);
   }, [placedItems]);
 
   const setSite = (site: Site | undefined) => {
@@ -411,20 +438,35 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
           break;
         }
         case 'sky': {
-          const h = Math.round(Number(args[0] ?? scene.skyHeight));
+          // kamera nad terenem: tam stawia się dachy skybase'a (płaszczyzna pod kamerą)
+          const h = Math.round(Number(args[0] ?? 150));
           if (!Number.isFinite(h) || h < 5) usage();
           else {
             const height = Math.min(h, maxSkyHeight);
-            setScene({ mode: 'sky', skyHeight: height });
-            info(t.commands.sky(height));
+            sendSceneCommand({ kind: 'fly', on: true });
+            if (sendSceneCommand({ kind: 'height', above: height })) info(t.commands.sky(height));
+            else fail(t.commands.noScene);
             if (height < h) info(t.commands.skyClamped(maxSkyHeight));
           }
           break;
         }
         case 'ground':
-          setScene({ mode: 'ground' });
-          info(t.commands.ground);
+          if (sendSceneCommand({ kind: 'height', above: 0 })) info(t.commands.ground);
+          else fail(t.commands.noScene);
           break;
+        case 'spawn': {
+          const spawns = activeMapData?.meta.noBuild?.spawns ?? [];
+          if (!spawns.length) {
+            fail(t.commands.noSpawns);
+            break;
+          }
+          const n = args[0] ? Math.round(Number(args[0])) : Math.floor(Math.random() * spawns.length) + 1;
+          const sp = spawns[n - 1];
+          if (!sp) usage();
+          else if (sendSceneCommand({ kind: 'tp', x: sp[0], z: sp[2] })) info(t.commands.spawn(n, spawns.length));
+          else fail(t.commands.noScene);
+          break;
+        }
         case 'fly':
         case 'walk':
           if (sendSceneCommand({ kind: 'fly', on: name === 'fly' })) info(name === 'fly' ? t.commands.fly : t.commands.walk);
@@ -523,6 +565,16 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
           else openOverlay('inventory');
           return;
         }
+        if (!mod && e.code === binds.map && activeMapData && (view.overlay === 'none' || view.overlay === 'map')) {
+          e.preventDefault();
+          if (view.overlay === 'map') closeOverlay();
+          else openOverlay('map');
+          return;
+        }
+        if (e.key === 'Escape' && paste && view.overlay === 'none') {
+          setPaste(null);
+          return;
+        }
         if (e.key === 'Escape') {
           // Esc z przechwyconym kursorem otwiera menu przez pointerlockchange; drugi raz go nie zamykamy
           if (performance.now() - view.changedAt < 300) return;
@@ -555,11 +607,14 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
         redo();
       }
       if (mod && k === 'c') {
-        const itemsToCopy = placedItems.filter(i => selectedItemIds.includes(i.id));
+        // w 3D bez zaznaczenia kopiujemy całą bazę (do wklejenia w innym miejscu mapy)
+        const itemsToCopy = is3DMode && selectedItemIds.length === 0
+          ? placedItems
+          : placedItems.filter(i => selectedItemIds.includes(i.id));
         setClipboard(itemsToCopy);
         if (itemsToCopy.length > 0) addNotification(t.editor.copied(itemsToCopy.length), 'success');
       }
-      if (mod && k === 'v' && clipboard.length > 0 && !is3DMode) {
+      if (mod && k === 'v' && clipboard.length > 0) {
         e.preventDefault();
         setActiveItem(null);
         setSelectedItemIds([]);
@@ -574,11 +629,11 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
       if (code === binds.bed) selectItem(BED.id);
       if (code === binds.floorUp) {
         e.preventDefault();
-        setCurrentFloor(f => Math.min(f + 1, floorsList.length - 1));
+        setCurrentFloor(f => floorsList.find(l => l > f) ?? f);
       }
       if (code === binds.floorDown) {
         e.preventDefault();
-        setCurrentFloor(f => Math.max(f - 1, 0));
+        setCurrentFloor(f => [...floorsList].reverse().find(l => l < f) ?? f);
       }
       const slotKey = SLOT_ACTIONS.findIndex(a => binds[a] === code);
       if (slotKey >= 0) selectSlot(slotKey);
@@ -630,7 +685,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
     let best: string | null = null;
     let bestLayer = -1;
     for (const item of placedItems) {
-      if ((item.floor || 0) !== currentFloor) continue;
+      if (planFloor(item) !== currentFloor) continue;
       if (Math.abs(item.x - p.x) > 45 || Math.abs(item.y - p.y) > 45) continue;
       const def = findDef(item.itemId);
       if (!def) continue;
@@ -740,7 +795,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
 
       if (maxX - minX > 5 || maxY - minY > 5) {
         setSelectedItemIds(placedItems
-          .filter(item => (item.floor || 0) === currentFloor && item.x >= minX && item.x <= maxX && item.y >= minY && item.y <= maxY)
+          .filter(item => planFloor(item) === currentFloor && item.x >= minX && item.x <= maxX && item.y >= minY && item.y <= maxY)
           .map(i => i.id));
       } else {
         setSelectedItemIds([]);
@@ -818,7 +873,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
 
 
   const floorCount = useMemo(
-    () => placedItems.filter(i => (i.floor || 0) === currentFloor).length,
+    () => placedItems.filter(i => planFloor(i) === currentFloor).length,
     [placedItems, currentFloor],
   );
 
@@ -1221,6 +1276,11 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                 commitAction(placedItemsRef.current.filter(i => i.id !== itemId));
                 setSelectedItemIds(prev => prev.filter(i => i !== itemId));
               }}
+              paste={paste && clipboard.length > 0 ? { clip: clipboard, turn: paste.turn } : null}
+              onPaste={(items) => {
+                commitAction([...placedItemsRef.current, ...items.map(i => ({ ...i, id: newItemId() }))]);
+                setPaste(null);
+              }}
             />
           ) : null}
           {is3DMode && (
@@ -1255,6 +1315,17 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                   onClose={closeOverlay}
                 />
               )}
+              {overlay === 'map' && activeMapData && (
+                <MapScreen
+                  meta={activeMapData.meta}
+                  site={project?.site}
+                  onTeleport={(x, z) => {
+                    sendSceneCommand({ kind: 'tp', x, z });
+                    closeOverlay();
+                  }}
+                  onClose={closeOverlay}
+                />
+              )}
               {overlay === 'menu' && (
                 <PauseMenu
                   title={project?.name ?? ''}
@@ -1284,39 +1355,6 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                               })}
                             </div>
                           </div>
-                          <div className={hud.field}>
-                            <span>{t.editor.baseType}</span>
-                            <div className={styles.segmented} role="group" aria-label={t.editor.baseType}>
-                              {(['ground', 'sky'] as const).map(m => (
-                                <button key={m} data-on={scene.mode === m || undefined} onClick={() => setScene({ mode: m })}>
-                                  {t.mode[m]}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          {scene.mode === 'sky' && (
-                            <div className={hud.field}>
-                              <span>{t.editor.skyHeightTitle(maxSkyHeight)}</span>
-                              <div className={styles.segmented} role="group" aria-label={t.editor.skyHeight}>
-                                {SKY_HEIGHTS.filter(hgt => hgt <= maxSkyHeight).map(hgt => (
-                                  <button key={hgt} data-on={scene.skyHeight === hgt || undefined} onClick={() => setScene({ skyHeight: hgt })}>
-                                    {hgt}
-                                  </button>
-                                ))}
-                                <label className={styles.skyInput}>
-                                  <input
-                                    type="number"
-                                    min={5}
-                                    max={maxSkyHeight}
-                                    step={5}
-                                    value={scene.skyHeight}
-                                    onChange={e => setScene({ skyHeight: Math.min(maxSkyHeight, Math.max(5, Number(e.target.value) || 5)) })}
-                                  />
-                                  m
-                                </label>
-                              </div>
-                            </div>
-                          )}
                           <label className={hud.toggle}>
                             <input type="checkbox" checked={showBedAreas} onChange={e => setShowBedAreas(e.target.checked)} />
                             {t.editor.bedAreas}
@@ -1333,6 +1371,10 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                           onChange={setSite}
                           showUnderlay={showUnderlay}
                           onToggleUnderlay={() => setShowUnderlay(v => !v)}
+                          onTeleport={(x, z) => {
+                            sendSceneCommand({ kind: 'tp', x, z });
+                            closeOverlay();
+                          }}
                         />
                       ),
                     },
@@ -1421,7 +1463,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                         transform: itemTransform(def, item.rotation),
                         transformOrigin: def.shape === 'triangle' ? '50% 66.666%' : '50% 50%',
                         '--c': bad ? 'var(--danger)' : item.customColor || def.color,
-                        opacity: (item.floor || 0) === currentFloor ? undefined : 0.3,
+                        opacity: planFloor(item) === currentFloor ? undefined : 0.3,
                         zIndex: 400 + layerOf(def),
                       } as React.CSSProperties}
                     >

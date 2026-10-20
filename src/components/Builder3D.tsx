@@ -8,16 +8,24 @@ import {
   LEVEL_HEIGHT,
   SIDE,
   TRI_H,
+  computePaste,
   computePlacement,
   findDef,
   findSlabSlotByRay,
   findSlotByRay,
+  isFloorPart,
   isPlacementValid,
+  isSlab,
+  normalizeAngle,
+  roundLevel,
+  sameLevel,
   wallMissingPillars,
   isRoofLayer,
   type BuildItem,
+  type PasteResult,
   type PlacedItem,
 } from '@/lib/builder';
+import { resolveLighting } from '@/lib/lighting';
 import { loadGameModels, type GameModel } from '@/lib/gameModels';
 import { loadMap, mapOverviewUrl, type MapData, type Site } from '@/lib/terrain';
 import { DEFAULT_SCENE, type SceneSettings } from '@/lib/scene';
@@ -144,11 +152,12 @@ function Piece({ def, model, color, clip, ghost, highlight, itemId }: PieceProps
       flatShading
     />
   );
+  // W Unturned budowle nie rzucają cienia, tylko go przyjmują
   const shadow = !ghost;
 
   if (model) {
     return (
-      <mesh geometry={model.geometry} castShadow={shadow} receiveShadow={shadow} userData={{ itemId }}>
+      <mesh geometry={model.geometry} receiveShadow={shadow} userData={{ itemId }}>
         {material}
       </mesh>
     );
@@ -158,7 +167,6 @@ function Piece({ def, model, color, clip, ghost, highlight, itemId }: PieceProps
     <mesh
       position={triangle ? [0, -0.25, 0] : fallbackOffset(def)}
       rotation={triangle ? [-Math.PI / 2, 0, 0] : undefined}
-      castShadow={shadow}
       receiveShadow={shadow}
       userData={{ itemId }}
     >
@@ -253,7 +261,7 @@ function batchMaterial(palette: boolean, color: string, metal: boolean, clipY: n
 }
 
 /** Wszystkie wystąpienia jednego typu elementu jako InstancedMesh; `userData.itemIds[instanceId]` to id elementu (celowanie, wyburzanie). */
-function InstancedGroup({ group, hidden }: { group: BatchGroup; hidden: Set<string> }) {
+function InstancedGroup({ group, hidden, ghost = false }: { group: BatchGroup; hidden: Set<string>; ghost?: boolean }) {
   const ref = useRef<THREE.InstancedMesh>(null);
 
   useLayoutEffect(() => {
@@ -270,12 +278,45 @@ function InstancedGroup({ group, hidden }: { group: BatchGroup; hidden: Set<stri
       ids.push(item.id);
     }
     mesh.count = ids.length;
-    mesh.userData = { itemIds: ids };
+    // podgląd wklejania nie jest celem celownika ani podłożem
+    mesh.userData = ghost ? {} : { itemIds: ids };
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
-  }, [group, hidden]);
+  }, [group, hidden, ghost]);
 
-  return <instancedMesh ref={ref} args={[group.geometry, group.material, group.items.length]} castShadow receiveShadow />;
+  // bez castShadow: w Unturned budowle nie rzucają cienia
+  return <instancedMesh ref={ref} args={[group.geometry, group.material, group.items.length]} receiveShadow={!ghost} />;
+}
+
+const NO_IDS = new Set<string>();
+const ghostMaterials = {
+  ok: new THREE.MeshStandardMaterial({ color: '#8dc46f', transparent: true, opacity: 0.45, depthWrite: false, flatShading: true }),
+  bad: new THREE.MeshStandardMaterial({ color: '#e5484d', transparent: true, opacity: 0.45, depthWrite: false, flatShading: true }),
+};
+
+/** Podgląd wklejanej grupy: zielone pasują, czerwone kolidują. */
+function PasteGhost({ paste, models }: { paste: PasteResult; models: Models }) {
+  const groups = useMemo(() => {
+    const byKey = new Map<string, BatchGroup>();
+    for (const item of paste.items) {
+      const def = findDef(item.itemId);
+      const model = def?.gameId !== undefined ? models.get(def.gameId) : undefined;
+      if (!def || !model) continue;
+      const bad = paste.invalid.has(item.id);
+      const key = `${def.id}|${bad}`;
+      let g = byKey.get(key);
+      if (!g) byKey.set(key, (g = { key, geometry: model.geometry, material: ghostMaterials[bad ? 'bad' : 'ok'], y: pieceY(def, model), items: [] }));
+      g.items.push(item);
+    }
+    return [...byKey.values()];
+  }, [paste, models]);
+  return (
+    <>
+      {groups.map((g) => (
+        <InstancedGroup key={`${g.key}-${g.items.length}`} group={g} hidden={NO_IDS} ghost />
+      ))}
+    </>
+  );
 }
 
 /**
@@ -397,9 +438,9 @@ function useOverviewTexture(meta: MapData['meta']) {
 }
 
 /** Teren, drogi i obiekty mapy wokół kamery. */
-function MapSurroundings({ site, lift, map }: { site: Site; lift: number; map: MapData }) {
+function MapSurroundings({ site, map }: { site: Site; map: MapData }) {
   const center = useChunkCenter();
-  const lifted = useMemo(() => ({ ...site, elevation: site.elevation + lift }), [site, lift]);
+  const lifted = site;
   const { meta } = map;
   const mask = nearMask(meta, TILE);
   // Tekstury terenu z gry (splatmapy); bez nich (stary eksport) podgląd satelity całej mapy
@@ -428,7 +469,7 @@ function MapSurroundings({ site, lift, map }: { site: Site; lift: number; map: M
           <meshStandardMaterial color="#2c4a5e" transparent opacity={0.78} roughness={0.15} metalness={0.1} />
         </mesh>
       )}
-      <MapObjects site={site} lift={lift} radius={OBJECT_RADIUS} center={center} />
+      <MapObjects site={site} radius={OBJECT_RADIUS} center={center} />
     </>
   );
 }
@@ -727,13 +768,17 @@ function PlayerCamera({
   // Czat: /tp na punkt mapy, /pos czyta pozycję kamery w układzie świata gry
   useEffect(() => {
     const ox = origin?.x ?? 0, oz = origin?.z ?? 0;
-    registerCameraProbe(() => [camera.position.x + ox, camera.position.y + envRef.current.baseWorld, oz - camera.position.z]);
+    registerCameraProbe(() => [camera.position.x + ox, camera.position.y + envRef.current.baseWorld, oz - camera.position.z, yaw.current]);
     const off = onSceneCommand((c) => {
-      if (c.kind !== 'tp') return;
-      const x = c.x - ox, z = oz - c.z;
       const p = phys.current;
-      p.vel.set(0, 0, 0);
-      camera.position.set(x, groundAt(x, z) + (walk ? p.eyes + 0.5 : 12), z);
+      if (c.kind === 'tp') {
+        const x = c.x - ox, z = oz - c.z;
+        p.vel.set(0, 0, 0);
+        camera.position.set(x, groundAt(x, z) + (walk ? p.eyes + 0.5 : 12), z);
+      } else if (c.kind === 'height') {
+        p.vel.set(0, 0, 0);
+        camera.position.y = groundAt(camera.position.x, camera.position.z) + Math.max(c.above, p.eyes);
+      }
     });
     return () => {
       off();
@@ -1010,8 +1055,12 @@ interface Aim {
   preview: PlacedItem | null;
   valid: boolean;
   targetId: string | null;
-  /** Poziom powierzchni, na którą celujemy (0 = ziemia). */
+  /** Poziom powierzchni, na którą celujemy (wysokość / 4,5 m od punktu odniesienia). */
   surface: number | null;
+  /** Wysokość tej powierzchni nad terenem (m). */
+  above: number | null;
+  /** Podgląd wklejania w 3D. */
+  paste: PasteResult | null;
   reason?: AimReason;
   warn?: AimWarn;
 }
@@ -1032,7 +1081,7 @@ export interface SceneLimits {
   undergroundBlocked: boolean;
 }
 
-const EMPTY_AIM: Aim = { preview: null, valid: false, targetId: null, surface: null };
+const EMPTY_AIM: Aim = { preview: null, valid: false, targetId: null, surface: null, above: null, paste: null };
 
 /** Siatki postawionych struktur (do celowania i kolizji). */
 function structureMeshes(scene: THREE.Scene) {
@@ -1046,30 +1095,77 @@ function structureMeshes(scene: THREE.Scene) {
 /** Promień do sprawdzania gruntu pod podłogą (wspólny, poza Reactem). */
 const groundProbe = new THREE.Raycaster();
 
+const AIM_RANGE = 120; // m: dalej celownik nic nie stawia
+const AIR_DROP = 2.5; // m pod kamerą: płaszczyzna dla dachów stawianych w powietrzu
+const TRI_FORWARD = 1.2679492; // UseableHousingUtils: wolna podłoga trójkątna przesunięta do przodu
+
+interface AimHit {
+  point: THREE.Vector3;
+  distance: number;
+  /** Teren i duże obiekty mapy liczą się jako grunt (DoesHitCountAsTerrain), struktury nie. */
+  ground: boolean;
+}
+
+/** Trafienie w teren z siatki wysokości: marsz co 1 m i dokładniej bisekcją. */
+function marchTerrain(ray: THREE.Ray, groundAt: (x: number, z: number) => number, max: number): AimHit | null {
+  const p = new THREE.Vector3();
+  if (ray.origin.y < groundAt(ray.origin.x, ray.origin.z)) return null;
+  let prev = 0;
+  for (let d = 1; d <= max; d += 1) {
+    ray.at(d, p);
+    if (p.y <= groundAt(p.x, p.z)) {
+      let lo = prev, hi = d;
+      for (let i = 0; i < 10; i++) {
+        const mid = (lo + hi) / 2;
+        ray.at(mid, p);
+        if (p.y <= groundAt(p.x, p.z)) hi = mid;
+        else lo = mid;
+      }
+      ray.at(hi, p);
+      return { point: p.clone(), distance: hi, ground: true };
+    }
+    prev = d;
+  }
+  return null;
+}
+
+/** Punkt zaczepienia schowka (jak computePaste): płyta z najniższego poziomu. */
+function pasteRef(clip: PlacedItem[]) {
+  const minFloor = Math.min(...clip.map((i) => i.floor || 0));
+  return clip.find((i) => sameLevel(i.floor || 0, minFloor) && isSlab(findDef(i.itemId))) ?? clip[0];
+}
+
 function AimController({
   containerRef,
   activeDef,
   items,
-  mode,
   limits,
+  groundAt,
   turn,
+  paste,
   onAim,
   onPlace,
   onDelete,
+  onPaste,
 }: {
   containerRef: React.RefObject<HTMLDivElement | null>;
   activeDef?: BuildItem;
   items: PlacedItem[];
-  mode: SceneSettings['mode'];
   limits: SceneLimits;
+  /** Wysokość terenu w układzie sceny (mapa albo łąka). */
+  groundAt: (x: number, z: number) => number;
   turn: number;
+  /** Wklejanie w 3D: schowek i liczba obrotów o 90°. */
+  paste: { clip: PlacedItem[]; turn: number } | null;
   onAim: (aim: Aim) => void;
   onPlace: (item: Omit<PlacedItem, 'id'>) => void;
   onDelete: (id: string) => void;
+  onPaste: (items: PlacedItem[]) => void;
 }) {
   const { camera, scene } = useThree();
   const aimRef = useRef<Aim>(EMPTY_AIM);
   const lastKey = useRef('');
+  const pasteCache = useRef<{ key: string; res: PasteResult | null }>({ key: '', res: null });
 
   /** Zasady z gry dla punktu stawiania (UseableHousingUtils, HousingConnections). */
   const gameRule = (def: BuildItem, preview: PlacedItem, surface: number): AimReason | undefined => {
@@ -1079,8 +1175,7 @@ function AimController({
     if (limits.nearSpawn(px, base + 1, pz)) return 'spawn';
     if (wallMissingPillars(def, preview, items)) return 'missingPillar';
     if (!limits.groundY) return undefined;
-    const floorPart = def.part === 'floor' || def.part === 'tri_floor';
-    if (floorPart) {
+    if (isFloorPart(def)) {
       // IsFloorAboveGround: teren albo duży obiekt mapy najwyżej 10 m pod środkiem podłogi
       let ground = limits.groundY(px, pz);
       groundProbe.set(new THREE.Vector3(px, base + 1, pz), new THREE.Vector3(0, -1, 0));
@@ -1096,79 +1191,133 @@ function AimController({
       const pts = def.shape === 'wall'
         ? [-3, 0, 3].map((o) => [px + o * Math.cos(r), pz + o * Math.sin(r)])
         : [[px, pz]];
-      const topY = def.shape === 'wall' || def.shape === 'pillar' ? base + H : base;
+      // ściany i filary sięgają poziom wyżej, dachy leżą na górze swojego poziomu
+      const topY = def.shape === 'wall' || def.shape === 'pillar' || isRoofLayer(def) ? base + H : base;
       if (pts.every(([x, z]) => topY < limits.groundY!(x, z))) return 'underground';
     }
     return undefined;
   };
+
+  /** Limity mapy (wysokość, strefy zakazu, tlen) i zasady gry dla gotowego podglądu. */
+  const judge = (def: BuildItem, preview: PlacedItem, surface: number, valid: boolean, warn?: AimWarn): Aim => {
+    const px = preview.x * SCALE, pz = preview.y * SCALE;
+    const top = surface * H + H;
+    let reason: AimReason | undefined;
+    if (top > limits.limitY) reason = 'mapLimit';
+    else if (limits.inClip(px, surface * H + 1, pz)) reason = 'noBuildZone';
+    else reason = gameRule(def, preview, preview.floor || 0);
+    if (!reason && !warn && limits.oxygenY !== null && top > limits.oxygenY) warn = 'oxygen';
+    return { ...EMPTY_AIM, preview, valid: valid && !reason, surface, above: surface * H - groundAt(px, pz), reason, warn };
+  };
+
   const raycaster = useMemo(() => new THREE.Raycaster(), []);
   const center = useMemo(() => new THREE.Vector2(0, 0), []);
+  const euler = useMemo(() => new THREE.Euler(0, 0, 0, 'YXZ'), []);
 
   useFrame(() => {
     raycaster.setFromCamera(center, camera);
+    const ray = raycaster.ray;
     let next: Aim = EMPTY_AIM;
-    const hit = raycaster.intersectObjects(structureMeshes(scene), false).find((h) => h.distance < 90);
+    const structureHit = raycaster.intersectObjects(structureMeshes(scene), false).find((h) => h.distance < 90);
 
-    if (!activeDef || activeDef.shape === 'remover') {
-      if (activeDef) {
-        next = { ...EMPTY_AIM, targetId: hit ? hitItemId(hit) : null };
-      }
+    if (!activeDef && !paste) {
+      // nic w ręku
+    } else if (activeDef?.shape === 'remover' && !paste) {
+      next = { ...EMPTY_AIM, targetId: structureHit ? hitItemId(structureHit) : null };
     } else {
-      // Ściany i filary jak w grze: wolny slot najbliżej celownika (do 8 m), nawet gdy promień trafia w pustkę.
-      const o = raycaster.ray.origin, d = raycaster.ray.direction;
-      const slot = findSlotByRay(activeDef, items, { origin: { x: o.x, y: o.y, z: o.z }, dir: { x: d.x, y: d.y, z: d.z } }, turn);
-      if (slot) {
-        const surface = slot.floor || 0;
-        const top = surface * H + H;
-        let reason: AimReason | undefined;
-        let warn: AimWarn | undefined;
-        if (top > limits.limitY) reason = 'mapLimit';
-        else if (limits.inClip(slot.x * SCALE, surface * H + 1, slot.y * SCALE)) reason = 'noBuildZone';
-        else reason = gameRule(activeDef, slot, surface);
-        if (!reason && limits.oxygenY !== null && top > limits.oxygenY) warn = 'oxygen';
-        next = { preview: slot, valid: isPlacementValid(activeDef, slot, items) && !reason, targetId: null, surface, reason, warn };
-      }
-    }
-    if (activeDef && activeDef.shape !== 'remover' && !next.preview) {
-      // Poziom z celownika: górna połowa ściany albo wierzch dachu to kolejna kondygnacja.
-      const roofLike = isRoofLayer(activeDef) || activeDef.shape === 'hatch';
-      // Podłogi i dachy jak w grze: wolne miejsce przy krawędzi najbliżej celownika, na poziomie tej krawędzi.
-      const o = raycaster.ray.origin, d = raycaster.ray.direction;
-      const slabSlot = findSlabSlotByRay(activeDef, items, { origin: { x: o.x, y: o.y, z: o.z }, dir: { x: d.x, y: d.y, z: d.z } }, turn);
-      let surface = hit ? Math.max(0, Math.round((hit.point.y - TOP) / H)) : mode === 'sky' ? 1 : 0;
-      if (roofLike && surface < 1) surface = 1;
-      if (slabSlot?.preview) surface = (slabSlot.preview.floor || 0) + (roofLike ? 1 : 0);
-      const level = roofLike ? surface - 1 : surface;
-      const planeY = surface * H + TOP;
-      const point = new THREE.Vector3();
-      const onPlane = slabSlot ? null : raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -planeY), point);
-      if (!onPlane && hit) point.copy(hit.point);
-      if (slabSlot || ((onPlane || hit) && camera.position.distanceTo(point) < 120)) {
-        const res = slabSlot ?? computePlacement({
-          def: activeDef,
-          items,
-          cursor: { x: point.x / SCALE, y: point.z / SCALE },
-          floor: level,
-          turn,
-        });
-        const floorPart = activeDef.part === 'floor' || activeDef.part === 'tri_floor';
-        let reason: AimReason | undefined;
-        let warn: AimWarn | undefined;
-        const top = surface * H + H;
-        const px = (res.preview?.x ?? 0) * SCALE, pz = (res.preview?.y ?? 0) * SCALE;
-        if (floorPart && mode === 'sky') reason = 'skyFloor';
-        else if (floorPart && level > 0) reason = 'floorGroundOnly';
-        else if (top > limits.limitY) reason = 'mapLimit';
-        else if (limits.inClip(px, surface * H + 1, pz)) reason = 'noBuildZone';
-        else if (res.preview) reason = gameRule(activeDef, res.preview, level);
-        if (!reason && limits.oxygenY !== null && top > limits.oxygenY) warn = 'oxygen';
-        next = { preview: res.preview, valid: res.valid && !reason, targetId: null, surface, reason, warn };
+      // Najbliższe trafienie: struktura, obiekt mapy albo teren
+      const hits: AimHit[] = [];
+      if (structureHit) hits.push({ point: structureHit.point, distance: structureHit.distance, ground: false });
+      const objs: THREE.Object3D[] = [];
+      scene.traverse((o) => (o as THREE.Mesh).isMesh && o.userData.mapObject && !o.userData.tree && objs.push(o));
+      const objHit = raycaster.intersectObjects(objs, false).find((h) => h.distance < AIM_RANGE);
+      if (objHit) hits.push({ point: objHit.point, distance: objHit.distance, ground: true });
+      const terrainHit = marchTerrain(ray, groundAt, AIM_RANGE);
+      if (terrainHit) hits.push(terrainHit);
+      hits.sort((a, b) => a.distance - b.distance);
+      const nearest = hits.find((h) => h.distance < AIM_RANGE) ?? null;
+      // W powietrzu: płaszczyzna kawałek pod kamerą (stawianie skybase'a)
+      const airPoint = () => {
+        const p = new THREE.Vector3();
+        const hit = ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -(camera.position.y - AIR_DROP)), p);
+        return hit && camera.position.distanceTo(p) < 60 ? p : null;
+      };
+      const yawDeg = THREE.MathUtils.radToDeg(euler.setFromQuaternion(camera.quaternion).y);
+
+      if (paste) {
+        const point = nearest?.point ?? airPoint();
+        if (point) {
+          const ref = pasteRef(paste.clip);
+          const refDef = findDef(ref.itemId);
+          const floor = roundLevel(point.y / H - (isRoofLayer(refDef) ? 1 : 0));
+          const cursor = { x: point.x / SCALE, y: point.z / SCALE };
+          // wklejanie dużych baz jest kosztowne: liczymy tylko po przesunięciu celownika
+          const key = `${Math.round(cursor.x)},${Math.round(cursor.y)},${floor.toFixed(2)},${paste.turn},${items.length}`;
+          if (pasteCache.current.key !== key) {
+            pasteCache.current = { key, res: computePaste({ clip: paste.clip, items, cursor, floor, turn: paste.turn, free: true }) };
+          }
+          const res = pasteCache.current.res;
+          if (res) next = { ...EMPTY_AIM, paste: res, valid: res.valid, surface: floor, above: point.y - groundAt(point.x, point.z) };
+        }
+      } else if (activeDef) {
+        const def = activeDef;
+        const ray3 = { origin: { x: ray.origin.x, y: ray.origin.y, z: ray.origin.z }, dir: { x: ray.direction.x, y: ray.direction.y, z: ray.direction.z } };
+        // Ściany i filary jak w grze: wolny slot najbliżej celownika (do 8 m), nawet gdy promień trafia w pustkę.
+        const slot = findSlotByRay(def, items, ray3, turn);
+        if (slot) {
+          next = judge(def, slot, slot.floor || 0, isPlacementValid(def, slot, items));
+        } else if (isSlab(def)) {
+          const roofLike = isRoofLayer(def);
+          // Podłogi i dachy: wolne miejsce przy krawędzi najbliżej celownika (FindEmptyFloorSlot)
+          const slab = findSlabSlotByRay(def, items, ray3, turn);
+          if (slab?.preview) {
+            next = judge(def, slab.preview, (slab.preview.floor || 0) + (roofLike ? 1 : 0), slab.valid);
+          } else {
+            // Wolne stawianie: podłoga w punkcie trafienia na gruncie, obrót z kierunku patrzenia (jak w grze);
+            // dach w punkcie trafienia albo w powietrzu (w grze potrzebuje podparcia, tu ostrzeżenie)
+            const point = roofLike ? nearest?.point ?? airPoint() : nearest?.point ?? null;
+            if (point) {
+              const triangle = def.shape === 'triangle';
+              const yaw = THREE.MathUtils.degToRad(yawDeg);
+              if (triangle) point.add(new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)).multiplyScalar(TRI_FORWARD));
+              const floor = roundLevel(point.y / H - (roofLike ? 1 : 0));
+              const preview: PlacedItem = {
+                id: 'preview',
+                itemId: def.id,
+                x: Math.round((point.x / SCALE) * 100) / 100,
+                y: Math.round((point.z / SCALE) * 100) / 100,
+                floor,
+                rotation: Math.round(normalizeAngle(-yawDeg + (triangle ? 0 : turn * 90)) * 10) / 10,
+              };
+              const onStructure = !roofLike && nearest && !nearest.ground;
+              const aim = judge(def, preview, floor + (roofLike ? 1 : 0), isPlacementValid(def, preview, items), roofLike ? 'noSupport' : undefined);
+              next = onStructure ? { ...aim, valid: false, reason: 'missingGround' } : aim;
+            }
+          }
+        } else if (def.shape === 'bed' && nearest) {
+          // Łóżko (barykada): w punkcie trafienia, obrócone jak gracz
+          const floor = roundLevel((nearest.point.y - TOP) / H);
+          const preview: PlacedItem = {
+            id: 'preview',
+            itemId: def.id,
+            x: Math.round((nearest.point.x / SCALE) * 100) / 100,
+            y: Math.round((nearest.point.z / SCALE) * 100) / 100,
+            floor,
+            rotation: Math.round(normalizeAngle(-yawDeg + turn * 90) * 10) / 10,
+          };
+          next = judge(def, preview, floor, isPlacementValid(def, preview, items));
+        } else if (def.shape === 'hatch' && nearest) {
+          // Klapa: w otworze dachu najbliżej trafienia
+          const floor = (nearest.point.y - TOP) / H - 1;
+          const res = computePlacement({ def, items, cursor: { x: nearest.point.x / SCALE, y: nearest.point.z / SCALE }, floor, turn, free: false });
+          if (res.preview) next = judge(def, res.preview, (res.preview.floor || 0) + 1, res.valid);
+        }
       }
     }
 
     aimRef.current = next;
     const p = next.preview;
-    const key = `${next.targetId}|${next.valid}|${next.surface}|${p ? `${p.itemId},${Math.round(p.x)},${Math.round(p.y)},${p.rotation},${p.floor}` : ''}`;
+    const key = `${next.targetId}|${next.valid}|${next.surface}|${next.reason}|${next.warn}|${p ? `${p.itemId},${p.x},${p.y},${p.rotation},${p.floor}` : ''}|${pasteCache.current.key}`;
     if (key !== lastKey.current) {
       lastKey.current = key;
       onAim(next);
@@ -1183,7 +1332,9 @@ function AimController({
       const fallback = lockState.failed && e.target instanceof HTMLCanvasElement;
       if (!locked && !fallback) return;
       const aim = aimRef.current;
-      if (activeDef?.shape === 'remover') {
+      if (paste) {
+        if (aim.paste?.valid) onPaste(aim.paste.items);
+      } else if (activeDef?.shape === 'remover') {
         if (aim.targetId) onDelete(aim.targetId);
       } else if (activeDef) {
         if (aim.preview && aim.valid) {
@@ -1194,7 +1345,7 @@ function AimController({
     };
     window.addEventListener('mousedown', handle);
     return () => window.removeEventListener('mousedown', handle);
-  }, [activeDef, onPlace, onDelete, containerRef]);
+  }, [activeDef, paste, onPlace, onDelete, onPaste, containerRef]);
 
   return null;
 }
@@ -1209,9 +1360,14 @@ interface Builder3DProps {
   selectedItemIds: string[];
   scene?: SceneSettings;
   site?: Site;
+  /** Wklejanie schowka w 3D (Ctrl+V): grupa i liczba obrotów o 90°. */
+  paste?: { clip: PlacedItem[]; turn: number } | null;
   onPlaceItem: (item: Omit<PlacedItem, 'id'>) => void;
   onDeleteItem: (id: string) => void;
+  onPaste?: (items: PlacedItem[]) => void;
 }
+
+const noPaste = () => {};
 
 export default function Builder3D({
   placedItems,
@@ -1221,8 +1377,10 @@ export default function Builder3D({
   selectedItemIds,
   scene = DEFAULT_SCENE,
   site,
+  paste = null,
   onPlaceItem,
   onDeleteItem,
+  onPaste = noPaste,
 }: Builder3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const models = useGameModels();
@@ -1241,9 +1399,6 @@ export default function Builder3D({
   const activeDef = activeItem ? findDef(activeItem) : undefined;
   const isDemolish = activeDef?.shape === 'remover';
   const siteMap = site?.map;
-  const sky = scene.mode === 'sky';
-  // Skybase: baza zostaje w (0,0,0), a cały świat opuszczamy o wysokość zawieszenia.
-  const lift = sky ? scene.skyHeight : 0;
   const night = scene.time === 'night';
 
   useEffect(() => {
@@ -1288,13 +1443,13 @@ export default function Builder3D({
     };
   }, []);
 
-  // Środek bazy liczony raz przy wejściu w 3D (kamera startuje przed bazą).
+  // Środek bazy liczony raz przy wejściu w 3D (kamera startuje przed bazą); bez elementów: punkt startu (spawn)
   const [start] = useState<[number, number, number]>(() => {
-    const baseY = sky ? H : 0;
-    if (placedItems.length === 0) return [0, baseY, 0];
+    if (placedItems.length === 0) return [0, 0, 0];
     const xs = placedItems.map((i) => i.x * SCALE);
     const zs = placedItems.map((i) => i.y * SCALE);
-    return [(Math.min(...xs) + Math.max(...xs)) / 2, baseY, (Math.min(...zs) + Math.max(...zs)) / 2];
+    const y = Math.min(...placedItems.map((i) => (i.floor || 0) * H));
+    return [(Math.min(...xs) + Math.max(...xs)) / 2, y, (Math.min(...zs) + Math.max(...zs)) / 2];
   });
 
   const activeMap = site && map && map.meta.id === site.map ? map : null;
@@ -1302,7 +1457,7 @@ export default function Builder3D({
   // Limity wysokości (docs/sky-limits.md). Bez mapy: teren i woda na 0 m.
   const limits = useMemo<SceneLimits>(() => {
     const meta = activeMap?.meta;
-    const baseWorld = (site && activeMap ? site.elevation : 0) + lift;
+    const baseWorld = site && activeMap ? site.elevation : 0;
     const sea = meta?.seaLevel ?? 0;
     const oxygenWorld = meta ? (meta.oxygen === false ? null : meta.oxygenLine ?? sea + (1024 - sea) / 2) : 512;
     const boxes = (meta?.clipVolumes ?? []).map((v) => ({
@@ -1351,11 +1506,11 @@ export default function Builder3D({
         return false;
       },
     };
-  }, [activeMap, site, lift]);
+  }, [activeMap, site]);
   // Woda i tlen dla chodzenia: poziom wody w układzie sceny, przesunięcie sceny względem świata gry
   const walkEnv = useMemo(() => {
     const meta = activeMap?.meta;
-    const baseWorld = (site && activeMap ? site.elevation : 0) + lift;
+    const baseWorld = site && activeMap ? site.elevation : 0;
     const sea = meta?.seaLevel ?? null;
     return {
       waterY: sea === null ? null : sea - baseWorld,
@@ -1363,12 +1518,17 @@ export default function Builder3D({
       baseWorld,
       legacyOxygen: meta ? meta.oxygen !== false : true,
     };
-  }, [activeMap, site, lift]);
+  }, [activeMap, site]);
   const [walkStatus, setWalkStatus] = useState<WalkStatus | null>(null);
   const groundAt = useMemo(() => {
-    if (site && activeMap) return (x: number, z: number) => activeMap.heightAt(site.x + x, site.z - z) - site.elevation - lift;
-    return (x: number, z: number) => meadowHeight(x, z) - lift;
-  }, [site, activeMap, lift]);
+    if (site && activeMap) return (x: number, z: number) => activeMap.heightAt(site.x + x, site.z - z) - site.elevation;
+    return meadowHeight;
+  }, [site, activeMap]);
+  // Oświetlenie mapy z gry (Lighting.dat) dla wybranej pory dnia
+  const lighting = useMemo(
+    () => (activeMap?.meta.lighting ? resolveLighting(activeMap.meta.lighting, scene.time) : null),
+    [activeMap, scene.time],
+  );
 
   const origin = useMemo(() => (site && activeMap ? { x: site.x, z: site.z } : null), [site, activeMap]);
 
@@ -1385,7 +1545,7 @@ export default function Builder3D({
           gl.localClippingEnabled = true;
         }}
       >
-        <SkyAndLight time={scene.time} focus={start} extend={sky ? lift * 1.6 + 260 : 0} />
+        <SkyAndLight time={scene.time} focus={start} lighting={lighting} />
         {night && <pointLight position={[start[0], start[1] + 7, start[2]]} intensity={70} distance={60} color="#ffb070" />}
 
         <PlayerCamera containerRef={containerRef} start={start} walk={walk} groundAt={groundAt} env={walkEnv} origin={origin} onStatus={setWalkStatus} />
@@ -1393,18 +1553,20 @@ export default function Builder3D({
           containerRef={containerRef}
           activeDef={activeDef}
           items={placedItems}
-          mode={scene.mode}
           limits={limits}
+          groundAt={groundAt}
           turn={turn}
+          paste={paste}
           onAim={setAim}
           onPlace={onPlaceItem}
           onDelete={onDeleteItem}
+          onPaste={onPaste}
         />
 
         {site && activeMap ? (
-          <MapSurroundings site={site} lift={lift} map={activeMap} />
+          <MapSurroundings site={site} map={activeMap} />
         ) : (
-          <Meadow lift={lift} night={night} />
+          <Meadow lift={0} night={night} />
         )}
 
         {/* Limity wysokości mapy: czerwony twardy limit, pomarańczowa granica tlenu */}
@@ -1427,10 +1589,12 @@ export default function Builder3D({
           selected={selectedItemIds}
           targetId={targeting ? aim.targetId : null}
           showBedAreas={showBedAreas}
-          noSkirt={sky}
+          noSkirt={false}
         />
 
-        {aim.preview && ghostDef && (
+        {aim.paste && <PasteGhost paste={aim.paste} models={models} />}
+
+        {aim.preview && ghostDef && !paste && (
           <group
             position={[aim.preview.x * SCALE, (aim.preview.floor || 0) * H + pieceY(ghostDef, ghostModel), aim.preview.y * SCALE]}
             rotation={[0, (-aim.preview.rotation * Math.PI) / 180, 0]}
@@ -1452,7 +1616,6 @@ export default function Builder3D({
 
       <div className={styles.modeBadge} data-ui>
         {walk ? t.view3d.walking : t.view3d.flying} <kbd>{keyLabel(binds.toggleFly, { space: t.keys.space, shift: t.keys.shift })}</kbd>
-        {sky && <span className={styles.modeMap}>Skybase {scene.skyHeight} m</span>}
         {site && <span className={styles.modeMap}>{site.map}</span>}
       </div>
 
@@ -1479,7 +1642,15 @@ export default function Builder3D({
       )}
       {walk && walkStatus?.dead && <div className={styles.deathNote}>{t.view3d.dead}</div>}
 
-      {isDemolish && (
+      {paste && (
+        <div className={styles.aimStatus} data-ui data-bad={!aim.valid || undefined}>
+          <strong>{t.hud.pasting(paste.clip.length)}</strong>
+          {aim.paste ? (aim.valid ? t.view3d.fits : t.view3d.collides) : t.view3d.aimAtGrid}
+          <span>{t.hud.pasteKeys(keyLabel(binds.rotate, { space: t.keys.space, shift: t.keys.shift }))}</span>
+        </div>
+      )}
+
+      {isDemolish && !paste && (
         <div className={styles.aimStatus} data-ui data-demolish>
           <strong>{t.hud.demolish}</strong>
           {t.hud.demolishHint}
@@ -1487,12 +1658,12 @@ export default function Builder3D({
       )}
 
       {/* Stan celownika nad paskiem: trzymany element i czy pasuje */}
-      {activeDef && !isDemolish && (
+      {activeDef && !isDemolish && !paste && (
         <div className={styles.aimStatus} data-ui data-bad={!aim.valid || undefined}>
           <strong>{itemLabel(activeDef, t)}</strong>
           {aim.reason ? t.view3d.reasons[aim.reason] : aim.warn ? t.view3d.warns[aim.warn] : aim.preview ? (aim.valid ? t.view3d.fits : t.view3d.collides) : t.view3d.aimAtGrid}
-          {aim.surface !== null && (
-            <span>{aim.surface === 0 ? t.view3d.ground : t.view3d.level(aim.surface)}, {(aim.surface * H).toFixed(1)} m</span>
+          {aim.above !== null && aim.preview && (
+            <span>{aim.above < 0.5 ? t.view3d.ground : t.view3d.above(aim.above.toFixed(1))}</span>
           )}
         </div>
       )}

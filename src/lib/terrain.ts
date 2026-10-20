@@ -5,6 +5,8 @@
   Map.png pokrywa kwadrat o boku `extent` wyśrodkowany w (0,0); wiersz 0 obrazu to północ.
 */
 
+import type { MapLighting } from './lighting';
+
 export interface MapInfo {
   id: string;
   name: string;
@@ -31,6 +33,8 @@ export interface MapMeta extends MapInfo {
   terrain?: { layers: { tex: string; size: number }[]; splats: number } | null;
   /** Czy jest roads.json (drogi z Paths.dat). */
   roads?: boolean;
+  /** Oświetlenie z Environment/Lighting.dat (kolory i słońce dla pór dnia). */
+  lighting?: MapLighting | null;
   /** Strefy bez budowania: safezone (kula/prostopadłościan/walec, skala = rozmiar), spawny graczy i ich promień, zakaz budowy pod terenem. */
   noBuild?: {
     safezones: { shape: string; p: number[]; r: number[]; s: number[] }[];

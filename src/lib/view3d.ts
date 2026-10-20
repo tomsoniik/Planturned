@@ -4,7 +4,7 @@
 */
 import { create } from 'zustand';
 
-export type Overlay = 'none' | 'inventory' | 'chat' | 'menu';
+export type Overlay = 'none' | 'inventory' | 'chat' | 'menu' | 'map';
 
 interface View3DState {
   overlay: Overlay;
@@ -47,10 +47,12 @@ export function unlockPointer() {
 
 export type SceneCommand =
   | { kind: 'tp'; x: number; z: number }
-  | { kind: 'fly'; on: boolean };
+  | { kind: 'fly'; on: boolean }
+  /** Kamera na tej wysokości nad terenem (m). */
+  | { kind: 'height'; above: number };
 
-/** Pozycja kamery w układzie świata gry (x, wysokość, z) albo null, gdy scena nie działa. */
-export type CameraProbe = () => [number, number, number] | null;
+/** Pozycja kamery w układzie świata gry (x, wysokość, z) i obrót (yaw sceny, rad) albo null, gdy scena nie działa. */
+export type CameraProbe = () => [number, number, number, number] | null;
 
 const listeners = new Set<(c: SceneCommand) => void>();
 let probe: CameraProbe = () => null;

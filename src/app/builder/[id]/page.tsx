@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useRef, useEffect, use } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 import {
   ArrowClockwise,
   ArrowCounterClockwise,
@@ -10,6 +11,7 @@ import {
   Bed,
   Cube,
   DownloadSimple,
+  GridFour,
   Hammer,
   Keyboard,
   MagnifyingGlass,
@@ -35,10 +37,15 @@ import MapPicker from '@/components/MapPicker';
 import SiteUnderlay from '@/components/SiteUnderlay';
 import PlanCanvas, { layerOf } from '@/components/PlanCanvas';
 import KeybindsPanel from '@/components/KeybindsPanel';
+import { Chat, Hotbar, Inventory, PauseMenu, type ChatMessage } from '@/components/Hud3D';
+import hud from '@/components/Hud3D.module.css';
 import { SLOT_ACTIONS, keyLabel, useKeybinds } from '@/lib/keybinds';
+import { cameraPosition, lockPointer, sendSceneCommand, unlockPointer, useView3D, type Overlay } from '@/lib/view3d';
+import { COMMAND_IDS, COMMAND_USAGE, isCommandId, parseCommand } from '@/lib/commands';
 import {
   BED,
   BED_CLAIM_RADIUS,
+  BUILD_ITEMS,
   FLOORS,
   MATERIALS,
   REMOVER,
@@ -48,9 +55,11 @@ import {
   itemsForMaterial,
   getPolygonVertices,
   newItemId,
+  normalizeHotbar,
   pointInPolygon,
   snapGroupDelta,
   type BuildItem,
+  type Hotbar as HotbarSlots,
   type MaterialId,
   type PartId,
   type PlacedItem,
@@ -121,6 +130,9 @@ const hitPolygon = (item: PlacedItem, def: BuildItem) => {
 
 const isTypingTarget = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+
+/** Id elementów do podpowiedzi komendy /give. */
+const ITEM_IDS = BUILD_ITEMS.map(i => i.id);
 
 export default function BuilderCanvas({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -197,6 +209,32 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   const [showBedAreas, setShowBedAreas] = useState(true);
   const [currentFloor, setCurrentFloor] = useState(0);
   const [showUnderlay, setShowUnderlay] = useState(true);
+  const router = useRouter();
+
+  // Pasek 9 slotów (per projekt) i wybrany slot
+  const hotbar = useMemo(() => normalizeHotbar(project?.hotbar), [project?.hotbar]);
+  const [slot, setSlot] = useState<number | null>(null);
+  const setHotbar = (next: HotbarSlots) => {
+    if (!project) return;
+    updateProject(id, { hotbar: next });
+    setProject({ ...project, hotbar: next });
+  };
+
+  // Nakładki widoku 3D: ekwipunek, czat, menu pauzy
+  const overlay = useView3D(s => s.overlay);
+  const setOverlay = useView3D(s => s.setOverlay);
+  const openOverlay = (o: Overlay) => {
+    setOverlay(o);
+    unlockPointer();
+  };
+  const closeOverlay = () => {
+    setOverlay('none');
+    lockPointer();
+  };
+  const [chatOpen, setChatOpen] = useState({ seed: 0, initial: '' });
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [history, setHistory] = useState<string[]>([]);
+  const messageId = useRef(0);
 
   const materialItems = useMemo(() => itemsForMaterial(material), [material]);
 
@@ -321,6 +359,144 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   const activeDef = activeItem ? findDef(activeItem) : undefined;
   const isRemoverActive = activeDef?.shape === 'remover';
 
+  /** Slot podświetlony na pasku: wybrany (także pusty) albo ten, w którym leży trzymany element. */
+  const heldSlot = slot !== null && (hotbar[slot] ?? null) === activeItem
+    ? slot
+    : activeItem && hotbar.includes(activeItem) ? hotbar.indexOf(activeItem) : null;
+
+  const selectSlot = (i: number) => {
+    setSlot(i);
+    setPaste(null);
+    setActiveItem(hotbar[i] ?? null);
+    setTurn(0);
+  };
+
+  const setView3D = (on: boolean) => {
+    setIs3DMode(on);
+    setOverlay('none');
+    if (!on) unlockPointer();
+  };
+
+  // --- Czat i komendy (3D) ---
+  const say = (lines: Omit<ChatMessage, 'id'>[]) => {
+    const added = lines.map(l => ({ ...l, id: ++messageId.current }));
+    setMessages(m => [...m, ...added].slice(-80));
+    const ids = new Set(added.map(m => m.id));
+    // po chwili znikają z ekranu, w otwartym czacie zostają
+    setTimeout(() => setMessages(m => m.map(x => (ids.has(x.id) ? { ...x, faded: true } : x))), 9000);
+  };
+
+  const runCommand = (text: string) => {
+    setHistory(h => [...h.filter(x => x !== text), text].slice(-50));
+    const out: Omit<ChatMessage, 'id'>[] = [{ text, kind: 'cmd' }];
+    const info = (s: string) => out.push({ text: s, kind: 'info' });
+    const fail = (s: string) => out.push({ text: s, kind: 'error' });
+    const cmd = parseCommand(text);
+    if (!cmd) fail(t.commands.notCommand);
+    else if (!isCommandId(cmd.name)) fail(t.commands.unknown(cmd.name));
+    else {
+      const { name, args } = cmd;
+      const usage = () => fail(t.commands.usage(COMMAND_USAGE[name]));
+      switch (name) {
+        case 'help':
+          info([t.commands.list, ...COMMAND_IDS.map(c => `${COMMAND_USAGE[c]}  ${t.commands.desc[c]}`)].join('\n'));
+          break;
+        case 'time': {
+          const v = args[0] as TimeOfDay;
+          if (v !== 'day' && v !== 'dusk' && v !== 'night') usage();
+          else {
+            setScene({ time: v });
+            info(t.commands.time(t.time[v]));
+          }
+          break;
+        }
+        case 'sky': {
+          const h = Math.round(Number(args[0] ?? scene.skyHeight));
+          if (!Number.isFinite(h) || h < 5) usage();
+          else {
+            const height = Math.min(h, maxSkyHeight);
+            setScene({ mode: 'sky', skyHeight: height });
+            info(t.commands.sky(height));
+            if (height < h) info(t.commands.skyClamped(maxSkyHeight));
+          }
+          break;
+        }
+        case 'ground':
+          setScene({ mode: 'ground' });
+          info(t.commands.ground);
+          break;
+        case 'fly':
+        case 'walk':
+          if (sendSceneCommand({ kind: 'fly', on: name === 'fly' })) info(name === 'fly' ? t.commands.fly : t.commands.walk);
+          else fail(t.commands.noScene);
+          break;
+        case 'tp': {
+          const [x, z] = args.map(Number);
+          if (args.length < 2 || !Number.isFinite(x) || !Number.isFinite(z)) usage();
+          else if (sendSceneCommand({ kind: 'tp', x, z })) info(t.commands.tp(Math.round(x), Math.round(z)));
+          else fail(t.commands.noScene);
+          break;
+        }
+        case 'pos': {
+          const p = cameraPosition();
+          if (p) info(t.commands.pos(Math.round(p[0]), Math.round(p[1]), Math.round(p[2])));
+          else fail(t.commands.noScene);
+          break;
+        }
+        case 'beds': {
+          const on = args[0] === 'on' ? true : args[0] === 'off' ? false : !showBedAreas;
+          setShowBedAreas(on);
+          info(t.commands.beds(on));
+          break;
+        }
+        case 'give': {
+          const last = args[args.length - 1];
+          const slotArg = args.length > 1 && /^[1-9]$/.test(last) ? Number(last) - 1 : null;
+          const query = (slotArg === null ? args : args.slice(0, -1)).join('_').toLowerCase();
+          if (!query) {
+            usage();
+            break;
+          }
+          const def = findDef(query)
+            ?? BUILD_ITEMS.find(i => i.id.includes(query))
+            ?? BUILD_ITEMS.find(i => itemLabel(i, t).toLowerCase().includes(query.replace(/_/g, ' ')));
+          if (!def) {
+            fail(t.commands.noItem(query));
+            break;
+          }
+          const target = slotArg ?? heldSlot ?? (hotbar.indexOf(null) >= 0 ? hotbar.indexOf(null) : 0);
+          setHotbar(hotbar.map((v, i) => (i === target ? def.id : v)));
+          setSlot(target);
+          setActiveItem(def.id);
+          info(t.commands.give(itemFullLabel(def, t), target + 1));
+          break;
+        }
+        case '2d':
+          setView3D(false);
+          break;
+        case 'undo':
+          if (past.length) {
+            undo();
+            info(t.commands.undo);
+          } else fail(t.commands.nothingUndo);
+          break;
+        case 'redo':
+          if (future.length) {
+            redo();
+            info(t.commands.redo);
+          } else fail(t.commands.nothingRedo);
+          break;
+        case 'clear':
+          if (placedItems.length > 0 && window.confirm(t.editor.confirmClear)) {
+            commitAction([]);
+            info(t.commands.cleared);
+          }
+          break;
+      }
+    }
+    say(out);
+  };
+
   const deleteSelection = () => {
     if (selectedItemIds.length > 0) {
       commitAction(placedItems.filter(i => !selectedItemIds.includes(i.id)));
@@ -337,6 +513,31 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
       if (isTypingTarget(e.target)) return;
       const mod = e.ctrlKey || e.metaKey;
       const k = e.key.toLowerCase();
+
+      // 3D jak w grze: E ekwipunek, T albo / czat, Esc menu; przy otwartej nakładce reszta skrótów śpi
+      if (is3DMode) {
+        const view = useView3D.getState();
+        if (!mod && e.code === binds.inventory && (view.overlay === 'none' || view.overlay === 'inventory')) {
+          e.preventDefault();
+          if (view.overlay === 'inventory') closeOverlay();
+          else openOverlay('inventory');
+          return;
+        }
+        if (e.key === 'Escape') {
+          // Esc z przechwyconym kursorem otwiera menu przez pointerlockchange; drugi raz go nie zamykamy
+          if (performance.now() - view.changedAt < 300) return;
+          if (view.overlay !== 'none') setOverlay('none');
+          else openOverlay('menu');
+          return;
+        }
+        if (view.overlay !== 'none') return;
+        if (!mod && (e.code === binds.chat || e.key === '/')) {
+          e.preventDefault();
+          setChatOpen(c => ({ seed: c.seed + 1, initial: e.key === '/' ? '/' : '' }));
+          openOverlay('chat');
+          return;
+        }
+      }
 
       if (e.key === 'Escape') {
         setPaste(null);
@@ -379,14 +580,23 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
         e.preventDefault();
         setCurrentFloor(f => Math.max(f - 1, 0));
       }
-      const slot = SLOT_ACTIONS.findIndex(a => binds[a] === code);
-      if (slot >= 0) {
-        const target = materialItems[slot];
-        if (target) selectItem(target.id);
-      }
+      const slotKey = SLOT_ACTIONS.findIndex(a => binds[a] === code);
+      if (slotKey >= 0) selectSlot(slotKey);
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+  });
+
+  // Kółko w 3D: następny / poprzedni slot paska (jak w grze)
+  useEffect(() => {
+    if (!is3DMode) return;
+    const onWheel = (e: WheelEvent) => {
+      if (useView3D.getState().overlay !== 'none' || !containerRef.current?.contains(e.target as Node)) return;
+      const from = heldSlot ?? (e.deltaY > 0 ? -1 : 0);
+      selectSlot((from + (e.deltaY > 0 ? 1 : -1) + hotbar.length) % hotbar.length);
+    };
+    window.addEventListener('wheel', onWheel);
+    return () => window.removeEventListener('wheel', onWheel);
   });
 
   // Podgląd stawianego elementu (wspólne snapowanie z 3D)
@@ -652,7 +862,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
 
   const renderCard = (item: BuildItem) => {
     const count = itemCounts[item.id] || 0;
-    const idx = materialItems.indexOf(item);
+    const idx = hotbar.indexOf(item.id);
     return (
       <button
         key={item.id}
@@ -693,7 +903,8 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
 
   return (
     <div className={styles.shell}>
-      {/* Górny pasek */}
+      {/* Górny pasek: tylko w 2D, w 3D ustawienia są w menu (Esc) i komendach */}
+      {!is3DMode && (
       <header className={styles.topbar}>
         <div className={styles.topLeft}>
           <Link href="/builder" className="icon-btn" title={t.editor.back}>
@@ -785,8 +996,8 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
             </div>
           )}
           <div className={styles.segmented} role="group" aria-label={t.editor.view}>
-            <button data-on={!is3DMode || undefined} onClick={() => setIs3DMode(false)}>2D</button>
-            <button data-on={is3DMode || undefined} onClick={() => setIs3DMode(true)}>3D</button>
+            <button data-on={!is3DMode || undefined} onClick={() => setView3D(false)}>2D</button>
+            <button data-on={is3DMode || undefined} onClick={() => setView3D(true)}>3D</button>
           </div>
         </div>
 
@@ -828,9 +1039,11 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
           <LangSwitch />
         </div>
       </header>
+      )}
 
       <div className={styles.body}>
-        {/* Przybornik */}
+        {/* Przybornik: tylko w 2D, w 3D jest pasek slotów i ekwipunek (E) */}
+        {!is3DMode && (
         <aside className={styles.sidebar} data-collapsed={isSidebarCollapsed || undefined}>
           <div className={styles.tabs} role="tablist">
             {TABS.filter(tb => !(is3DMode && tb.id === 'color')).map(({ id: tabId, Icon }) => (
@@ -980,6 +1193,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
             </div>
           )}
         </aside>
+        )}
 
         {/* Płótno */}
         <div
@@ -1008,7 +1222,127 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                 setSelectedItemIds(prev => prev.filter(i => i !== itemId));
               }}
             />
-          ) : (
+          ) : null}
+          {is3DMode && (
+            <>
+              <Hotbar hotbar={hotbar} selected={heldSlot} />
+              {(overlay === 'none' || overlay === 'chat') && <Chat
+                key={chatOpen.seed}
+                open={overlay === 'chat'}
+                initial={chatOpen.initial}
+                messages={messages}
+                history={history}
+                itemIds={ITEM_IDS}
+                onSubmit={runCommand}
+                onClose={() => useView3D.getState().overlay === 'chat' && closeOverlay()}
+              />}
+              {overlay === 'inventory' && (
+                <Inventory
+                  hotbar={hotbar}
+                  selected={heldSlot}
+                  material={material}
+                  onMaterial={setMaterial}
+                  onAssign={(i, itemId) => {
+                    setHotbar(hotbar.map((v, k) => (k === i ? itemId : v)));
+                    if (i === heldSlot || i === slot) setActiveItem(itemId);
+                  }}
+                  onSwap={(a, b) => {
+                    const next = [...hotbar];
+                    [next[a], next[b]] = [next[b], next[a]];
+                    setHotbar(next);
+                  }}
+                  onSelectSlot={selectSlot}
+                  onClose={closeOverlay}
+                />
+              )}
+              {overlay === 'menu' && (
+                <PauseMenu
+                  title={project?.name ?? ''}
+                  onResume={closeOverlay}
+                  footer={t.hud.commandsHint(keyName(binds.chat))}
+                  actions={[
+                    { label: t.hud.to2d, icon: <GridFour size={16} weight="bold" />, onClick: () => setView3D(false) },
+                    { label: t.editor.export, icon: <DownloadSimple size={16} weight="bold" />, onClick: () => project && exportProject({ ...project, items: placedItems }) },
+                    { label: t.hud.projects, icon: <ArrowLeft size={16} weight="bold" />, onClick: () => router.push('/builder') },
+                  ]}
+                  sections={[
+                    {
+                      id: 'scene',
+                      label: t.hud.sections.scene,
+                      content: (
+                        <>
+                          <div className={hud.field}>
+                            <span>{t.editor.timeOfDay}</span>
+                            <div className={styles.segmented} role="group" aria-label={t.editor.timeOfDay}>
+                              {(['day', 'dusk', 'night'] as TimeOfDay[]).map(time => {
+                                const Icon = time === 'day' ? Sun : time === 'dusk' ? SunHorizon : Moon;
+                                return (
+                                  <button key={time} data-on={scene.time === time || undefined} onClick={() => setScene({ time })}>
+                                    <Icon size={14} weight="bold" /> {t.time[time]}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          <div className={hud.field}>
+                            <span>{t.editor.baseType}</span>
+                            <div className={styles.segmented} role="group" aria-label={t.editor.baseType}>
+                              {(['ground', 'sky'] as const).map(m => (
+                                <button key={m} data-on={scene.mode === m || undefined} onClick={() => setScene({ mode: m })}>
+                                  {t.mode[m]}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          {scene.mode === 'sky' && (
+                            <div className={hud.field}>
+                              <span>{t.editor.skyHeightTitle(maxSkyHeight)}</span>
+                              <div className={styles.segmented} role="group" aria-label={t.editor.skyHeight}>
+                                {SKY_HEIGHTS.filter(hgt => hgt <= maxSkyHeight).map(hgt => (
+                                  <button key={hgt} data-on={scene.skyHeight === hgt || undefined} onClick={() => setScene({ skyHeight: hgt })}>
+                                    {hgt}
+                                  </button>
+                                ))}
+                                <label className={styles.skyInput}>
+                                  <input
+                                    type="number"
+                                    min={5}
+                                    max={maxSkyHeight}
+                                    step={5}
+                                    value={scene.skyHeight}
+                                    onChange={e => setScene({ skyHeight: Math.min(maxSkyHeight, Math.max(5, Number(e.target.value) || 5)) })}
+                                  />
+                                  m
+                                </label>
+                              </div>
+                            </div>
+                          )}
+                          <label className={hud.toggle}>
+                            <input type="checkbox" checked={showBedAreas} onChange={e => setShowBedAreas(e.target.checked)} />
+                            {t.editor.bedAreas}
+                          </label>
+                        </>
+                      ),
+                    },
+                    {
+                      id: 'map',
+                      label: t.hud.sections.map,
+                      content: (
+                        <MapPicker
+                          site={project?.site}
+                          onChange={setSite}
+                          showUnderlay={showUnderlay}
+                          onToggleUnderlay={() => setShowUnderlay(v => !v)}
+                        />
+                      ),
+                    },
+                    { id: 'keys', label: t.hud.sections.keys, content: <KeybindsPanel /> },
+                  ]}
+                />
+              )}
+            </>
+          )}
+          {!is3DMode && (
             <>
               <div
                 className={styles.grid}

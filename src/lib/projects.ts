@@ -11,6 +11,8 @@ export interface Project {
   site?: Site;
   /** Pora dnia i tryb bazy (ziemia / skybase) w 3D. */
   scene?: SceneSettings;
+  /** Pasek 9 slotów (id elementów, null = pusty). Brak: domyślny pasek. */
+  hotbar?: (string | null)[];
   createdAt: string;
   updatedAt: string;
 }
@@ -72,6 +74,9 @@ export function createProject(partial: Partial<Project> = {}): Project {
     name: partial.name || `Baza ${list.length + 1}`,
     description: partial.description || '',
     items: partial.items || [],
+    site: partial.site,
+    scene: partial.scene,
+    hotbar: partial.hotbar,
     createdAt: now,
     updatedAt: now,
   };
@@ -102,6 +107,7 @@ export function exportProject(project: Project) {
     items: project.items,
     site: project.site,
     scene: project.scene,
+    hotbar: project.hotbar,
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -125,5 +131,6 @@ export async function importProjectFile(file: File): Promise<Project> {
     items: items as PlacedItem[],
     site: data?.site,
     scene: data?.scene,
+    hotbar: Array.isArray(data?.hotbar) ? data.hotbar : undefined,
   });
 }

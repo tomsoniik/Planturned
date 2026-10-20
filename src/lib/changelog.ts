@@ -16,6 +16,33 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.6.0',
+    date: '2026-10-20',
+    title: { pl: 'Widok 3D jak w grze', en: '3D view like in the game' },
+    changes: [
+      {
+        pl: 'Widok 3D na cały ekran: bez górnego paska i przybornika.',
+        en: 'Full-screen 3D view: no top bar or toolbox.',
+      },
+      {
+        pl: 'Pasek 9 slotów u dołu ekranu, osobny dla każdego projektu. Puste sloty nie są widoczne, klawisze 1-9 i kółko myszy wybierają slot.',
+        en: 'A 9-slot hotbar at the bottom, saved per project. Empty slots stay hidden, keys 1-9 and the mouse wheel pick a slot.',
+      },
+      {
+        pl: 'Ekwipunek pod E: kliknij element albo najedź i wciśnij 1-9, żeby włożyć go do slotu. Sloty można przeciągać, PPM czyści slot.',
+        en: 'Inventory on E: click a piece or hover it and press 1-9 to put it in a slot. Slots can be dragged, RMB clears a slot.',
+      },
+      {
+        pl: 'Czat z komendami pod T albo /: /time, /sky, /ground, /fly, /walk, /tp, /pos, /beds, /give, /2d, /undo, /redo, /clear. Tab podpowiada, /help pokazuje listę.',
+        en: 'Chat with commands on T or /: /time, /sky, /ground, /fly, /walk, /tp, /pos, /beds, /give, /2d, /undo, /redo, /clear. Tab completes, /help lists them.',
+      },
+      {
+        pl: 'Menu pod Esc zamiast przełączników: pora dnia, skybase i wysokość, mapa, klawisze, powrót do 2D i eksport.',
+        en: 'An Esc menu instead of toggles: time of day, skybase and height, map, keys, back to 2D and export.',
+      },
+    ],
+  },
+  {
     version: '0.5.0',
     date: '2026-10-20',
     title: { pl: 'Drzewa z gry i płynniejsze 3D', en: 'Game trees and smoother 3D' },

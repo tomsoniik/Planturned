@@ -22,7 +22,8 @@ Nagranie pokazuje prawdziwą sesję w aplikacji: nowy projekt, 6 podłóg, ścia
 
 - **Plan 2D jak w grze.** Podłogi, ściany, filary, dachy, schody i rampy z pięciu materiałów (klon, brzoza, sosna, metal, cegła). Ściany i filary same przyklejają się do krawędzi i narożników, kolizja jest widoczna od razu.
 - **Piętra.** Do czterech poziomów; niższe widać pod spodem jako tło.
-- **Widok 3D z kamerą z gry.** Oryginalne modele struktur z plików Unturned. Latanie albo chodzenie, stawianie i wyburzanie z celownika, pora dnia.
+- **Widok 3D jak w grze.** Oryginalne modele struktur z plików Unturned. Pełny ekran z paskiem 9 slotów i ekwipunkiem (`E`), latanie albo chodzenie, stawianie i wyburzanie z celownika.
+- **Komendy na czacie.** `T` albo `/` otwiera czat: `/time night`, `/sky 150`, `/tp <x> <z>`, `/give metal_wall 3` i inne (`/help`). `Esc` otwiera menu ze sceną, mapą i klawiszami.
 - **Prawdziwe mapy.** Russia, Washington, PEI, Germany, Yukon i inne: teren, satelita, budynki i drzewa w skali 1:1. Skybase na wybranej wysokości.
 - **Limity z gry.** Maksymalna wysokość budowania, granica tlenu i strefy zakazu budowy dla każdej mapy ([docs/sky-limits.md](docs/sky-limits.md)).
 - **Zasięg claimu łóżka.** Okrąg pokazuje, gdzie nikt spoza grupy nic nie postawi.
@@ -36,7 +37,9 @@ Klawisze można zmienić w zakładce **Skróty** w edytorze (zapis w przeglądar
 
 | Klawisz | Plan 2D | Widok 3D |
 | --- | --- | --- |
-| `1`-`9` | element z przybornika | element z przybornika |
+| `1`-`9` | slot paska | slot paska (kółko: następny slot) |
+| `E` | | ekwipunek: elementy do slotów paska |
+| `T`, `/` | | czat z komendami, `/help` pokazuje listę |
 | `X` / `B` | wyburzanie / łóżko | wyburzanie / łóżko |
 | `R` | obrót | obrót |
 | `LPM` | postaw, zaznacz, przeciągnij | postaw albo wyburz w celowniku |
@@ -47,7 +50,7 @@ Klawisze można zmienić w zakładce **Skróty** w edytorze (zapis w przeglądar
 | `Ctrl Z` / `Ctrl Y` | cofnij / ponów | |
 | `W A S D`, `Spacja`, `Q` | | ruch, w górę, w dół |
 | `F` | | latanie albo chodzenie |
-| `Esc` | odłóż element | oddaj kursor |
+| `Esc` | odłóż element | menu: scena, mapa, klawisze, widok 2D |
 
 ## Technologie
 

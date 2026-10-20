@@ -24,6 +24,7 @@ import { DEFAULT_SCENE, type SceneSettings } from '@/lib/scene';
 import { itemLabel, type AimReason, type AimWarn } from '@/lib/i18n';
 import { useT } from './I18nProvider';
 import { keyLabel, useKeybinds } from '@/lib/keybinds';
+import { onSceneCommand, registerCameraProbe, registerContainer, useView3D } from '@/lib/view3d';
 import {
   AIR_ACCEL, AIR_DECEL, EYES, EYES_LERP, FALL_DAMAGE_MAX, FALL_DAMAGE_SPEED, GRAVITY, HEIGHT, JUMP_SPEED, MAX_SLOPE_DEG,
   RADIUS, SLIDE_ACCEL, SPEED, SWIM_BODY_DEPTH, SWIM_MULTIPLIER, SWIM_SURFACE_OFFSET, SWIM_UP_SPEED, TERMINAL_VELOCITY, TICK,
@@ -656,6 +657,7 @@ function PlayerCamera({
   walk,
   groundAt,
   env,
+  origin,
   onStatus,
 }: {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -663,6 +665,8 @@ function PlayerCamera({
   walk: boolean;
   groundAt: (x: number, z: number) => number;
   env: WalkEnv;
+  /** Punkt (0,0) sceny w układzie świata gry (miejsce bazy); null bez mapy. */
+  origin: { x: number; z: number } | null;
   onStatus: (s: WalkStatus) => void;
 }) {
   const { camera, scene } = useThree();
@@ -720,6 +724,24 @@ function PlayerCamera({
     };
     (window as unknown as { __planturned: unknown }).__planturned = { camera, phys: phys.current, groundAt, probe };
   }, [camera, groundAt, scene]);
+  // Czat: /tp na punkt mapy, /pos czyta pozycję kamery w układzie świata gry
+  useEffect(() => {
+    const ox = origin?.x ?? 0, oz = origin?.z ?? 0;
+    registerCameraProbe(() => [camera.position.x + ox, camera.position.y + envRef.current.baseWorld, oz - camera.position.z]);
+    const off = onSceneCommand((c) => {
+      if (c.kind !== 'tp') return;
+      const x = c.x - ox, z = oz - c.z;
+      const p = phys.current;
+      p.vel.set(0, 0, 0);
+      camera.position.set(x, groundAt(x, z) + (walk ? p.eyes + 0.5 : 12), z);
+    });
+    return () => {
+      off();
+      registerCameraProbe(null);
+    };
+  }, [camera, groundAt, origin, walk]);
+  // Otwarta nakładka (ekwipunek, czat, menu): puszczamy wszystkie klawisze ruchu
+  useEffect(() => useView3D.subscribe((s) => s.overlay !== 'none' && (keys.current = {})), []);
   // Wejście w chodzenie: pełne zdrowie, stopy na wysokości oczu kamery
   useEffect(() => {
     if (!walk) return;
@@ -741,7 +763,7 @@ function PlayerCamera({
 
     const lock = (e: MouseEvent) => {
       if ((e.target as HTMLElement).closest('[data-ui]') || lockState.failed) return;
-      if (document.pointerLockElement === container) return;
+      if (document.pointerLockElement === container || useView3D.getState().overlay !== 'none') return;
       try {
         const res = container?.requestPointerLock() as unknown as Promise<void> | undefined;
         res?.catch?.(() => markLockFailed());
@@ -751,7 +773,7 @@ function PlayerCamera({
     };
     const onLockError = () => markLockFailed();
     const keyDown = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
+      if ((e.target as HTMLElement)?.tagName === 'INPUT' || useView3D.getState().overlay !== 'none') return;
       keys.current[e.code] = true;
       if (e.code === bindsRef.current.up && walk) e.preventDefault();
       if (walk && !e.repeat && e.code === bindsRef.current.crouch) toggles.current.push('crouch');
@@ -763,6 +785,7 @@ function PlayerCamera({
     const move = (e: MouseEvent) => {
       // Bez przechwyconej myszki kamerą kręci się przeciągając prawym przyciskiem.
       if (document.pointerLockElement !== container && !(e.buttons & 2)) return;
+      if (useView3D.getState().overlay !== 'none') return;
       yaw.current -= e.movementX * 0.0025;
       pitch.current = Math.max(-1.52, Math.min(1.52, pitch.current - e.movementY * 0.0025));
       camera.quaternion.setFromEuler(new THREE.Euler(pitch.current, yaw.current, 0, 'YXZ'));
@@ -1154,7 +1177,7 @@ function AimController({
 
   useEffect(() => {
     const handle = (e: MouseEvent) => {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || useView3D.getState().overlay !== 'none') return;
       // Pierwszy klik tylko przejmuje kamerę; przy przechwyconej myszce target to kontener, nie canvas.
       const locked = document.pointerLockElement === containerRef.current;
       const fallback = lockState.failed && e.target instanceof HTMLCanvasElement;
@@ -1214,6 +1237,7 @@ export default function Builder3D({
   const [walk, setWalk] = useState(false);
   const [lockFailed, setLockFailed] = useState(lockState.failed);
   const [map, setMap] = useState<MapData | null>(null);
+  const overlay = useView3D((s) => s.overlay);
   const activeDef = activeItem ? findDef(activeItem) : undefined;
   const isDemolish = activeDef?.shape === 'remover';
   const siteMap = site?.map;
@@ -1236,14 +1260,27 @@ export default function Builder3D({
   useEffect(() => {
     const onFail = () => setLockFailed(true);
     lockState.listeners.add(onFail);
-    const onChange = () => setLocked(document.pointerLockElement === containerRef.current);
+    registerContainer(containerRef.current);
+    let wasLocked = false;
+    const onChange = () => {
+      const now = document.pointerLockElement === containerRef.current;
+      setLocked(now);
+      // Esc oddaje kursor bez zdarzenia klawisza: jak w grze otwieramy menu pauzy
+      const view = useView3D.getState();
+      if (wasLocked && !now && view.overlay === 'none') view.setOverlay('menu');
+      wasLocked = now;
+    };
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
+      if ((e.target as HTMLElement)?.tagName === 'INPUT' || useView3D.getState().overlay !== 'none') return;
       if (e.code === flyKeyRef.current) setWalk((w) => !w);
     };
+    const off = onSceneCommand((c) => c.kind === 'fly' && setWalk(!c.on));
     document.addEventListener('pointerlockchange', onChange);
     window.addEventListener('keydown', onKey);
     return () => {
+      off();
+      registerContainer(null);
+      useView3D.getState().setOverlay('none');
       lockState.listeners.delete(onFail);
       document.removeEventListener('pointerlockchange', onChange);
       window.removeEventListener('keydown', onKey);
@@ -1333,6 +1370,8 @@ export default function Builder3D({
     return (x: number, z: number) => meadowHeight(x, z) - lift;
   }, [site, activeMap, lift]);
 
+  const origin = useMemo(() => (site && activeMap ? { x: site.x, z: site.z } : null), [site, activeMap]);
+
   const ghostDef = aim.preview ? findDef(aim.preview.itemId) : undefined;
   const ghostModel = ghostDef?.gameId !== undefined ? models.get(ghostDef.gameId) : undefined;
   const targeting = isDemolish;
@@ -1349,7 +1388,7 @@ export default function Builder3D({
         <SkyAndLight time={scene.time} focus={start} extend={sky ? lift * 1.6 + 260 : 0} />
         {night && <pointLight position={[start[0], start[1] + 7, start[2]]} intensity={70} distance={60} color="#ffb070" />}
 
-        <PlayerCamera containerRef={containerRef} start={start} walk={walk} groundAt={groundAt} env={walkEnv} onStatus={setWalkStatus} />
+        <PlayerCamera containerRef={containerRef} start={start} walk={walk} groundAt={groundAt} env={walkEnv} origin={origin} onStatus={setWalkStatus} />
         <AimController
           containerRef={containerRef}
           activeDef={activeDef}
@@ -1403,7 +1442,7 @@ export default function Builder3D({
 
       <div className={styles.crosshair} data-mode={isDemolish ? 'demolish' : 'build'} aria-hidden />
 
-      {!locked && (
+      {!locked && overlay === 'none' && (
         <div className={styles.lockHint}>
           {lockFailed
             ? t.view3d.lockFailed
@@ -1440,7 +1479,14 @@ export default function Builder3D({
       )}
       {walk && walkStatus?.dead && <div className={styles.deathNote}>{t.view3d.dead}</div>}
 
-      {/* Stan celownika: tylko gdy trzymasz element, skróty są w zakładce Skróty */}
+      {isDemolish && (
+        <div className={styles.aimStatus} data-ui data-demolish>
+          <strong>{t.hud.demolish}</strong>
+          {t.hud.demolishHint}
+        </div>
+      )}
+
+      {/* Stan celownika nad paskiem: trzymany element i czy pasuje */}
       {activeDef && !isDemolish && (
         <div className={styles.aimStatus} data-ui data-bad={!aim.valid || undefined}>
           <strong>{itemLabel(activeDef, t)}</strong>

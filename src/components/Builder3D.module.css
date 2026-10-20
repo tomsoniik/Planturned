@@ -137,7 +137,8 @@
 /* Stan celownika u dołu: trzymany element i czy pasuje */
 .aimStatus {
   position: absolute;
-  bottom: 16px;
+  /* nad paskiem slotów */
+  bottom: 82px;
   left: 50%;
   transform: translateX(-50%);
   display: inline-flex;
@@ -155,8 +156,15 @@
   z-index: var(--z-overlay);
 }
 
-.aimStatus[data-bad] {
+.aimStatus[data-bad],
+.aimStatus[data-demolish] {
   color: var(--danger);
+}
+
+@media (max-width: 640px) {
+  .aimStatus {
+    bottom: 62px;
+  }
 }
 
 .aimStatus strong {

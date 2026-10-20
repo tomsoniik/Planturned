@@ -22,7 +22,8 @@ The recording is a real session in the app (with the Polish UI): a new project, 
 
 - **A 2D plan that works like the game.** Floors, walls, pillars, roofs, stairs and ramps in five materials (maple, birch, pine, metal, brick). Walls and pillars snap to edges and corners, and collisions show up right away.
 - **Floors.** Up to four levels; the ones below show through as a backdrop.
-- **3D view with an in-game camera.** Original structure models from the Unturned files. Fly or walk, place and demolish from the crosshair, change the time of day.
+- **3D view like in the game.** Original structure models from the Unturned files. Full screen with a 9-slot hotbar and an inventory (`E`), fly or walk, place and demolish from the crosshair.
+- **Chat commands.** `T` or `/` opens the chat: `/time night`, `/sky 150`, `/tp <x> <z>`, `/give metal_wall 3` and more (`/help`). `Esc` opens the menu with the scene, map and keys.
 - **Real maps.** Russia, Washington, PEI, Germany, Yukon and more: terrain, satellite, buildings and trees at 1:1 scale. Skybases at any height.
 - **Limits from the game.** Max build height, the oxygen line and no-build zones for each map ([docs/sky-limits.md](docs/sky-limits.md), in Polish).
 - **Bed claim radius.** A circle shows where nobody outside your group can build.
@@ -36,7 +37,9 @@ Keys can be changed in the editor's **Keys** tab (saved in your browser). Defaul
 
 | Key | 2D plan | 3D view |
 | --- | --- | --- |
-| `1`-`9` | piece from the toolbox | piece from the toolbox |
+| `1`-`9` | hotbar slot | hotbar slot (wheel: next slot) |
+| `E` | | inventory: put pieces in the hotbar slots |
+| `T`, `/` | | chat with commands, `/help` lists them |
 | `X` / `B` | demolish / bed | demolish / bed |
 | `R` | rotate | rotate |
 | `LMB` | place, select, drag | place or demolish at the crosshair |
@@ -47,7 +50,7 @@ Keys can be changed in the editor's **Keys** tab (saved in your browser). Defaul
 | `Ctrl Z` / `Ctrl Y` | undo / redo | |
 | `W A S D`, `Space`, `Q` | | move, up, down |
 | `F` | | fly or walk |
-| `Esc` | drop the piece | release the cursor |
+| `Esc` | drop the piece | menu: scene, map, keys, 2D view |
 
 ## Tech
 

@@ -1,7 +1,8 @@
 /*
   Klawisze do zmiany przez użytkownika. Zapisywane jako KeyboardEvent.code (fizyczne miejsce klawisza),
   więc działają tak samo na układzie polskim, niemieckim czy AZERTY.
-  Stałe (nie do zmiany): Esc (przeglądarka oddaje nim kursor w 3D), Ctrl+C/V/Z/Y i przyciski myszy.
+  Stałe (nie do zmiany): Esc (przeglądarka oddaje nim kursor w 3D, potem menu), / (czat z komendą),
+  Ctrl+C/V/Z/Y i przyciski myszy.
 */
 import { create } from 'zustand';
 
@@ -10,6 +11,7 @@ export const KEYBIND_ACTIONS = [
   'demolish', 'bed', 'rotate', 'deleteSelected',
   'floorUp', 'floorDown',
   'forward', 'back', 'left', 'right', 'up', 'down', 'sprint', 'crouch', 'prone', 'toggleFly',
+  'inventory', 'chat',
 ] as const;
 export type KeybindAction = (typeof KEYBIND_ACTIONS)[number];
 export type Keybinds = Record<KeybindAction, string>;
@@ -34,6 +36,8 @@ export const DEFAULT_KEYBINDS: Keybinds = {
   crouch: 'KeyC',
   prone: 'KeyZ',
   toggleFly: 'KeyF',
+  inventory: 'KeyE',
+  chat: 'KeyT',
 };
 
 export const SLOT_ACTIONS: KeybindAction[] = ['slot1', 'slot2', 'slot3', 'slot4', 'slot5', 'slot6', 'slot7', 'slot8', 'slot9'];

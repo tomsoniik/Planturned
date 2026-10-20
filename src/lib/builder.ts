@@ -197,6 +197,22 @@ export const BUILD_ITEMS: BuildItem[] = [REMOVER, BED, ...STRUCTURES];
 
 export const itemsForMaterial = (material: MaterialId) => STRUCTURES.filter((s) => s.material === material);
 
+/** Pasek szybkiego wyboru: 9 slotów, w każdym id elementu albo null (pusty). */
+export const HOTBAR_SIZE = 9;
+export type Hotbar = (string | null)[];
+
+/** Domyślny pasek nowego projektu: pierwsze elementy klonu, jak dawne klawisze 1-9. */
+export const defaultHotbar = (): Hotbar => itemsForMaterial('maple').slice(0, HOTBAR_SIZE).map((i) => i.id);
+
+/** Pasek z zapisu: zawsze 9 slotów, nieznane id jako puste. */
+export const normalizeHotbar = (saved: unknown): Hotbar => {
+  if (!Array.isArray(saved)) return defaultHotbar();
+  return Array.from({ length: HOTBAR_SIZE }, (_, i) => {
+    const v = saved[i];
+    return typeof v === 'string' && findDef(v) ? normalizeItemId(v) : null;
+  });
+};
+
 /** Stare identyfikatory z pierwszej wersji buildera. */
 const LEGACY_IDS: Record<string, string> = {
   f_square: 'metal_floor',

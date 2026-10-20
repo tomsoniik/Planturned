@@ -16,6 +16,25 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.10.0',
+    date: '2026-10-20',
+    title: { pl: 'Klocki w oknie zamiast panelu', en: 'Pieces in a window instead of a side panel' },
+    changes: [
+      {
+        pl: 'Plan 2D zajmuje cały ekran. Na dole pasek: sloty 1-9, materiał i wyburzanie. E (albo przycisk na pasku) otwiera okno z klockami: najpierw Wszystko, potem filtry Podłogi, Ściany, Dachy, Filary, Schody, Klapy, Łóżko.',
+        en: 'The 2D plan takes the whole screen. The bar at the bottom holds slots 1-9, the material and demolish. E (or the bar button) opens the pieces window: All first, then filters for Floors, Walls, Roofs, Pillars, Stairs, Hatches, Bed.',
+      },
+      {
+        pl: 'Klocek wybrany w oknie trafia do wybranego slotu, jak w ekwipunku gry. Zmiana materiału w doku przestawia trzymany klocek w tym samym slocie. PPM na slocie go czyści.',
+        en: 'A piece picked in the window goes into the selected slot, like the game inventory. Changing the material in the dock switches the held piece in the same slot. RMB on a slot clears it.',
+      },
+      {
+        pl: 'Ikony Phosphor zamiast napisów i obrazków kategorii. Budowle, kolor i skróty są zakładkami tego samego okna.',
+        en: 'Phosphor icons instead of labels and category pictures. Builds, color and keys are tabs of the same window.',
+      },
+    ],
+  },
+  {
     version: '0.9.0',
     date: '2026-10-20',
     title: { pl: 'Nowy przybornik 2D', en: 'New 2D toolbox' },

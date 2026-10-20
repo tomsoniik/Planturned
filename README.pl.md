@@ -20,7 +20,7 @@ Nagranie pokazuje prawdziwą sesję w aplikacji: nowy projekt, 6 podłóg, ścia
 
 ## Co potrafi
 
-- **Plan 2D jak w grze.** Podłogi, ściany, filary, dachy, schody i rampy z pięciu materiałów (klon, brzoza, sosna, metal, cegła). Ściany i filary same przyklejają się do krawędzi i narożników, kolizja jest widoczna od razu.
+- **Plan 2D jak w grze.** Podłogi, ściany, filary, dachy, schody i rampy z pięciu materiałów (klon, brzoza, sosna, metal, cegła). Ściany i filary same przyklejają się do krawędzi i narożników, kolizja jest widoczna od razu. Plan zajmuje cały ekran: na dole pasek 9 slotów, a `E` otwiera okno ze wszystkimi klockami (najpierw Wszystko, potem filtry kategorii) i dokiem materiałów.
 - **Piętra.** Do czterech poziomów; niższe widać pod spodem jako tło.
 - **Widok 3D jak w grze.** Oryginalne modele struktur z plików Unturned. Pełny ekran z paskiem 9 slotów i ekwipunkiem (`E`), latanie albo chodzenie, stawianie i wyburzanie z celownika.
 - **Komendy na czacie.** `T` albo `/` otwiera czat: `/time night`, `/sky 150`, `/tp <x> <z>`, `/give metal_wall 3` i inne (`/help`). `Esc` otwiera menu ze sceną, mapą i klawiszami.
@@ -33,12 +33,12 @@ Nagranie pokazuje prawdziwą sesję w aplikacji: nowy projekt, 6 podłóg, ścia
 
 ## Sterowanie
 
-Klawisze można zmienić w zakładce **Skróty** w edytorze (zapis w przeglądarce). Domyślne:
+Klawisze można zmienić w zakładce **Skróty** w oknie pod `E` (zapis w przeglądarce). Domyślne:
 
 | Klawisz | Plan 2D | Widok 3D |
 | --- | --- | --- |
 | `1`-`9` | slot paska | slot paska (kółko: następny slot) |
-| `E` | | ekwipunek: elementy do slotów paska |
+| `E` | okno: wszystkie klocki, budowle, kolor i skróty | ekwipunek: elementy do slotów paska |
 | `T`, `/` | | czat z komendami, `/help` pokazuje listę |
 | `M` | | mapa z twoją pozycją, klik teleportuje |
 | `Ctrl C` / `Ctrl V` | kopiuj / wklej | kopiuj całą bazę / wklej w celowniku |

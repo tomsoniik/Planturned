@@ -9,18 +9,14 @@ import {
   ArrowCounterClockwise,
   ArrowLeft,
   Bed,
-  Buildings,
-  Cube,
   DownloadSimple,
   GlobeHemisphereWest,
   GridFour,
-  Keyboard,
   MapTrifold,
   Moon,
   SunHorizon,
-  PaintBucket,
   PencilSimple,
-  SidebarSimple,
+  SquaresFour,
   Sun,
   Trash,
   X,
@@ -30,14 +26,14 @@ import { useAppStore } from '@/store/useAppStore';
 import { exportProject, getProject, updateProject, type Project } from '@/lib/projects';
 import { loadMap, type MapData, type Site } from '@/lib/terrain';
 import { DEFAULT_SCENE, SKY_HEIGHTS, type SceneSettings, type TimeOfDay } from '@/lib/scene';
-import { itemFullLabel, itemLabel, type SidebarTabId } from '@/lib/i18n';
+import { itemFullLabel, itemLabel } from '@/lib/i18n';
 import { useI18n, useT } from '@/components/I18nProvider';
 import LangSwitch from '@/components/LangSwitch';
 import MapPicker from '@/components/MapPicker';
 import SiteUnderlay from '@/components/SiteUnderlay';
 import PlanCanvas, { layerOf } from '@/components/PlanCanvas';
 import KeybindsPanel from '@/components/KeybindsPanel';
-import Toolbox from '@/components/Toolbox';
+import { BuildBar, BuildWindow, type WindowTab } from '@/components/BuildWindow';
 import MapChooser from '@/components/MapChooser';
 import BasesPanel, { baseWorld, type BaseInfo } from '@/components/BasesPanel';
 import { Chat, Hotbar, Inventory, MapScreen, PauseMenu, type ChatMessage } from '@/components/Hud3D';
@@ -80,15 +76,6 @@ const Builder3D = dynamic(() => import('@/components/Builder3D'), {
 });
 
 const PAINT_COLORS = ['#d9534f', '#e8692f', '#e2b93b', '#8dc46f', '#3e8ed0', '#8e6bbf', '#c9ccd1', '#3a3d42'];
-
-type SidebarTab = SidebarTabId;
-
-const TABS: { id: SidebarTab; Icon: typeof Cube }[] = [
-  { id: 'blocks', Icon: Cube },
-  { id: 'bases', Icon: Buildings },
-  { id: 'color', Icon: PaintBucket },
-  { id: 'hotkeys', Icon: Keyboard },
-];
 
 const shapeClassFor = (def: BuildItem) => {
   switch (def.shape) {
@@ -196,13 +183,12 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   };
 
   const [selectedColor, setSelectedColor] = useState<string>(''); // '' = bez malowania, 'clear' = zdejmij kolor
-  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('blocks');
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  // Okno klocków nad planem 2D (E) i jego zakładka
+  const [windowTab, setWindowTab] = useState<WindowTab>('blocks');
+  const [windowOpen, setWindowOpen] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState('');
   const [is3DMode, setIs3DMode] = useState(false);
-  // Malowanie dotyczy tylko planu 2D; w 3D struktury wyglądają jak w grze.
-  const tab: SidebarTab = is3DMode && sidebarTab === 'color' ? 'blocks' : sidebarTab;
   const [showBedAreas, setShowBedAreas] = useState(true);
   const [currentFloor, setCurrentFloor] = useState(0);
   const [showUnderlay, setShowUnderlay] = useState(true);
@@ -234,15 +220,6 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   const messageId = useRef(0);
 
 
-  const itemCounts = useMemo(() => {
-    const map: Record<string, number> = {};
-    placedItems.forEach(i => {
-      const def = findDef(i.itemId);
-      if (def) map[def.id] = (map[def.id] || 0) + 1;
-    });
-    return map;
-  }, [placedItems]);
-
 
   // Wczytanie projektu z localStorage
   useEffect(() => {
@@ -266,7 +243,6 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
     // plan otwiera się na najniższym poziomie z elementami (skybase stoi np. na poziomie 9, nie na 0)
     if (p.items.length) setCurrentFloor(Math.min(...p.items.map(planFloor)));
     lastSavedRef.current = JSON.stringify(p.items);
-    if (window.innerWidth < 900) setIsSidebarCollapsed(true);
   }, [id]);
 
   // Dane mapy projektu (spawny dla /spawn i mapy pod M)
@@ -394,6 +370,30 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
     ? slot
     : activeItem && hotbar.includes(activeItem) ? hotbar.indexOf(activeItem) : null;
 
+  /** Klocek z okna: już jest na pasku, to ten slot; inaczej trafia do wybranego slotu (jak w ekwipunku gry). */
+  const takeItem = (itemId: string) => {
+    pickItem(itemId);
+    const def = findDef(itemId);
+    if (def?.material) setMaterial(def.material);
+    if (!def?.part) return; // wyburzanie i łóżko mają własne klawisze
+    const at = hotbar.indexOf(itemId);
+    if (at >= 0) {
+      setSlot(at);
+      return;
+    }
+    const target = heldSlot ?? slot ?? (hotbar.indexOf(null) >= 0 ? hotbar.indexOf(null) : 0);
+    setHotbar(hotbar.map((v, i) => (i === target ? itemId : v)));
+    setSlot(target);
+  };
+
+  /** Materiał w oknie: trzymana część przechodzi na ten materiał (w tym samym slocie). */
+  const changeMaterial = (m: MaterialId) => {
+    setMaterial(m);
+    const part = activeDef?.part;
+    const v = part ? findDef(`${m}_${part}`) : undefined;
+    if (v) takeItem(v.id);
+  };
+
   const selectSlot = (i: number) => {
     setSlot(i);
     setPaste(null);
@@ -405,6 +405,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   const setView3D = (on: boolean) => {
     setIs3DMode(on);
     setOverlay('none');
+    setWindowOpen(false);
     if (!on) unlockPointer();
   };
 
@@ -635,6 +636,17 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
           openOverlay('chat');
           return;
         }
+      }
+
+      if (!is3DMode && windowOpen && (e.key === 'Escape' || (!mod && e.code === binds.inventory))) {
+        e.preventDefault();
+        setWindowOpen(false);
+        return;
+      }
+      if (!is3DMode && !mod && e.code === binds.inventory) {
+        e.preventDefault();
+        setWindowOpen(true);
+        return;
       }
 
       if (e.key === 'Escape') {
@@ -959,8 +971,6 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   const gridMinor = 30 * scale;
   const gridMajor = 120 * scale;
 
-  const shortName = (item: BuildItem) => itemLabel(item, t);
-
   return (
     <div className={styles.shell}>
       {/* Górny pasek: tylko w 2D, w 3D ustawienia są w menu (Esc) i komendach */}
@@ -972,11 +982,11 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
           </Link>
           <button
             className="icon-btn"
-            data-on={!isSidebarCollapsed || undefined}
-            onClick={() => setIsSidebarCollapsed(c => !c)}
-            title={isSidebarCollapsed ? t.editor.showToolbox : t.editor.hideToolbox}
+            data-on={windowOpen || undefined}
+            onClick={() => setWindowOpen(o => !o)}
+            title={t.toolbox.open(keyName(binds.inventory))}
           >
-            <SidebarSimple size={18} weight="bold" />
+            <SquaresFour size={18} weight="bold" />
           </button>
 
           {isEditingName ? (
@@ -1116,109 +1126,6 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
       )}
 
       <div className={styles.body}>
-        {/* Przybornik: tylko w 2D, w 3D jest pasek slotów i ekwipunek (E) */}
-        {!is3DMode && (
-        <aside className={styles.sidebar} data-collapsed={isSidebarCollapsed || undefined}>
-          <div className={styles.tabs} role="tablist">
-            {TABS.filter(tb => !(is3DMode && tb.id === 'color')).map(({ id: tabId, Icon }) => (
-              <button
-                key={tabId}
-                role="tab"
-                aria-selected={tab === tabId}
-                data-on={tab === tabId || undefined}
-                onClick={() => setSidebarTab(tabId)}
-              >
-                <Icon size={16} weight="bold" />
-                {t.editor.tabs[tabId]}
-              </button>
-            ))}
-          </div>
-
-          <div className={styles.panel}>
-            {tab === 'blocks' && (
-              <Toolbox
-                activeItem={activeItem}
-                material={material}
-                counts={itemCounts}
-                hotbar={hotbar}
-                onMaterial={setMaterial}
-                onSelect={pickItem}
-              />
-            )}
-
-            {tab === 'color' && (
-              <>
-                <p className={styles.panelHint}>
-                  {t.editor.colorHint}
-                </p>
-                <div className={styles.swatches}>
-                  <button
-                    className={styles.swatchText}
-                    data-on={selectedColor === '' || undefined}
-                    onClick={() => setSelectedColor('')}
-                  >
-                    {t.editor.colorOff}
-                  </button>
-                  <button
-                    className={styles.swatchText}
-                    data-on={selectedColor === 'clear' || undefined}
-                    onClick={() => setSelectedColor('clear')}
-                    title={t.editor.colorDefaultTitle}
-                  >
-                    <X size={12} weight="bold" /> {t.editor.colorDefault}
-                  </button>
-                  {PAINT_COLORS.map(c => (
-                    <button
-                      key={c}
-                      className={styles.swatch}
-                      data-on={selectedColor === c || undefined}
-                      style={{ backgroundColor: c }}
-                      onClick={() => setSelectedColor(c)}
-                      aria-label={t.editor.colorAria(c)}
-                    />
-                  ))}
-                </div>
-                <label className={styles.customColor}>
-                  {t.editor.colorCustom}
-                  <input
-                    type="color"
-                    value={selectedColor.startsWith('#') ? selectedColor : '#8dc46f'}
-                    onChange={e => setSelectedColor(e.target.value)}
-                  />
-                  <code>{selectedColor.startsWith('#') ? selectedColor : '-'}</code>
-                </label>
-              </>
-            )}
-
-            {tab === 'bases' && (
-              <BasesPanel
-                items={placedItems}
-                site={project?.site}
-                map={activeMapData}
-                hint={t.bases.hint2d}
-                onShow={showBase}
-                onDelete={deleteBase}
-              />
-            )}
-
-            {tab === 'hotkeys' && <KeybindsPanel />}
-          </div>
-
-          {tab === 'blocks' && activeDef && !isRemoverActive && (
-            <div className={styles.activeBar}>
-              <span className={styles.activeThumb}>
-                <img src={activeDef.icon} alt="" />
-              </span>
-              <div className={styles.activeInfo}>
-                <strong>{shortName(activeDef)}</strong>
-                {activeDef.health && <span>{activeDef.health} HP</span>}
-              </div>
-              <span className={styles.activeHint}><kbd>{keyName(binds.rotate)}</kbd> {t.editor.rotate}</span>
-            </div>
-          )}
-        </aside>
-        )}
-
         {/* Płótno */}
         <div
           ref={containerRef}
@@ -1536,6 +1443,97 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
             </>
           )}
         </div>
+          {!is3DMode && (
+            <>
+              {windowOpen && (
+                <BuildWindow
+                  tab={windowTab}
+                  activeItem={activeItem}
+                  material={material}
+                  hotbar={hotbar}
+                  onTab={setWindowTab}
+                  onPick={itemId => {
+                    takeItem(itemId);
+                    setWindowOpen(false);
+                  }}
+                  onMaterial={changeMaterial}
+                  onClose={() => setWindowOpen(false)}
+                  panels={{
+                    color: (
+                      <>
+                        <p className={styles.panelHint}>
+                          {t.editor.colorHint}
+                        </p>
+                        <div className={styles.swatches}>
+                          <button
+                            className={styles.swatchText}
+                            data-on={selectedColor === '' || undefined}
+                            onClick={() => setSelectedColor('')}
+                          >
+                            {t.editor.colorOff}
+                          </button>
+                          <button
+                            className={styles.swatchText}
+                            data-on={selectedColor === 'clear' || undefined}
+                            onClick={() => setSelectedColor('clear')}
+                            title={t.editor.colorDefaultTitle}
+                          >
+                            <X size={12} weight="bold" /> {t.editor.colorDefault}
+                          </button>
+                          {PAINT_COLORS.map(c => (
+                            <button
+                              key={c}
+                              className={styles.swatch}
+                              data-on={selectedColor === c || undefined}
+                              style={{ backgroundColor: c }}
+                              onClick={() => setSelectedColor(c)}
+                              aria-label={t.editor.colorAria(c)}
+                            />
+                          ))}
+                        </div>
+                        <label className={styles.customColor}>
+                          {t.editor.colorCustom}
+                          <input
+                            type="color"
+                            value={selectedColor.startsWith('#') ? selectedColor : '#8dc46f'}
+                            onChange={e => setSelectedColor(e.target.value)}
+                          />
+                          <code>{selectedColor.startsWith('#') ? selectedColor : '-'}</code>
+                        </label>
+                      </>
+                    ),
+                    bases: (
+                      <BasesPanel
+                        items={placedItems}
+                        site={project?.site}
+                        map={activeMapData}
+                        hint={t.bases.hint2d}
+                        onShow={b => {
+                          showBase(b);
+                          setWindowOpen(false);
+                        }}
+                        onDelete={deleteBase}
+                      />
+                    ),
+                    hotkeys: <KeybindsPanel />,
+                  }}
+                />
+              )}
+              <BuildBar
+                open={windowOpen}
+                hotbar={hotbar}
+                selected={heldSlot}
+                activeItem={activeItem}
+                material={material}
+                paint={selectedColor}
+                onOpen={() => setWindowOpen(o => !o)}
+                onSlot={selectSlot}
+                onClearSlot={i => setHotbar(hotbar.map((v, k) => (k === i ? null : v)))}
+                onDemolish={() => selectItem(REMOVER.id)}
+                onPaintOff={() => setSelectedColor('')}
+              />
+            </>
+          )}
       </div>
       {!is3DMode && (needsMap || chooserOpen) && (
         <MapChooser

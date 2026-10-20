@@ -20,7 +20,7 @@ The recording is a real session in the app (with the Polish UI): a new project, 
 
 ## Features
 
-- **A 2D plan that works like the game.** Floors, walls, pillars, roofs, stairs and ramps in five materials (maple, birch, pine, metal, brick). Walls and pillars snap to edges and corners, and collisions show up right away.
+- **A 2D plan that works like the game.** Floors, walls, pillars, roofs, stairs and ramps in five materials (maple, birch, pine, metal, brick). Walls and pillars snap to edges and corners, and collisions show up right away. The plan takes the whole screen: a 9-slot bar sits at the bottom and `E` opens a window with every piece (All first, then filters by category) and the material dock.
 - **Floors.** Up to four levels; the ones below show through as a backdrop.
 - **3D view like in the game.** Original structure models from the Unturned files. Full screen with a 9-slot hotbar and an inventory (`E`), fly or walk, place and demolish from the crosshair.
 - **Chat commands.** `T` or `/` opens the chat: `/time night`, `/sky 150`, `/tp <x> <z>`, `/give metal_wall 3` and more (`/help`). `Esc` opens the menu with the scene, map and keys.
@@ -33,12 +33,12 @@ The recording is a real session in the app (with the Polish UI): a new project, 
 
 ## Controls
 
-Keys can be changed in the editor's **Keys** tab (saved in your browser). Defaults:
+Keys can be changed in the **Keys** tab of the `E` window (saved in your browser). Defaults:
 
 | Key | 2D plan | 3D view |
 | --- | --- | --- |
 | `1`-`9` | hotbar slot | hotbar slot (wheel: next slot) |
-| `E` | | inventory: put pieces in the hotbar slots |
+| `E` | window with all pieces, builds, color and keys | inventory: put pieces in the hotbar slots |
 | `T`, `/` | | chat with commands, `/help` lists them |
 | `M` | | map with your position, click teleports |
 | `Ctrl C` / `Ctrl V` | copy / paste | copy the whole base / paste it at the crosshair |

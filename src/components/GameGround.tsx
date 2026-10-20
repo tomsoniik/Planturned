@@ -11,7 +11,8 @@
   Drogi (Road.buildMesh): próbka co 5 m po krzywej Béziera, wysokość z terenu podniesiona, gdy krawędź
   wchodzi w zbocze, przekrój z 4 punktów (płaska jezdnia + skośne pobocza), U na szerokość, V wzdłuż drogi.
 */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { MapData, MapMeta, Site } from '@/lib/terrain';
 
@@ -87,11 +88,84 @@ function loadGround(meta: MapMeta): Promise<GroundTextures | null> {
   return p;
 }
 
+// --- Maska kafli terenu wczytanych w pełnej rozdzielczości ---
+
+/**
+ * Jeden teksel na kafel terenu (wiersz 0 = północ): 255, gdy kafel jest już zbudowany.
+ * Daleki teren chowa się nad takimi kaflami, a drogi rysują się tylko na nich. Dzięki temu doczytanie kafla
+ * zmienia jeden bajt tekstury zamiast przebudowy siatek całej mapy.
+ */
+export interface NearMask {
+  texture: THREE.DataTexture;
+  data: Uint8Array;
+  /** Kafli na bok mapy. */
+  tiles: number;
+}
+
+const nearMasks = new Map<string, NearMask>();
+
+/** Maska mapy (jedna na mapę, wspólna dla terenu, dalekiego terenu i dróg). */
+export function nearMask(meta: MapMeta, tile: number): NearMask {
+  const tiles = Math.ceil(meta.extent / tile);
+  let m = nearMasks.get(meta.id);
+  if (!m || m.tiles !== tiles) {
+    const data = new Uint8Array(tiles * tiles);
+    const texture = new THREE.DataTexture(data, tiles, tiles, THREE.RedFormat, THREE.UnsignedByteType);
+    texture.flipY = false;
+    texture.minFilter = texture.magFilter = THREE.NearestFilter;
+    texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.needsUpdate = true;
+    m = { texture, data, tiles };
+    nearMasks.set(meta.id, m);
+  }
+  return m;
+}
+
+/**
+ * Wstrzykuje do shadera odrzucanie fragmentów według maski kafli.
+ * keepNear = false: fragment znika nad wczytanym kaflem (daleki teren); true: zostaje tylko nad wczytanym (drogi).
+ */
+function injectNearMask(
+  shader: THREE.WebGLProgramParametersWithUniforms,
+  mask: NearMask,
+  origin: THREE.Vector2,
+  extent: number,
+  keepNear: boolean,
+) {
+  shader.uniforms.uNearMask = { value: mask.texture };
+  shader.uniforms.uMaskOrigin = { value: origin };
+  shader.uniforms.uMaskExtent = { value: extent };
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nvarying vec2 vMaskXZ;')
+    .replace('#include <project_vertex>', '#include <project_vertex>\nvMaskXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nuniform sampler2D uNearMask;\nuniform vec2 uMaskOrigin;\nuniform float uMaskExtent;\nvarying vec2 vMaskXZ;')
+    .replace(
+      '#include <clipping_planes_fragment>',
+      `#include <clipping_planes_fragment>
+vec2 maskUv = vec2(vMaskXZ.x + uMaskOrigin.x + uMaskExtent * 0.5, uMaskExtent * 0.5 - uMaskOrigin.y + vMaskXZ.y) / uMaskExtent;
+if (texture2D(uNearMask, maskUv).r ${keepNear ? '<' : '>'} 0.5) discard;`,
+    );
+}
+
+/**
+ * Zwykły materiał (drogi, satelita ze starego eksportu) z maską kafli; site: punkt odniesienia sceny.
+ * Nowy obiekt przy każdym wywołaniu: tworzyć w useMemo.
+ */
+export function maskedMaterial(params: THREE.MeshStandardMaterialParameters, mask: NearMask, site: Site, extent: number, keepNear: boolean) {
+  const m = new THREE.MeshStandardMaterial(params);
+  const origin = new THREE.Vector2(site.x, site.z);
+  m.onBeforeCompile = (shader) => injectNearMask(shader, mask, origin, extent, keepNear);
+  m.customProgramCacheKey = () => `near-mask-${keepNear}`;
+  return m;
+}
+
 /**
  * Materiał terenu z teksturami gry. Siatki terenu leżą w układzie sceny (x = świat x - site.x, z = site.z - świat z),
  * więc shader odtwarza współrzędne świata z uOrigin. Null, gdy brak danych (stary eksport): wtedy zostaje satelita.
+ * farMask: wersja dla dalekiego terenu, schowana nad kaflami wczytanymi w pełnej rozdzielczości.
  */
-export function useGroundMaterial(map: MapData, site: Site): THREE.MeshStandardMaterial | null {
+export function useGroundMaterial(map: MapData, site: Site, farMask?: NearMask): THREE.MeshStandardMaterial | null {
   const [tex, setTex] = useState<GroundTextures | null>(null);
   useEffect(() => {
     let alive = true;
@@ -106,7 +180,8 @@ export function useGroundMaterial(map: MapData, site: Site): THREE.MeshStandardM
     const n = tex.sizes.length;
     const m = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1 });
     m.onBeforeCompile = (shader) => {
-      shader.uniforms.uOrigin = { value: new THREE.Vector2(site.x, site.z) };
+      const origin = new THREE.Vector2(site.x, site.z);
+      shader.uniforms.uOrigin = { value: origin };
       shader.uniforms.uHalf = { value: map.meta.extent / 2 };
       shader.uniforms.uExtent = { value: map.meta.extent };
       shader.uniforms.uLayers = { value: tex.layers };
@@ -142,11 +217,13 @@ vec3 col = vec3(0.0); float tot = 0.0;
 ${blend}
 diffuseColor.rgb *= tot > 0.001 ? col / tot : vec3(0.24, 0.29, 0.17);`,
         );
+      // ten sam wektor co uOrigin: efekt niżej przesuwa oba naraz
+      if (farMask) injectNearMask(shader, farMask, origin, map.meta.extent, false);
     };
-    m.customProgramCacheKey = () => `ground-${n}-${tex.splats.length}`;
+    m.customProgramCacheKey = () => `ground-${n}-${tex.splats.length}-${farMask ? 'far' : 'near'}`;
     return m;
     // site.x/z aktualizuje efekt niżej, bez przekompilowania shadera
-  }, [tex, map.meta.extent]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tex, map.meta.extent, farMask]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const shader = material?.userData.shader as { uniforms: Record<string, { value: unknown }> } | undefined;
@@ -209,14 +286,12 @@ const bezierVel = (a: V3, b: V3, c: V3, d: V3, t: number): V3 => {
 };
 const bezierLen = (a: V3, b: V3, c: V3, d: V3) => (len(sub(d, a)) + len(sub(d, c)) + len(sub(b, c)) + len(sub(b, a))) / 2;
 
-/** Geometria jednej drogi w układzie sceny (null, gdy droga nie dotyka wycinka). */
+/** Geometria jednej drogi w układzie sceny (null, gdy droga jest pusta). */
 function buildRoad(
   road: RoadsFile['roads'][number],
   params: RoadParams,
   heightAt: (x: number, z: number) => number,
   site: Site,
-  span: number,
-  center: [number, number],
 ): { pos: number[]; nrm: number[]; uv: number[]; idx: number[] } | null {
   const J = road.j;
   if (J.length < 2) return null;
@@ -241,14 +316,6 @@ function buildRoad(
     carry = s - L;
   }
   samples.push(road.loop ? { i: 0, t: 0 } : { i: J.length - 2, t: 1 });
-
-  // szybkie odrzucenie dróg poza wycinkiem (jego środek w układzie świata); odcinek między węzłami też się liczy
-  const cx = site.x + center[0], cz = site.z - center[1];
-  const near = J.some((j, k) => {
-    const n = J[(k + 1) % J.length];
-    return Math.min(j[0], n[0]) < cx + span && Math.max(j[0], n[0]) > cx - span && Math.min(j[2], n[2]) < cz + span && Math.max(j[2], n[2]) > cz - span;
-  });
-  if (!near) return null;
 
   const normalAt = (x: number, z: number): V3 => {
     const e = 1;
@@ -307,8 +374,13 @@ function buildRoad(
   return { pos, nrm, uv, idx };
 }
 
-/** Drogi z mapy gry w obrębie wycinka terenu. */
-export function GameRoads({ site, map, span, center }: { site: Site; map: MapData; span: number; center: [number, number] }) {
+const ROAD_BUCKET = 256; // drogi pocięte na kwadraty (m): własna bryła brzegowa do raycastów i ukrywania
+
+/**
+ * Drogi z całej mapy, budowane raz. Widać je tylko nad kaflami terenu w pełnej rozdzielczości (maska),
+ * więc przesuwanie się po mapie niczego nie przebudowuje. `visibleRadius`: dalsze kubełki są ukryte.
+ */
+export function GameRoads({ site, map, mask, visibleRadius }: { site: Site; map: MapData; mask: NearMask; visibleRadius: number }) {
   const [file, setFile] = useState<RoadsFile | null>(null);
   useEffect(() => {
     let alive = true;
@@ -318,47 +390,69 @@ export function GameRoads({ site, map, span, center }: { site: Site; map: MapDat
     };
   }, [map.meta.id, map.meta.roads]);
 
-  // jedna siatka na materiał drogi
+  // materiał drogi -> kubełki: trójkąty przypisane do kwadratu wg środka ciężkości (bez indeksów)
   const meshes = useMemo(() => {
     if (!file) return [];
-    const groups = new Map<string, { params: RoadParams; parts: NonNullable<ReturnType<typeof buildRoad>>[] }>();
+    const groups = new Map<string, Map<string, { pos: number[]; nrm: number[]; uv: number[] }>>();
     for (const road of file.roads) {
       const params = (road.a && file.assets[road.a]) || file.materials[road.m];
       if (!params) continue;
-      const part = buildRoad(road, params, map.heightAt, site, span, center);
+      const part = buildRoad(road, params, map.heightAt, site);
       if (!part) continue;
-      const key = params.tex;
-      if (!groups.has(key)) groups.set(key, { params, parts: [] });
-      groups.get(key)!.parts.push(part);
-    }
-    return [...groups.values()].map(({ params, parts }) => {
-      const pos: number[] = [], nrm: number[] = [], uv: number[] = [], idx: number[] = [];
-      for (const p of parts) {
-        const base = pos.length / 3;
-        pos.push(...p.pos);
-        nrm.push(...p.nrm);
-        uv.push(...p.uv);
-        for (const i of p.idx) idx.push(i + base);
+      let buckets = groups.get(params.tex);
+      if (!buckets) groups.set(params.tex, (buckets = new Map()));
+      const { pos, nrm, uv, idx } = part;
+      for (let t = 0; t < idx.length; t += 3) {
+        const a = idx[t], b = idx[t + 1], c = idx[t + 2];
+        const cx = (pos[a * 3] + pos[b * 3] + pos[c * 3]) / 3, cz = (pos[a * 3 + 2] + pos[b * 3 + 2] + pos[c * 3 + 2]) / 3;
+        const key = `${Math.floor(cx / ROAD_BUCKET)},${Math.floor(cz / ROAD_BUCKET)}`;
+        let out = buckets.get(key);
+        if (!out) buckets.set(key, (out = { pos: [], nrm: [], uv: [] }));
+        for (const v of [a, b, c]) {
+          out.pos.push(pos[v * 3], pos[v * 3 + 1], pos[v * 3 + 2]);
+          out.nrm.push(nrm[v * 3], nrm[v * 3 + 1], nrm[v * 3 + 2]);
+          out.uv.push(uv[v * 2], uv[v * 2 + 1]);
+        }
       }
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-      g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
-      g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-      g.setIndex(idx);
-      return { key: params.tex, geometry: g, url: `${mapBase(map.meta.id)}/${params.tex}` };
-    });
-  }, [file, map, site, span, center]);
+    }
+    return [...groups.entries()].map(([tex, buckets]) => ({
+      key: tex,
+      url: `${mapBase(map.meta.id)}/${tex}`,
+      geometries: [...buckets.values()].map((o) => {
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(o.pos, 3));
+        g.setAttribute('normal', new THREE.Float32BufferAttribute(o.nrm, 3));
+        g.setAttribute('uv', new THREE.Float32BufferAttribute(o.uv, 2));
+        g.computeBoundingSphere();
+        return g;
+      }),
+    }));
+  }, [file, map, site]);
 
   return (
     <>
       {meshes.map((m) => (
-        <RoadMesh key={m.key} geometry={m.geometry} url={m.url} />
+        <RoadMesh key={m.key} geometries={m.geometries} url={m.url} mask={mask} site={site} extent={map.meta.extent} visibleRadius={visibleRadius} />
       ))}
     </>
   );
 }
 
-function RoadMesh({ geometry, url }: { geometry: THREE.BufferGeometry; url: string }) {
+function RoadMesh({
+  geometries,
+  url,
+  mask,
+  site,
+  extent,
+  visibleRadius,
+}: {
+  geometries: THREE.BufferGeometry[];
+  url: string;
+  mask: NearMask;
+  site: Site;
+  extent: number;
+  visibleRadius: number;
+}) {
   const [tex, setTex] = useState<THREE.Texture | null>(null);
   useEffect(() => {
     let alive = true;
@@ -374,11 +468,29 @@ function RoadMesh({ geometry, url }: { geometry: THREE.BufferGeometry; url: stri
       alive = false;
     };
   }, [url]);
-  useEffect(() => () => geometry.dispose(), [geometry]);
-  if (!tex) return null;
+  useEffect(() => () => geometries.forEach((g) => g.dispose()), [geometries]);
+  const material = useMemo(() => (tex ? maskedMaterial({ map: tex, roughness: 0.95 }, mask, site, extent, true) : null), [tex, mask, site, extent]);
+  useEffect(() => () => material?.dispose(), [material]);
+
+  // kubełki daleko od kamery nie idą do rysowania (i tak byłyby odrzucone przez maskę)
+  const group = useRef<THREE.Group>(null);
+  const camera = useThree((s) => s.camera);
+  useFrame(() => {
+    const g = group.current;
+    if (!g) return;
+    const r = visibleRadius + ROAD_BUCKET;
+    for (const child of g.children) {
+      const s = (child as THREE.Mesh).geometry.boundingSphere!;
+      child.visible = Math.hypot(s.center.x - camera.position.x, s.center.z - camera.position.z) < r + s.radius;
+    }
+  });
+
+  if (!material) return null;
   return (
-    <mesh geometry={geometry} receiveShadow userData={{ terrain: true, road: true }}>
-      <meshStandardMaterial map={tex} roughness={0.95} />
-    </mesh>
+    <group ref={group}>
+      {geometries.map((g, i) => (
+        <mesh key={i} geometry={g} material={material} receiveShadow userData={{ terrain: true, road: true }} />
+      ))}
+    </group>
   );
 }

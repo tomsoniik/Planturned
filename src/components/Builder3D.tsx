@@ -19,7 +19,7 @@ import {
   type PlacedItem,
 } from '@/lib/builder';
 import { loadGameModels, type GameModel } from '@/lib/gameModels';
-import { loadMap, mapOverviewUrl, mapTileUrl, tilesInRange, type MapData, type Site } from '@/lib/terrain';
+import { loadMap, mapOverviewUrl, type MapData, type Site } from '@/lib/terrain';
 import { DEFAULT_SCENE, type SceneSettings } from '@/lib/scene';
 import { itemLabel, type AimReason, type AimWarn } from '@/lib/i18n';
 import { useT } from './I18nProvider';
@@ -31,7 +31,7 @@ import {
 } from '@/lib/playerPhysics';
 import { Meadow, SkyAndLight, meadowHeight } from './Scenery';
 import MapObjects from './MapObjects';
-import { GameRoads, useGroundMaterial } from './GameGround';
+import { GameRoads, maskedMaterial, nearMask, useGroundMaterial } from './GameGround';
 
 // --- Wymiary w metrach (zgodne z modelami gry) ---
 export const SCALE = 1 / 10; // jednostki planu -> metry
@@ -39,9 +39,12 @@ const S = SIDE * SCALE; // bok podłogi: 6 m
 const H = LEVEL_HEIGHT; // wysokość poziomu: 4,5 m
 const TOP = 0.25; // wierzch podłogi nad jej pivotem
 const WALL_BASE = 0.125; // spód ścian, filarów i słupków nad poziomem
-const TERRAIN_SPAN = 1024; // bok szczegółowego wycinka terenu w 3D (wokół kamery)
-const OBJECT_RADIUS = 480; // promień wokół środka wycinka, w którym wczytujemy obiekty mapy
-const CHUNK = 128; // co ile metrów wycinek terenu i obiekty przesuwają się za kamerą
+const TILE = 128; // bok kafla terenu w pełnej rozdzielczości (m)
+const NEAR_RADIUS = 600; // kafle do tej odległości od kamery (środek kafla) są w pełnej rozdzielczości
+const DROP_RADIUS = 760; // dalsze kafle są zwalniane (histereza względem NEAR_RADIUS)
+const TILE_BUDGET_MS = 3; // czas na dobudowanie kafli w jednej klatce
+const OBJECT_RADIUS = 480; // promień wokół kamery, w którym wczytujemy obiekty mapy
+const CHUNK = 128; // co ile metrów obszar obiektów mapy przesuwa się za kamerą
 
 type Models = Map<number, GameModel>;
 
@@ -359,8 +362,8 @@ function hitItemId(hit: THREE.Intersection): string | null {
 // --- Teren mapy z gry ---
 
 /**
- * Środek szczegółowego wycinka mapy (współrzędne sceny): podąża za kamerą skokami co CHUNK metrów,
- * więc da się odejść daleko od bazy i dalej mieć pełny teren i obiekty. Histereza: bez skakania na granicy.
+ * Środek obszaru obiektów mapy (współrzędne sceny): podąża za kamerą skokami co CHUNK metrów.
+ * Histereza: bez skakania na granicy.
  */
 function useChunkCenter(): [number, number] {
   const camera = useThree((s) => s.camera);
@@ -373,177 +376,8 @@ function useChunkCenter(): [number, number] {
   return center;
 }
 
-/** Teren, drogi i obiekty mapy wokół kamery. */
-function MapSurroundings({ site, lift, map }: { site: Site; lift: number; map: MapData }) {
-  const center = useChunkCenter();
-  const lifted = useMemo(() => ({ ...site, elevation: site.elevation + lift }), [site, lift]);
-  return (
-    <>
-      <TerrainPatch site={lifted} map={map} center={center} />
-      <MapObjects site={site} lift={lift} radius={OBJECT_RADIUS} center={center} />
-    </>
-  );
-}
-
-function TerrainPatch({ site, map, center }: { site: Site; map: MapData; center: [number, number] }) {
-  const { meta } = map;
-  // Tekstury terenu z gry (splatmapy); bez nich (stary eksport) satelita z Map.png
-  const ground = useGroundMaterial(map, site);
-  // środek wycinka w układzie świata gry
-  const wx = site.x + center[0], wz = site.z - center[1];
-
-  // Wierzchołki dokładnie w punktach siatki wysokości gry (co meta.cell), bez interpolacji
-  const geometry = useMemo(() => {
-    const { cell, grid, extent } = meta;
-    const half = extent / 2, span = TERRAIN_SPAN / 2;
-    const c0 = Math.max(0, Math.floor((wx - span + half) / cell)), c1 = Math.min(grid - 1, Math.ceil((wx + span + half) / cell));
-    const r0 = Math.max(0, Math.floor((half - wz - span) / cell)), r1 = Math.min(grid - 1, Math.ceil((half - wz + span) / cell));
-    const nc = c1 - c0 + 1, nr = r1 - r0 + 1;
-    const pos = new Float32Array(nc * nr * 3);
-    const uv = new Float32Array(nc * nr * 2);
-    for (let r = 0; r < nr; r++) {
-      for (let c = 0; c < nc; c++) {
-        const x = -half + (c0 + c) * cell, z = half - (r0 + r) * cell;
-        const k = r * nc + c;
-        pos.set([x - site.x, map.heights[(r0 + r) * grid + c0 + c] - site.elevation, site.z - z], k * 3);
-        // UV satelity (stary eksport): kwadrat TERRAIN_SPAN wokół środka wycinka, v = 1 na północy
-        uv.set([(x - wx + span) / TERRAIN_SPAN, (z - wz + span) / TERRAIN_SPAN], k * 2);
-      }
-    }
-    const index = new Uint32Array((nc - 1) * (nr - 1) * 6);
-    let i = 0;
-    for (let r = 0; r < nr - 1; r++) {
-      for (let c = 0; c < nc - 1; c++) {
-        const a = r * nc + c, b = a + 1, d = a + nc, e = d + 1;
-        index.set([a, d, b, b, d, e], i);
-        i += 6;
-      }
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-    g.setIndex(new THREE.BufferAttribute(index, 1));
-    g.computeVertexNormals();
-    return g;
-  }, [meta, map.heights, wx, wz, site.x, site.z, site.elevation]);
-  useEffect(() => () => geometry.dispose(), [geometry]);
-
-  const [texture, setTexture] = useState<THREE.CanvasTexture | null>(null);
-  useEffect(() => {
-    if (meta.terrain) return;
-    let alive = true;
-    const half = TERRAIN_SPAN / 2;
-    const metersPerPx = meta.extent / (meta.tiles * 512);
-    const px = Math.ceil(TERRAIN_SPAN / metersPerPx);
-    const canvas = document.createElement('canvas');
-    canvas.width = canvas.height = px;
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = '#3c4a2c';
-    ctx.fillRect(0, 0, px, px);
-    const tiles = tilesInRange(meta, wx, wz, half);
-    Promise.all(
-      tiles.map(
-        (t) =>
-          new Promise<void>((resolve) => {
-            const img = new Image();
-            img.onload = () => {
-              // Lewy górny róg kafla względem lewego górnego rogu wycinka (zachód, północ).
-              const dx = (t.left - (wx - half)) / metersPerPx;
-              const dy = (wz + half - t.top) / metersPerPx;
-              ctx.drawImage(img, dx, dy, t.size / metersPerPx, t.size / metersPerPx);
-              resolve();
-            };
-            img.onerror = () => resolve();
-            img.src = mapTileUrl(meta.id, t.tx, t.ty);
-          }),
-      ),
-    ).then(() => {
-      if (!alive) return;
-      const tex = new THREE.CanvasTexture(canvas);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.anisotropy = 8;
-      setTexture(tex);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [meta, wx, wz]);
-
-  return (
-    <>
-      {ground ? (
-        <mesh geometry={geometry} material={ground} receiveShadow userData={{ terrain: true }} />
-      ) : (
-        <mesh geometry={geometry} receiveShadow userData={{ terrain: true }}>
-          {/* key: materiał musi się przekompilować, gdy dochodzi tekstura (map z null na teksturę) */}
-          <meshStandardMaterial key={texture ? 'tex' : 'plain'} map={texture} color={texture ? '#ffffff' : '#3c4a2c'} roughness={1} />
-        </mesh>
-      )}
-      <GameRoads site={site} map={map} span={TERRAIN_SPAN / 2 + 40} center={center} />
-      <FarTerrain site={site} map={map} ground={ground} center={center} />
-      {meta.seaLevel !== null && (
-        <mesh position={[0, meta.seaLevel - site.elevation, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[meta.extent * 2.5, meta.extent * 2.5]} />
-          <meshStandardMaterial color="#2c4a5e" transparent opacity={0.78} roughness={0.15} metalness={0.1} />
-        </mesh>
-      )}
-    </>
-  );
-}
-
-const FAR_STEP = 16; // rozdzielczość terenu całej mapy (m)
-
-/**
- * Reszta mapy poza wycinkiem: cała mapa w niskiej rozdzielczości z podglądem satelity.
- * Widać ją głównie ze skybase; środek (szczegółowy wycinek) jest wycięty, a całość lekko obniżona, żeby nie przebijała.
- */
-function FarTerrain({ site, map, ground, center }: { site: Site; map: MapData; ground: THREE.MeshStandardMaterial | null; center: [number, number] }) {
-  const { meta, heightAt } = map;
-
-  // Wierzchołki całej mapy liczone raz; przy przesunięciu wycinka zmienia się tylko indeks.
-  const attrs = useMemo(() => {
-    const half = meta.extent / 2;
-    const n = Math.floor(meta.extent / FAR_STEP) + 1;
-    const pos = new Float32Array(n * n * 3);
-    const uv = new Float32Array(n * n * 2);
-    for (let r = 0; r < n; r++) {
-      for (let c = 0; c < n; c++) {
-        const wx = -half + c * FAR_STEP, wz = half - r * FAR_STEP;
-        const k = r * n + c;
-        pos.set([wx - site.x, heightAt(wx, wz) - site.elevation - 0.6, site.z - wz], k * 3);
-        uv.set([c / (n - 1), 1 - r / (n - 1)], k * 2);
-      }
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    g.computeVertexNormals();
-    return { n, position: g.attributes.position, normal: g.attributes.normal, uv: new THREE.BufferAttribute(uv, 2) };
-  }, [meta.extent, site.x, site.z, site.elevation, heightAt]);
-
-  const geometry = useMemo(() => {
-    const { n, position } = attrs;
-    // Pomijamy kwadraty leżące w całości wewnątrz szczegółowego wycinka.
-    const inner = TERRAIN_SPAN / 2 - FAR_STEP;
-    const inside = (k: number) => Math.abs(position.getX(k) - center[0]) < inner && Math.abs(position.getZ(k) - center[1]) < inner;
-    const index: number[] = [];
-    for (let r = 0; r < n - 1; r++) {
-      for (let c = 0; c < n - 1; c++) {
-        const a = r * n + c, b = a + 1, d = a + n, e = d + 1;
-        if (inside(a) && inside(b) && inside(d) && inside(e)) continue;
-        index.push(a, d, b, b, d, e);
-      }
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', attrs.position);
-    g.setAttribute('normal', attrs.normal);
-    g.setAttribute('uv', attrs.uv);
-    g.setIndex(index);
-    g.computeBoundingSphere();
-    return g;
-  }, [attrs, center]);
-  // zwalnia też wspólne bufory wierzchołków; następna geometria wgra je ponownie (raz na przesunięcie wycinka)
-  useEffect(() => () => geometry.dispose(), [geometry]);
-
+/** Podgląd satelity całej mapy: tylko stary eksport bez tekstur terenu. */
+function useOverviewTexture(meta: MapData['meta']) {
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
   useEffect(() => {
     if (meta.terrain) return;
@@ -558,13 +392,235 @@ function FarTerrain({ site, map, ground, center }: { site: Site; map: MapData; g
       alive = false;
     };
   }, [meta.id, meta.terrain]);
+  return texture;
+}
 
-  if (ground) return <mesh geometry={geometry} material={ground} receiveShadow />;
-  return (
-    <mesh geometry={geometry} receiveShadow>
-      <meshStandardMaterial key={texture ? 'tex' : 'plain'} map={texture} color={texture ? '#ffffff' : '#3c4a2c'} roughness={1} />
-    </mesh>
+/** Teren, drogi i obiekty mapy wokół kamery. */
+function MapSurroundings({ site, lift, map }: { site: Site; lift: number; map: MapData }) {
+  const center = useChunkCenter();
+  const lifted = useMemo(() => ({ ...site, elevation: site.elevation + lift }), [site, lift]);
+  const { meta } = map;
+  const mask = nearMask(meta, TILE);
+  // Tekstury terenu z gry (splatmapy); bez nich (stary eksport) podgląd satelity całej mapy
+  const ground = useGroundMaterial(map, lifted);
+  const farGround = useGroundMaterial(map, lifted, mask);
+  const overview = useOverviewTexture(meta);
+  const plain = useMemo(
+    () => new THREE.MeshStandardMaterial({ map: overview, color: overview ? '#ffffff' : '#3c4a2c', roughness: 1 }),
+    [overview],
   );
+  const farPlain = useMemo(
+    () => maskedMaterial({ map: overview, color: overview ? '#ffffff' : '#3c4a2c', roughness: 1 }, mask, lifted, meta.extent, false),
+    [overview, mask, lifted, meta.extent],
+  );
+  useEffect(() => () => plain.dispose(), [plain]);
+  useEffect(() => () => farPlain.dispose(), [farPlain]);
+
+  return (
+    <>
+      <NearTerrain site={lifted} map={map} material={ground ?? plain} />
+      <FarTerrain site={lifted} map={map} material={farGround ?? farPlain} />
+      <GameRoads site={lifted} map={map} mask={mask} visibleRadius={NEAR_RADIUS} />
+      {meta.seaLevel !== null && (
+        <mesh position={[0, meta.seaLevel - lifted.elevation, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[meta.extent * 2.5, meta.extent * 2.5]} />
+          <meshStandardMaterial color="#2c4a5e" transparent opacity={0.78} roughness={0.15} metalness={0.1} />
+        </mesh>
+      )}
+      <MapObjects site={site} lift={lift} radius={OBJECT_RADIUS} center={center} />
+    </>
+  );
+}
+
+const SKIRT = 4; // fartuch krawędzi kafla w dół (m): bez szpar między kaflem a dalekim terenem
+
+/**
+ * Kafel terenu (c, r) w pełnej rozdzielczości: wierzchołki dokładnie w punktach siatki wysokości gry,
+ * normalne z różnic sąsiednich wysokości (te same na styku kafli, więc bez widocznych szwów).
+ */
+function buildTile(map: MapData, site: Site, c: number, r: number): THREE.BufferGeometry | null {
+  const { cell, grid, extent } = map.meta;
+  const { heights } = map;
+  const half = extent / 2;
+  const k = Math.round(TILE / cell);
+  const gc0 = c * k, gr0 = r * k;
+  const gc1 = Math.min(gc0 + k, grid - 1), gr1 = Math.min(gr0 + k, grid - 1);
+  if (gc1 <= gc0 || gr1 <= gr0) return null;
+  const nc = gc1 - gc0 + 1, nr = gr1 - gr0 + 1;
+  const edge = 2 * (nc + nr) - 4;
+  const count = nc * nr + edge;
+  const pos = new Float32Array(count * 3), nrm = new Float32Array(count * 3), uv = new Float32Array(count * 2);
+  const h = (gr: number, gc: number) =>
+    heights[Math.min(grid - 1, Math.max(0, gr)) * grid + Math.min(grid - 1, Math.max(0, gc))];
+  const put = (i: number, gr: number, gc: number, drop: number) => {
+    // scena: x rośnie z kolumną, z rośnie z wierszem (na południe)
+    pos[i * 3] = -half + gc * cell - site.x;
+    pos[i * 3 + 1] = h(gr, gc) - site.elevation - drop;
+    pos[i * 3 + 2] = site.z - (half - gr * cell);
+    const dx = (h(gr, gc + 1) - h(gr, gc - 1)) / (2 * cell), dz = (h(gr + 1, gc) - h(gr - 1, gc)) / (2 * cell);
+    const l = Math.hypot(dx, 1, dz);
+    nrm[i * 3] = -dx / l;
+    nrm[i * 3 + 1] = 1 / l;
+    nrm[i * 3 + 2] = -dz / l;
+    uv[i * 2] = (gc * cell) / extent;
+    uv[i * 2 + 1] = 1 - (gr * cell) / extent;
+  };
+  for (let r2 = 0; r2 < nr; r2++) for (let c2 = 0; c2 < nc; c2++) put(r2 * nc + c2, gr0 + r2, gc0 + c2, 0);
+
+  const index: number[] = [];
+  for (let r2 = 0; r2 < nr - 1; r2++) {
+    for (let c2 = 0; c2 < nc - 1; c2++) {
+      const a = r2 * nc + c2, b = a + 1, d = a + nc, e = d + 1;
+      index.push(a, d, b, b, d, e);
+    }
+  }
+  // fartuch: obwód kafla powtórzony SKIRT m niżej, ściany w obie strony
+  const ring: number[] = [];
+  for (let c2 = 0; c2 < nc; c2++) ring.push(c2);
+  for (let r2 = 1; r2 < nr; r2++) ring.push(r2 * nc + nc - 1);
+  for (let c2 = nc - 2; c2 >= 0; c2--) ring.push((nr - 1) * nc + c2);
+  for (let r2 = nr - 2; r2 > 0; r2--) ring.push(r2 * nc);
+  const base = nc * nr;
+  ring.forEach((v, i) => put(base + i, gr0 + Math.floor(v / nc), gc0 + (v % nc), SKIRT));
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length], a2 = base + i, b2 = base + ((i + 1) % ring.length);
+    index.push(a, a2, b, b, a2, b2, a, b, a2, b, b2, a2);
+  }
+
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setIndex(index);
+  g.computeBoundingSphere();
+  return g;
+}
+
+/**
+ * Teren w pełnej rozdzielczości wokół kamery, w kaflach TILE x TILE m. Brakujące kafle (najbliższe najpierw)
+ * dobudowują się w każdej klatce do limitu czasu, dalekie są zwalniane; dzięki temu ruch po mapie nie zacina.
+ * Kafle trafiają do grupy bezpośrednio (bez Reacta), maska kafli mówi dalekiemu terenowi i drogom, gdzie już są.
+ */
+function NearTerrain({ site, map, material }: { site: Site; map: MapData; material: THREE.Material }) {
+  const camera = useThree((s) => s.camera);
+  const group = useRef<THREE.Group>(null);
+  const tiles = useRef(new Map<number, THREE.Mesh>());
+  const mat = useRef(material);
+
+  useEffect(() => {
+    mat.current = material;
+    tiles.current.forEach((m) => (m.material = material));
+  }, [material]);
+
+  // inna mapa albo miejsce bazy: kafle od nowa
+  useEffect(() => {
+    const live = tiles.current;
+    return () => {
+      live.forEach((m) => {
+        m.removeFromParent();
+        m.geometry.dispose();
+      });
+      live.clear();
+      const mask = nearMask(map.meta, TILE);
+      mask.data.fill(0);
+      mask.texture.needsUpdate = true;
+    };
+  }, [map, site]);
+
+  useFrame(() => {
+    const g = group.current;
+    if (!g) return;
+    const { meta } = map;
+    const mask = nearMask(meta, TILE);
+    const T = mask.tiles, half = meta.extent / 2;
+    const live = tiles.current;
+    // kamera w układzie świata gry
+    const cx = camera.position.x + site.x, cz = site.z - camera.position.z;
+    const dist = (key: number) => {
+      const c = key % T, r = Math.floor(key / T);
+      return Math.hypot(-half + (c + 0.5) * TILE - cx, half - (r + 0.5) * TILE - cz);
+    };
+    let changed = false;
+    for (const [key, mesh] of live) {
+      if (dist(key) < DROP_RADIUS) continue;
+      mesh.removeFromParent();
+      mesh.geometry.dispose();
+      live.delete(key);
+      mask.data[key] = 0;
+      changed = true;
+    }
+    const want: { d: number; key: number }[] = [];
+    const c0 = Math.max(0, Math.floor((cx - NEAR_RADIUS + half) / TILE)), c1 = Math.min(T - 1, Math.floor((cx + NEAR_RADIUS + half) / TILE));
+    const r0 = Math.max(0, Math.floor((half - cz - NEAR_RADIUS) / TILE)), r1 = Math.min(T - 1, Math.floor((half - cz + NEAR_RADIUS) / TILE));
+    for (let r = r0; r <= r1; r++) {
+      for (let c = c0; c <= c1; c++) {
+        const key = r * T + c;
+        if (live.has(key)) continue;
+        const d = dist(key);
+        if (d < NEAR_RADIUS) want.push({ d, key });
+      }
+    }
+    want.sort((a, b) => a.d - b.d);
+    const t0 = performance.now();
+    for (const { key } of want) {
+      if (performance.now() - t0 > TILE_BUDGET_MS) break;
+      const geometry = buildTile(map, site, key % T, Math.floor(key / T));
+      if (!geometry) continue;
+      const mesh = new THREE.Mesh(geometry, mat.current);
+      mesh.receiveShadow = true;
+      mesh.userData = { terrain: true };
+      g.add(mesh);
+      live.set(key, mesh);
+      mask.data[key] = 255;
+      changed = true;
+    }
+    if (changed) mask.texture.needsUpdate = true;
+  });
+
+  return <group ref={group} />;
+}
+
+const FAR_STEP = 16; // rozdzielczość terenu całej mapy (m)
+
+/**
+ * Reszta mapy: cała mapa w niskiej rozdzielczości, budowana raz. Nad kaflami pełnej rozdzielczości
+ * znika w shaderze (maska), a całość jest lekko obniżona, żeby nie przebijała przez kafle na ich krawędziach.
+ */
+function FarTerrain({ site, map, material }: { site: Site; map: MapData; material: THREE.Material }) {
+  const { meta, heightAt } = map;
+
+  const geometry = useMemo(() => {
+    const half = meta.extent / 2;
+    const n = Math.floor(meta.extent / FAR_STEP) + 1;
+    const pos = new Float32Array(n * n * 3);
+    const uv = new Float32Array(n * n * 2);
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) {
+        const wx = -half + c * FAR_STEP, wz = half - r * FAR_STEP;
+        const k = r * n + c;
+        pos.set([wx - site.x, heightAt(wx, wz) - site.elevation - 0.6, site.z - wz], k * 3);
+        uv.set([c / (n - 1), 1 - r / (n - 1)], k * 2);
+      }
+    }
+    const index = new Uint32Array((n - 1) * (n - 1) * 6);
+    let i = 0;
+    for (let r = 0; r < n - 1; r++) {
+      for (let c = 0; c < n - 1; c++) {
+        const a = r * n + c, b = a + 1, d = a + n, e = d + 1;
+        index.set([a, d, b, b, d, e], i);
+        i += 6;
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    g.setIndex(new THREE.BufferAttribute(index, 1));
+    g.computeVertexNormals();
+    return g;
+  }, [meta.extent, site.x, site.z, site.elevation, heightAt]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+
+  return <mesh geometry={geometry} material={material} receiveShadow />;
 }
 
 // --- Kamera: latanie (noclip) albo chodzenie z grawitacją ---

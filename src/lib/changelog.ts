@@ -29,6 +29,10 @@ export const CHANGELOG: Release[] = [
         en: 'The 3D ground reaches over 500 m from the camera and follows it: walk far from the base and the ground, roads and map objects load along the way.',
       },
       {
+        pl: 'Teren doczytuje się kawałkami po 128 m, kilka na klatkę, bez zacięć przy ruchu po mapie.',
+        en: 'The ground streams in 128 m tiles, a few per frame, with no stutter while moving across the map.',
+      },
+      {
         pl: 'Rzeźba terenu dokładnie z siatki wysokości gry, bez wygładzania.',
         en: 'Terrain shape taken exactly from the game heightmap, no smoothing.',
       },

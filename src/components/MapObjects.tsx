@@ -8,22 +8,24 @@ import type { Site } from '@/lib/terrain';
 // Jeden materiał dla wszystkich obiektów mapy: kolory z palety gry siedzą w wierzchołkach.
 const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true });
 
-interface Group {
-  guid: string;
-  kind: string;
-  rows: number[][];
-}
-
-/** Jedna część modelu (bryła albo liście) we wszystkich wystąpieniach typu. */
+/**
+ * Jedna część modelu (bryła albo liście) we wszystkich widocznych wystąpieniach typu.
+ * Pojemność to liczba wszystkich wystąpień typu na mapie, więc przy ruchu kamery siatka się nie przebudowuje:
+ * zmienia się tylko lista macierzy (`visible`: indeksy instancji w `matrices`).
+ */
 function InstancedPart({
   geometry,
   mat,
   matrices,
+  visible,
+  capacity,
   userData,
 }: {
   geometry: THREE.BufferGeometry;
   mat: THREE.Material;
   matrices: Float32Array;
+  visible: Int32Array;
+  capacity: number;
   userData: Record<string, boolean>;
 }) {
   const ref = useRef<THREE.InstancedMesh>(null);
@@ -31,52 +33,79 @@ function InstancedPart({
   useLayoutEffect(() => {
     const mesh = ref.current;
     if (!mesh) return;
-    mesh.instanceMatrix.array.set(matrices);
-    mesh.instanceMatrix.needsUpdate = true;
-    mesh.computeBoundingSphere();
-  }, [matrices]);
+    const attr = mesh.instanceMatrix;
+    attr.setUsage(THREE.DynamicDrawUsage);
+    const out = attr.array as Float32Array;
+    for (let i = 0; i < visible.length; i++) {
+      const src = visible[i] * 16, dst = i * 16;
+      for (let k = 0; k < 16; k++) out[dst + k] = matrices[src + k];
+    }
+    mesh.count = visible.length;
+    mesh.visible = visible.length > 0;
+    attr.clearUpdateRanges();
+    attr.addUpdateRange(0, visible.length * 16);
+    attr.needsUpdate = true;
+    if (visible.length) mesh.computeBoundingSphere();
+  }, [matrices, visible]);
 
-  return <instancedMesh ref={ref} args={[geometry, mat, matrices.length / 16]} castShadow receiveShadow userData={userData} />;
+  return <instancedMesh ref={ref} args={[geometry, mat, capacity]} castShadow receiveShadow userData={userData} />;
 }
 
-/** Jeden typ obiektu: wszystkie jego wystąpienia w wycinku jako InstancedMesh (po jednym na część modelu). */
-function InstancedType({ group, origin }: { group: Group; origin: { x: number; y: number; z: number } }) {
+/** Jeden typ obiektu: InstancedMesh na każdą część modelu. */
+function InstancedType({
+  guid,
+  kind,
+  matrices,
+  visible,
+  capacity,
+}: {
+  guid: string;
+  kind: string;
+  matrices: Float32Array;
+  visible: Int32Array;
+  capacity: number;
+}) {
   const [model, setModel] = useState<SceneryModel | null>(null);
 
   useEffect(() => {
     let alive = true;
-    loadSceneryModel(group.guid).then((g) => alive && setModel(g));
+    loadSceneryModel(guid).then((g) => alive && setModel(g));
     return () => {
       alive = false;
     };
-  }, [group.guid]);
-
-  const matrices = useMemo(() => {
-    const out = new Float32Array(group.rows.length * 16);
-    const m = new THREE.Matrix4();
-    group.rows.forEach((row, i) => instanceMatrix(row, origin, m).toArray(out, i * 16));
-    return out;
-  }, [group.rows, origin]);
+  }, [guid]);
 
   if (!model) return null;
-  const tree = group.kind === 'tree';
+  const tree = kind === 'tree';
   return (
     <>
       {model.solid && (
         // drzewa: w grze kolizja tylko na pniu, więc nie służą za podłoże przy chodzeniu
-        <InstancedPart geometry={model.solid} mat={material} matrices={matrices} userData={{ mapObject: true, tree }} />
+        <InstancedPart geometry={model.solid} mat={material} matrices={matrices} visible={visible} capacity={capacity} userData={{ mapObject: true, tree }} />
       )}
       {model.cutouts.map((c, i) => (
         // liście i siatki: przezroczyste karty bez kolizji, nie stoi się na nich i nie blokują ruchu
-        <InstancedPart key={i} geometry={c.geometry} mat={c.material} matrices={matrices} userData={{ mapObject: true, tree: true, cutout: true }} />
+        <InstancedPart
+          key={i}
+          geometry={c.geometry}
+          mat={c.material}
+          matrices={matrices}
+          visible={visible}
+          capacity={capacity}
+          userData={{ mapObject: true, tree: true, cutout: true }}
+        />
       ))}
     </>
   );
 }
 
+const NONE = new Int32Array(0);
+
 /**
  * Budynki, skały i drzewa z mapy gry w promieniu `radius` od `center` (punkt sceny), 1:1 z plików poziomu.
  * `lift`: skybase opuszcza świat o tę wysokość.
+ * Typ, który raz się pojawił, zostaje zamontowany (przy wyjściu z zasięgu ma 0 instancji), więc przesuwanie
+ * obszaru nie tworzy siatek od nowa.
  */
 export default function MapObjects({
   site,
@@ -99,27 +128,60 @@ export default function MapObjects({
     };
   }, [site.map]);
 
-  const groups = useMemo(() => {
+  const origin = useMemo(() => ({ x: site.x, y: site.elevation + lift, z: site.z }), [site.x, site.z, site.elevation, lift]);
+
+  // macierze wszystkich instancji mapy, pogrupowane po typie (raz na mapę i miejsce bazy)
+  const types = useMemo(() => {
     if (!scene) return [];
-    const byType = new Map<number, number[][]>();
+    const rows = scene.types.map((): number[][] => []);
+    scene.inst.forEach((row) => rows[row[0]].push(row));
+    const m = new THREE.Matrix4();
+    return rows.map((list, t) => {
+      const matrices = new Float32Array(list.length * 16);
+      const xz = new Float32Array(list.length * 2);
+      list.forEach((row, i) => {
+        instanceMatrix(row, origin, m).toArray(matrices, i * 16);
+        xz[i * 2] = row[1];
+        xz[i * 2 + 1] = row[3];
+      });
+      return { guid: scene.types[t].guid, kind: scene.types[t].kind, matrices, xz };
+    });
+  }, [scene, origin]);
+
+  // indeksy wystąpień w zasięgu, dla każdego typu
+  const visible = useMemo(() => {
     const r2 = radius * radius;
     const cx = site.x + center[0], cz = site.z - center[1];
-    scene.inst.forEach((row) => {
-      const dx = row[1] - cx, dz = row[3] - cz;
-      if (dx * dx + dz * dz > r2) return;
-      let list = byType.get(row[0]);
-      if (!list) byType.set(row[0], (list = []));
-      list.push(row);
+    return types.map(({ xz }) => {
+      const out: number[] = [];
+      for (let i = 0; i < xz.length / 2; i++) {
+        const dx = xz[i * 2] - cx, dz = xz[i * 2 + 1] - cz;
+        if (dx * dx + dz * dz <= r2) out.push(i);
+      }
+      return out.length ? Int32Array.from(out) : NONE;
     });
-    return [...byType.entries()].map(([t, rows]): Group => ({ guid: scene.types[t].guid, kind: scene.types[t].kind, rows }));
-  }, [scene, site.x, site.z, radius, center]);
+  }, [types, site.x, site.z, radius, center]);
 
-  const origin = useMemo(() => ({ x: site.x, y: site.elevation + lift, z: site.z }), [site.x, site.z, site.elevation, lift]);
+  // typy, które choć raz były w zasięgu: zostają zamontowane do zmiany mapy
+  const [seen, setSeen] = useState<{ types: typeof types; ids: Set<number> }>({ types, ids: new Set() });
+  let ids = seen.types === types ? seen.ids : new Set<number>();
+  if (visible.some((v, t) => v.length && !ids.has(t))) {
+    ids = new Set(ids);
+    visible.forEach((v, t) => v.length && ids.add(t));
+  }
+  if (seen.types !== types || seen.ids !== ids) setSeen({ types, ids });
 
   return (
     <>
-      {groups.map((g) => (
-        <InstancedType key={`${g.guid}-${g.rows.length}`} group={g} origin={origin} />
+      {[...ids].map((t) => (
+        <InstancedType
+          key={types[t].guid}
+          guid={types[t].guid}
+          kind={types[t].kind}
+          matrices={types[t].matrices}
+          visible={visible[t] ?? NONE}
+          capacity={Math.max(1, types[t].xz.length / 2)}
+        />
       ))}
     </>
   );

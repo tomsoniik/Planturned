@@ -44,6 +44,10 @@ export const CHANGELOG: Release[] = [
         pl: 'Nowe komendy: /spawn, a /sky i /ground przenoszą kamerę na wysokość nad terenem. Stare skybase\'y same przechodzą na swoją wysokość.',
         en: 'New command /spawn; /sky and /ground move the camera to a height above the ground. Old skybases move to their height on their own.',
       },
+      {
+        pl: 'Plan 2D liczy piętra od najniższego poziomu z elementami i otwiera się na nim, więc skybase po przeniesieniu na swoją wysokość dalej jest widoczny.',
+        en: 'The 2D plan counts floors from the lowest level with pieces and opens on it, so a skybase moved to its height stays visible.',
+      },
     ],
   },
   {

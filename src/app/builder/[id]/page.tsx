@@ -275,6 +275,8 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
     }
     setProject(p);
     setPlacedItems(p.items);
+    // plan otwiera się na najniższym poziomie z elementami (skybase stoi np. na poziomie 9, nie na 0)
+    if (p.items.length) setCurrentFloor(Math.min(...p.items.map(planFloor)));
     lastSavedRef.current = JSON.stringify(p.items);
     if (window.innerWidth < 900) setIsSidebarCollapsed(true);
   }, [id]);
@@ -316,14 +318,15 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   // Skybase nie może przebić twardego limitu budowania (1024 m świata, docs/sky-limits.md); zapas na kilka pięter.
   const maxSkyHeight = Math.max(20, Math.floor((1024 - (project?.site?.elevation ?? 0) - 30) / 5) * 5);
 
-  // Piętra w 2D: presety Parter-3, lista rośnie, gdy w 3D zbudowano wyżej.
+  // Piętra w 2D liczone od najniższego poziomu z elementami (to on jest "Parterem"): elementy z 3D stoją
+  // na wysokości terenu albo wysoko (skybase), więc piętro = najbliższy pełny poziom, np. 9 dla skybase'a na 40 m.
+  const floorBase = useMemo(() => (placedItems.length ? Math.min(...placedItems.map(planFloor)) : 0), [placedItems]);
+  // Lista: parter i 3 piętra, piętra z elementami oraz jedno nad najwyższym (bez setek pustych przycisków).
   const floorsList = useMemo(() => {
-    // elementy z 3D stoją na wysokości terenu albo wysoko (skybase): piętro = najbliższy pełny poziom.
-    // Lista: parter i 3 piętra, piętra z elementami oraz jedno nad najwyższym (bez setek pustych przycisków).
     const levels = placedItems.map(planFloor);
-    const set = new Set([...FLOORS, ...levels, Math.max(FLOORS.length - 1, ...levels) + 1]);
+    const set = new Set([...FLOORS.map(f => f + floorBase), ...levels, Math.max(floorBase + FLOORS.length - 1, ...levels) + 1]);
     return [...set].sort((a, b) => a - b);
-  }, [placedItems]);
+  }, [placedItems, floorBase]);
 
   const setSite = (site: Site | undefined) => {
     if (!project) return;
@@ -1045,7 +1048,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
             <div className={styles.segmented} role="group" aria-label={t.editor.floor}>
               {floorsList.map(lvl => (
                 <button key={lvl} data-on={currentFloor === lvl || undefined} onClick={() => setCurrentFloor(lvl)}>
-                  {lvl === 0 ? t.editor.groundFloor : lvl}
+                  {lvl === floorBase ? t.editor.groundFloor : lvl - floorBase}
                 </button>
               ))}
             </div>
@@ -1496,7 +1499,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
               )}
 
               <div className={styles.statusbar}>
-                <span>{t.editor.floorLabel(currentFloor)}: {floorCount}</span>
+                <span>{t.editor.floorLabel(currentFloor - floorBase)}: {floorCount}</span>
                 <span>x {Math.round(mousePos.x)}, y {Math.round(mousePos.y)}</span>
                 <span className={styles.zoom}>
                   <button onClick={() => {

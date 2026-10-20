@@ -68,7 +68,7 @@ Bez eksportu aplikacja też działa: struktury są wtedy prostymi bryłami, a za
 `npm run export:game` uruchamia `scripts/export_game_data.py`. Skrypt sam znajduje Unturned w bibliotekach Steam.
 Ścieżkę można też podać ręcznie: `python scripts/export_game_data.py "D:\Steam\steamapps\common\Unturned"`.
 
-Wymagania: Python 3.10+ oraz `pip install UnityPy numpy pillow`. Same tekstury terenu i drogi: `python scripts/export_game_data.py --terrain`.
+Wymagania: Python 3.10+ oraz `pip install UnityPy numpy pillow`. Same tekstury terenu i drogi: `python scripts/export_game_data.py --terrain`. Same modele obiektów i drzew: `--scenery`.
 
 Co powstaje (pliki gry, tylko do użytku lokalnego, są w `.gitignore`):
 

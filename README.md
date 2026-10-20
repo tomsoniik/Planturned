@@ -68,7 +68,7 @@ The app works without the export too: structures are simple boxes and the Terrai
 `npm run export:game` runs `scripts/export_game_data.py`. The script finds Unturned in your Steam libraries on its own.
 You can also pass the path: `python scripts/export_game_data.py "D:\Steam\steamapps\common\Unturned"`.
 
-Requirements: Python 3.10+ and `pip install UnityPy numpy pillow`. Ground textures and roads only: `python scripts/export_game_data.py --terrain`.
+Requirements: Python 3.10+ and `pip install UnityPy numpy pillow`. Ground textures and roads only: `python scripts/export_game_data.py --terrain`. Map object and tree models only: `--scenery`.
 
 What it writes (game files, for local use only, listed in `.gitignore`):
 

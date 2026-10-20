@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import styles from './Builder3D.module.css';
@@ -39,8 +39,9 @@ const S = SIDE * SCALE; // bok podłogi: 6 m
 const H = LEVEL_HEIGHT; // wysokość poziomu: 4,5 m
 const TOP = 0.25; // wierzch podłogi nad jej pivotem
 const WALL_BASE = 0.125; // spód ścian, filarów i słupków nad poziomem
-const TERRAIN_SPAN = 680; // bok wycinka terenu w 3D
-const OBJECT_RADIUS = 330; // promień, w którym wczytujemy obiekty mapy
+const TERRAIN_SPAN = 1024; // bok szczegółowego wycinka terenu w 3D (wokół kamery)
+const OBJECT_RADIUS = 480; // promień wokół środka wycinka, w którym wczytujemy obiekty mapy
+const CHUNK = 128; // co ile metrów wycinek terenu i obiekty przesuwają się za kamerą
 
 type Models = Map<number, GameModel>;
 
@@ -215,25 +216,217 @@ export function Item3D({
   );
 }
 
+// --- Wiele struktur jednym wywołaniem rysowania ---
+
+interface BatchGroup {
+  key: string;
+  geometry: THREE.BufferGeometry;
+  material: THREE.Material;
+  /** Wysokość pivotu nad poziomem piętra. */
+  y: number;
+  items: PlacedItem[];
+}
+
+// Materiały wspólne dla wszystkich instancji: bez podświetlenia, jak Piece.
+const batchMaterials = new Map<string, THREE.MeshStandardMaterial>();
+
+function batchMaterial(palette: boolean, color: string, metal: boolean, clipY: number | null) {
+  const key = `${palette}|${color}|${metal}|${clipY}`;
+  let m = batchMaterials.get(key);
+  if (!m) {
+    m = new THREE.MeshStandardMaterial({
+      vertexColors: palette,
+      color: palette ? '#ffffff' : color,
+      roughness: metal ? 0.55 : 0.9,
+      metalness: metal ? 0.2 : 0,
+      flatShading: true,
+      clippingPlanes: clipY === null ? null : [new THREE.Plane(new THREE.Vector3(0, 1, 0), -clipY)],
+      side: clipY === null ? THREE.FrontSide : THREE.DoubleSide,
+    });
+    batchMaterials.set(key, m);
+  }
+  return m;
+}
+
+/** Wszystkie wystąpienia jednego typu elementu jako InstancedMesh; `userData.itemIds[instanceId]` to id elementu (celowanie, wyburzanie). */
+function InstancedGroup({ group, hidden }: { group: BatchGroup; hidden: Set<string> }) {
+  const ref = useRef<THREE.InstancedMesh>(null);
+
+  useLayoutEffect(() => {
+    const mesh = ref.current;
+    if (!mesh) return;
+    const ids: string[] = [];
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3();
+    const one = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
+    for (const item of group.items) {
+      if (hidden.has(item.id)) continue;
+      p.set(item.x * SCALE, (item.floor || 0) * H + group.y, item.y * SCALE);
+      q.setFromAxisAngle(up, (-item.rotation * Math.PI) / 180);
+      mesh.setMatrixAt(ids.length, m.compose(p, q, one));
+      ids.push(item.id);
+    }
+    mesh.count = ids.length;
+    mesh.userData = { itemIds: ids };
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }, [group, hidden]);
+
+  return <instancedMesh ref={ref} args={[group.geometry, group.material, group.items.length]} castShadow receiveShadow />;
+}
+
+/**
+ * Postawione elementy: jedno wywołanie rysowania na typ (zamiast jednego na element), więc duże bazy nie tną.
+ * Zaznaczone i celowane elementy idą osobno przez Item3D, z podświetleniem.
+ */
+function Structures({
+  items,
+  models,
+  selected,
+  targetId,
+  showBedAreas,
+  noSkirt,
+}: {
+  items: PlacedItem[];
+  models: Models;
+  selected: string[];
+  targetId: string | null;
+  showBedAreas: boolean;
+  noSkirt: boolean;
+}) {
+  const { groups, loose } = useMemo(() => {
+    const byKey = new Map<string, BatchGroup>();
+    const loose: PlacedItem[] = [];
+    for (const item of items) {
+      const def = findDef(item.itemId);
+      const model = def?.gameId !== undefined ? models.get(def.gameId) : undefined;
+      if (!def || !model) {
+        loose.push(item);
+        continue;
+      }
+      const floorPart = def.part === 'floor' || def.part === 'tri_floor';
+      // skybase: fundament podłogi przycięty płaszczyzną na wysokości jej piętra
+      const clipY = noSkirt && floorPart ? (item.floor || 0) * H - 0.3 : null;
+      const key = `${def.id}|${clipY}`;
+      let g = byKey.get(key);
+      if (!g) {
+        const palette = model.hasColors;
+        const material = batchMaterial(palette, model.color || def.color, def.material === 'metal', clipY);
+        byKey.set(key, (g = { key, geometry: model.geometry, material, y: pieceY(def, model), items: [] }));
+      }
+      g.items.push(item);
+    }
+    return { groups: [...byKey.values()], loose };
+  }, [items, models, noSkirt]);
+
+  const hidden = useMemo(() => new Set(targetId ? [...selected, targetId] : selected), [selected, targetId]);
+  const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
+  const special = [...hidden].map((id) => byId.get(id)).filter((i): i is PlacedItem => !!i && !loose.includes(i));
+
+  return (
+    <>
+      {groups.map((g) => (
+        <InstancedGroup key={`${g.key}-${g.items.length}`} group={g} hidden={hidden} />
+      ))}
+      {[...loose, ...special].map((item) => (
+        <Item3D
+          key={item.id}
+          item={item}
+          models={models}
+          isSelected={selected.includes(item.id)}
+          isTargeted={targetId === item.id}
+          noSkirt={noSkirt}
+        />
+      ))}
+      {showBedAreas &&
+        items
+          .filter((i) => findDef(i.itemId)?.shape === 'bed')
+          .map((i) => (
+            <mesh key={i.id} position={[i.x * SCALE, (i.floor || 0) * H + TOP + 0.05, i.y * SCALE]} rotation={[-Math.PI / 2, 0, 0]}>
+              <ringGeometry args={[27 - 0.15, 27, 96]} />
+              <meshBasicMaterial color="#8dc46f" transparent opacity={0.7} depthWrite={false} />
+            </mesh>
+          ))}
+    </>
+  );
+}
+
+/** Id elementu trafionego promieniem: zwykła siatka (itemId) albo instancja z partii (itemIds[instanceId]). */
+function hitItemId(hit: THREE.Intersection): string | null {
+  const d = hit.object.userData;
+  return (d.itemId as string | undefined) ?? (hit.instanceId !== undefined ? (d.itemIds?.[hit.instanceId] as string | undefined) : undefined) ?? null;
+}
+
 // --- Teren mapy z gry ---
 
-function TerrainPatch({ site, map }: { site: Site; map: MapData }) {
-  const { meta, heightAt } = map;
+/**
+ * Środek szczegółowego wycinka mapy (współrzędne sceny): podąża za kamerą skokami co CHUNK metrów,
+ * więc da się odejść daleko od bazy i dalej mieć pełny teren i obiekty. Histereza: bez skakania na granicy.
+ */
+function useChunkCenter(): [number, number] {
+  const camera = useThree((s) => s.camera);
+  const [center, setCenter] = useState<[number, number]>([0, 0]);
+  useFrame(() => {
+    const { x, z } = camera.position;
+    if (Math.abs(x - center[0]) < CHUNK * 0.75 && Math.abs(z - center[1]) < CHUNK * 0.75) return;
+    setCenter([Math.round(x / CHUNK) * CHUNK, Math.round(z / CHUNK) * CHUNK]);
+  });
+  return center;
+}
+
+/** Teren, drogi i obiekty mapy wokół kamery. */
+function MapSurroundings({ site, lift, map }: { site: Site; lift: number; map: MapData }) {
+  const center = useChunkCenter();
+  const lifted = useMemo(() => ({ ...site, elevation: site.elevation + lift }), [site, lift]);
+  return (
+    <>
+      <TerrainPatch site={lifted} map={map} center={center} />
+      <MapObjects site={site} lift={lift} radius={OBJECT_RADIUS} center={center} />
+    </>
+  );
+}
+
+function TerrainPatch({ site, map, center }: { site: Site; map: MapData; center: [number, number] }) {
+  const { meta } = map;
   // Tekstury terenu z gry (splatmapy); bez nich (stary eksport) satelita z Map.png
   const ground = useGroundMaterial(map, site);
+  // środek wycinka w układzie świata gry
+  const wx = site.x + center[0], wz = site.z - center[1];
 
+  // Wierzchołki dokładnie w punktach siatki wysokości gry (co meta.cell), bez interpolacji
   const geometry = useMemo(() => {
-    const seg = Math.round(TERRAIN_SPAN / 2.5);
-    const g = new THREE.PlaneGeometry(TERRAIN_SPAN, TERRAIN_SPAN, seg, seg);
-    g.rotateX(-Math.PI / 2);
-    const pos = g.attributes.position as THREE.BufferAttribute;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i), z = pos.getZ(i);
-      pos.setY(i, heightAt(site.x + x, site.z - z) - site.elevation);
+    const { cell, grid, extent } = meta;
+    const half = extent / 2, span = TERRAIN_SPAN / 2;
+    const c0 = Math.max(0, Math.floor((wx - span + half) / cell)), c1 = Math.min(grid - 1, Math.ceil((wx + span + half) / cell));
+    const r0 = Math.max(0, Math.floor((half - wz - span) / cell)), r1 = Math.min(grid - 1, Math.ceil((half - wz + span) / cell));
+    const nc = c1 - c0 + 1, nr = r1 - r0 + 1;
+    const pos = new Float32Array(nc * nr * 3);
+    const uv = new Float32Array(nc * nr * 2);
+    for (let r = 0; r < nr; r++) {
+      for (let c = 0; c < nc; c++) {
+        const x = -half + (c0 + c) * cell, z = half - (r0 + r) * cell;
+        const k = r * nc + c;
+        pos.set([x - site.x, map.heights[(r0 + r) * grid + c0 + c] - site.elevation, site.z - z], k * 3);
+        // UV satelity (stary eksport): kwadrat TERRAIN_SPAN wokół środka wycinka, v = 1 na północy
+        uv.set([(x - wx + span) / TERRAIN_SPAN, (z - wz + span) / TERRAIN_SPAN], k * 2);
+      }
     }
+    const index = new Uint32Array((nc - 1) * (nr - 1) * 6);
+    let i = 0;
+    for (let r = 0; r < nr - 1; r++) {
+      for (let c = 0; c < nc - 1; c++) {
+        const a = r * nc + c, b = a + 1, d = a + nc, e = d + 1;
+        index.set([a, d, b, b, d, e], i);
+        i += 6;
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    g.setIndex(new THREE.BufferAttribute(index, 1));
     g.computeVertexNormals();
     return g;
-  }, [site.x, site.z, site.elevation, heightAt]);
+  }, [meta, map.heights, wx, wz, site.x, site.z, site.elevation]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
 
   const [texture, setTexture] = useState<THREE.CanvasTexture | null>(null);
   useEffect(() => {
@@ -247,7 +440,7 @@ function TerrainPatch({ site, map }: { site: Site; map: MapData }) {
     const ctx = canvas.getContext('2d')!;
     ctx.fillStyle = '#3c4a2c';
     ctx.fillRect(0, 0, px, px);
-    const tiles = tilesInRange(meta, site.x, site.z, half);
+    const tiles = tilesInRange(meta, wx, wz, half);
     Promise.all(
       tiles.map(
         (t) =>
@@ -255,8 +448,8 @@ function TerrainPatch({ site, map }: { site: Site; map: MapData }) {
             const img = new Image();
             img.onload = () => {
               // Lewy górny róg kafla względem lewego górnego rogu wycinka (zachód, północ).
-              const dx = (t.left - (site.x - half)) / metersPerPx;
-              const dy = (site.z + half - t.top) / metersPerPx;
+              const dx = (t.left - (wx - half)) / metersPerPx;
+              const dy = (wz + half - t.top) / metersPerPx;
               ctx.drawImage(img, dx, dy, t.size / metersPerPx, t.size / metersPerPx);
               resolve();
             };
@@ -274,7 +467,7 @@ function TerrainPatch({ site, map }: { site: Site; map: MapData }) {
     return () => {
       alive = false;
     };
-  }, [meta, site.x, site.z]);
+  }, [meta, wx, wz]);
 
   return (
     <>
@@ -286,8 +479,8 @@ function TerrainPatch({ site, map }: { site: Site; map: MapData }) {
           <meshStandardMaterial key={texture ? 'tex' : 'plain'} map={texture} color={texture ? '#ffffff' : '#3c4a2c'} roughness={1} />
         </mesh>
       )}
-      <GameRoads site={site} map={map} span={TERRAIN_SPAN / 2 + 40} />
-      <FarTerrain site={site} map={map} ground={ground} />
+      <GameRoads site={site} map={map} span={TERRAIN_SPAN / 2 + 40} center={center} />
+      <FarTerrain site={site} map={map} ground={ground} center={center} />
       {meta.seaLevel !== null && (
         <mesh position={[0, meta.seaLevel - site.elevation, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[meta.extent * 2.5, meta.extent * 2.5]} />
@@ -304,10 +497,11 @@ const FAR_STEP = 16; // rozdzielczość terenu całej mapy (m)
  * Reszta mapy poza wycinkiem: cała mapa w niskiej rozdzielczości z podglądem satelity.
  * Widać ją głównie ze skybase; środek (szczegółowy wycinek) jest wycięty, a całość lekko obniżona, żeby nie przebijała.
  */
-function FarTerrain({ site, map, ground }: { site: Site; map: MapData; ground: THREE.MeshStandardMaterial | null }) {
+function FarTerrain({ site, map, ground, center }: { site: Site; map: MapData; ground: THREE.MeshStandardMaterial | null; center: [number, number] }) {
   const { meta, heightAt } = map;
 
-  const geometry = useMemo(() => {
+  // Wierzchołki całej mapy liczone raz; przy przesunięciu wycinka zmienia się tylko indeks.
+  const attrs = useMemo(() => {
     const half = meta.extent / 2;
     const n = Math.floor(meta.extent / FAR_STEP) + 1;
     const pos = new Float32Array(n * n * 3);
@@ -320,9 +514,17 @@ function FarTerrain({ site, map, ground }: { site: Site; map: MapData; ground: T
         uv.set([c / (n - 1), 1 - r / (n - 1)], k * 2);
       }
     }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.computeVertexNormals();
+    return { n, position: g.attributes.position, normal: g.attributes.normal, uv: new THREE.BufferAttribute(uv, 2) };
+  }, [meta.extent, site.x, site.z, site.elevation, heightAt]);
+
+  const geometry = useMemo(() => {
+    const { n, position } = attrs;
     // Pomijamy kwadraty leżące w całości wewnątrz szczegółowego wycinka.
     const inner = TERRAIN_SPAN / 2 - FAR_STEP;
-    const inside = (k: number) => Math.abs(pos[k * 3]) < inner && Math.abs(pos[k * 3 + 2]) < inner;
+    const inside = (k: number) => Math.abs(position.getX(k) - center[0]) < inner && Math.abs(position.getZ(k) - center[1]) < inner;
     const index: number[] = [];
     for (let r = 0; r < n - 1; r++) {
       for (let c = 0; c < n - 1; c++) {
@@ -332,12 +534,15 @@ function FarTerrain({ site, map, ground }: { site: Site; map: MapData; ground: T
       }
     }
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    g.setAttribute('position', attrs.position);
+    g.setAttribute('normal', attrs.normal);
+    g.setAttribute('uv', attrs.uv);
     g.setIndex(index);
-    g.computeVertexNormals();
+    g.computeBoundingSphere();
     return g;
-  }, [meta.extent, site.x, site.z, site.elevation, heightAt]);
+  }, [attrs, center]);
+  // zwalnia też wspólne bufory wierzchołków; następna geometria wgra je ponownie (raz na przesunięcie wycinka)
+  useEffect(() => () => geometry.dispose(), [geometry]);
 
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
   useEffect(() => {
@@ -563,9 +768,9 @@ function PlayerCamera({
     // Promienie tylko na struktury, obiekty mapy i drogi; wysokość terenu daje groundAt (bez siatki 74 tys. trójkątów)
     const meshes: THREE.Object3D[] = [];
     scene.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh && (o.userData.itemId || o.userData.road || o.userData.mapObject)) meshes.push(o);
+      if ((o as THREE.Mesh).isMesh && (o.userData.itemId || o.userData.itemIds || o.userData.road || o.userData.mapObject)) meshes.push(o);
     });
-    const solids = meshes.filter((m) => !m.userData.road);
+    const solids = meshes.filter((m) => !m.userData.road && !m.userData.cutout);
     const floors = meshes.filter((m) => !m.userData.tree);
 
     // Kucanie i czołganie przełączane klawiszem (nie w wodzie)
@@ -754,7 +959,7 @@ const EMPTY_AIM: Aim = { preview: null, valid: false, targetId: null, surface: n
 function structureMeshes(scene: THREE.Scene) {
   const out: THREE.Object3D[] = [];
   scene.traverse((o) => {
-    if ((o as THREE.Mesh).isMesh && o.userData.itemId) out.push(o);
+    if ((o as THREE.Mesh).isMesh && (o.userData.itemId || o.userData.itemIds)) out.push(o);
   });
   return out;
 }
@@ -827,7 +1032,7 @@ function AimController({
 
     if (!activeDef || activeDef.shape === 'remover') {
       if (activeDef) {
-        next = { ...EMPTY_AIM, targetId: hit ? (hit.object.userData.itemId as string) : null };
+        next = { ...EMPTY_AIM, targetId: hit ? hitItemId(hit) : null };
       }
     } else {
       // Ściany i filary jak w grze: wolny slot najbliżej celownika (do 8 m), nawet gdy promień trafia w pustkę.
@@ -1102,10 +1307,7 @@ export default function Builder3D({
         />
 
         {site && activeMap ? (
-          <>
-            <TerrainPatch site={{ ...site, elevation: site.elevation + lift }} map={activeMap} />
-            <MapObjects site={site} lift={lift} radius={OBJECT_RADIUS} />
-          </>
+          <MapSurroundings site={site} lift={lift} map={activeMap} />
         ) : (
           <Meadow lift={lift} night={night} />
         )}
@@ -1124,17 +1326,14 @@ export default function Builder3D({
           </mesh>
         )}
 
-        {placedItems.map((item) => (
-          <Item3D
-            key={item.id}
-            item={item}
-            models={models}
-            isSelected={selectedItemIds.includes(item.id)}
-            isTargeted={targeting && aim.targetId === item.id}
-            showBedAreas={showBedAreas}
-            noSkirt={sky}
-          />
-        ))}
+        <Structures
+          items={placedItems}
+          models={models}
+          selected={selectedItemIds}
+          targetId={targeting ? aim.targetId : null}
+          showBedAreas={showBedAreas}
+          noSkirt={sky}
+        />
 
         {aim.preview && ghostDef && (
           <group

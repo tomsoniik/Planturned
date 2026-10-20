@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { instanceMatrix, loadMapScene, loadSceneryModel, type MapScene } from '@/lib/mapScene';
+import { instanceMatrix, loadMapScene, loadSceneryModel, type MapScene, type SceneryModel } from '@/lib/mapScene';
 import type { Site } from '@/lib/terrain';
 
 // Jeden materiał dla wszystkich obiektów mapy: kolory z palety gry siedzą w wierzchołkach.
@@ -14,46 +14,81 @@ interface Group {
   rows: number[][];
 }
 
-/** Jeden typ obiektu: wszystkie jego wystąpienia w wycinku jako InstancedMesh. */
-function InstancedType({ group, origin }: { group: Group; origin: { x: number; y: number; z: number } }) {
-  const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null);
+/** Jedna część modelu (bryła albo liście) we wszystkich wystąpieniach typu. */
+function InstancedPart({
+  geometry,
+  mat,
+  matrices,
+  userData,
+}: {
+  geometry: THREE.BufferGeometry;
+  mat: THREE.Material;
+  matrices: Float32Array;
+  userData: Record<string, boolean>;
+}) {
   const ref = useRef<THREE.InstancedMesh>(null);
+
+  useLayoutEffect(() => {
+    const mesh = ref.current;
+    if (!mesh) return;
+    mesh.instanceMatrix.array.set(matrices);
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }, [matrices]);
+
+  return <instancedMesh ref={ref} args={[geometry, mat, matrices.length / 16]} castShadow receiveShadow userData={userData} />;
+}
+
+/** Jeden typ obiektu: wszystkie jego wystąpienia w wycinku jako InstancedMesh (po jednym na część modelu). */
+function InstancedType({ group, origin }: { group: Group; origin: { x: number; y: number; z: number } }) {
+  const [model, setModel] = useState<SceneryModel | null>(null);
 
   useEffect(() => {
     let alive = true;
-    loadSceneryModel(group.guid).then((g) => alive && setGeometry(g));
+    loadSceneryModel(group.guid).then((g) => alive && setModel(g));
     return () => {
       alive = false;
     };
   }, [group.guid]);
 
-  useLayoutEffect(() => {
-    const mesh = ref.current;
-    if (!mesh || !geometry) return;
+  const matrices = useMemo(() => {
+    const out = new Float32Array(group.rows.length * 16);
     const m = new THREE.Matrix4();
-    group.rows.forEach((row, i) => mesh.setMatrixAt(i, instanceMatrix(row, origin, m)));
-    mesh.instanceMatrix.needsUpdate = true;
-    mesh.computeBoundingSphere();
-  }, [geometry, group.rows, origin]);
+    group.rows.forEach((row, i) => instanceMatrix(row, origin, m).toArray(out, i * 16));
+    return out;
+  }, [group.rows, origin]);
 
-  if (!geometry) return null;
+  if (!model) return null;
+  const tree = group.kind === 'tree';
   return (
-    <instancedMesh
-      ref={ref}
-      args={[geometry, material, group.rows.length]}
-      castShadow
-      receiveShadow
-      // drzewa: w grze kolizja tylko na pniu, więc nie służą za podłoże przy chodzeniu
-      userData={{ mapObject: true, tree: group.kind === 'tree' }}
-    />
+    <>
+      {model.solid && (
+        // drzewa: w grze kolizja tylko na pniu, więc nie służą za podłoże przy chodzeniu
+        <InstancedPart geometry={model.solid} mat={material} matrices={matrices} userData={{ mapObject: true, tree }} />
+      )}
+      {model.cutouts.map((c, i) => (
+        // liście i siatki: przezroczyste karty bez kolizji, nie stoi się na nich i nie blokują ruchu
+        <InstancedPart key={i} geometry={c.geometry} mat={c.material} matrices={matrices} userData={{ mapObject: true, tree: true, cutout: true }} />
+      ))}
+    </>
   );
 }
 
 /**
- * Budynki, skały i drzewa z mapy gry w promieniu `radius` od miejsca bazy, 1:1 z plików poziomu.
+ * Budynki, skały i drzewa z mapy gry w promieniu `radius` od `center` (punkt sceny), 1:1 z plików poziomu.
  * `lift`: skybase opuszcza świat o tę wysokość.
  */
-export default function MapObjects({ site, lift, radius }: { site: Site; lift: number; radius: number }) {
+export default function MapObjects({
+  site,
+  lift,
+  radius,
+  center,
+}: {
+  site: Site;
+  lift: number;
+  radius: number;
+  center: [number, number];
+}) {
   const [scene, setScene] = useState<MapScene | null>(null);
 
   useEffect(() => {
@@ -68,15 +103,16 @@ export default function MapObjects({ site, lift, radius }: { site: Site; lift: n
     if (!scene) return [];
     const byType = new Map<number, number[][]>();
     const r2 = radius * radius;
+    const cx = site.x + center[0], cz = site.z - center[1];
     scene.inst.forEach((row) => {
-      const dx = row[1] - site.x, dz = row[3] - site.z;
+      const dx = row[1] - cx, dz = row[3] - cz;
       if (dx * dx + dz * dz > r2) return;
       let list = byType.get(row[0]);
       if (!list) byType.set(row[0], (list = []));
       list.push(row);
     });
     return [...byType.entries()].map(([t, rows]): Group => ({ guid: scene.types[t].guid, kind: scene.types[t].kind, rows }));
-  }, [scene, site.x, site.z, radius]);
+  }, [scene, site.x, site.z, radius, center]);
 
   const origin = useMemo(() => ({ x: site.x, y: site.elevation + lift, z: site.z }), [site.x, site.z, site.elevation, lift]);
 

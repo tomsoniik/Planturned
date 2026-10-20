@@ -216,6 +216,7 @@ function buildRoad(
   heightAt: (x: number, z: number) => number,
   site: Site,
   span: number,
+  center: [number, number],
 ): { pos: number[]; nrm: number[]; uv: number[]; idx: number[] } | null {
   const J = road.j;
   if (J.length < 2) return null;
@@ -241,8 +242,12 @@ function buildRoad(
   }
   samples.push(road.loop ? { i: 0, t: 0 } : { i: J.length - 2, t: 1 });
 
-  // szybkie odrzucenie dróg poza wycinkiem
-  const near = J.some((j) => Math.abs(j[0] - site.x) < span && Math.abs(j[2] - site.z) < span);
+  // szybkie odrzucenie dróg poza wycinkiem (jego środek w układzie świata); odcinek między węzłami też się liczy
+  const cx = site.x + center[0], cz = site.z - center[1];
+  const near = J.some((j, k) => {
+    const n = J[(k + 1) % J.length];
+    return Math.min(j[0], n[0]) < cx + span && Math.max(j[0], n[0]) > cx - span && Math.min(j[2], n[2]) < cz + span && Math.max(j[2], n[2]) > cz - span;
+  });
   if (!near) return null;
 
   const normalAt = (x: number, z: number): V3 => {
@@ -303,7 +308,7 @@ function buildRoad(
 }
 
 /** Drogi z mapy gry w obrębie wycinka terenu. */
-export function GameRoads({ site, map, span }: { site: Site; map: MapData; span: number }) {
+export function GameRoads({ site, map, span, center }: { site: Site; map: MapData; span: number; center: [number, number] }) {
   const [file, setFile] = useState<RoadsFile | null>(null);
   useEffect(() => {
     let alive = true;
@@ -320,7 +325,7 @@ export function GameRoads({ site, map, span }: { site: Site; map: MapData; span:
     for (const road of file.roads) {
       const params = (road.a && file.assets[road.a]) || file.materials[road.m];
       if (!params) continue;
-      const part = buildRoad(road, params, map.heightAt, site, span);
+      const part = buildRoad(road, params, map.heightAt, site, span, center);
       if (!part) continue;
       const key = params.tex;
       if (!groups.has(key)) groups.set(key, { params, parts: [] });
@@ -342,7 +347,7 @@ export function GameRoads({ site, map, span }: { site: Site; map: MapData; span:
       g.setIndex(idx);
       return { key: params.tex, geometry: g, url: `${mapBase(map.meta.id)}/${params.tex}` };
     });
-  }, [file, map, site, span]);
+  }, [file, map, site, span, center]);
 
   return (
     <>

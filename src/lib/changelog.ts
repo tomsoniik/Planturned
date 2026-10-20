@@ -16,6 +16,33 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.5.0',
+    date: '2026-10-20',
+    title: { pl: 'Drzewa z gry i płynniejsze 3D', en: 'Game trees and smoother 3D' },
+    changes: [
+      {
+        pl: 'Drzewa i krzaki na mapach mają liście z tekstur gry zamiast brązowych brył. Siatki płotów i uprawy też są ażurowe jak w Unturned.',
+        en: 'Map trees and bushes now have leaves from the game textures instead of brown blobs. Fence meshes and crops are see-through like in Unturned.',
+      },
+      {
+        pl: 'Teren w 3D sięga ponad 500 m od kamery i idzie za nią: można odejść daleko od bazy, a ziemia, drogi i obiekty mapy doczytują się po drodze.',
+        en: 'The 3D ground reaches over 500 m from the camera and follows it: walk far from the base and the ground, roads and map objects load along the way.',
+      },
+      {
+        pl: 'Rzeźba terenu dokładnie z siatki wysokości gry, bez wygładzania.',
+        en: 'Terrain shape taken exactly from the game heightmap, no smoothing.',
+      },
+      {
+        pl: 'Duże bazy w 3D rysują się dużo szybciej: elementy jednego typu idą jednym wywołaniem karty graficznej.',
+        en: 'Large bases render much faster in 3D: pieces of the same type are drawn in a single GPU call.',
+      },
+      {
+        pl: 'Na liściach drzew nie da się już stanąć ani o nie zahaczyć, kolizję ma tylko pień, jak w grze.',
+        en: 'Tree leaves no longer block you or hold you up; only the trunk collides, like in the game.',
+      },
+    ],
+  },
+  {
     version: '0.4.0',
     date: '2026-10-19',
     title: { pl: 'Teren, drogi i ruch jak w grze', en: 'Ground, roads and movement like in the game' },

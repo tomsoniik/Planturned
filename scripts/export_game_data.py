@@ -13,12 +13,14 @@ Tworzy (pliki z gry, tylko do użytku lokalnego, są w .gitignore):
   public/maps/<Map>/overview.jpg   podgląd mapy 1024 px
   public/maps/<Map>/tiles/x_y.jpg  satelita z gry w kaflach 512 px
   public/maps/<Map>/scene.json     obiekty mapy (budynki, skały...) i drzewa: typ, pozycja, obrót, skala
-  public/game/scenery/<guid>.json  modele obiektów i drzew (LOD0, kolory palety)
+  public/game/scenery/<guid>.json  modele obiektów i drzew (LOD0, kolory palety, liście z teksturą alfa)
+  public/game/scenery/tex/*.png    tekstury liści i siatek wycinanych alfą
   public/maps/<Map>/splat_N.png    wagi materiałów terenu (RGBA = 4 warstwy), siatka co 4 m
   public/game/terrain/<nazwa>.png  tekstury warstw terenu (64 px, powtarzane co 16 m)
   public/maps/<Map>/roads.json     drogi (krzywe, materiały) + public/maps/<Map>/roads/*.png tekstury
 
 Same tekstury terenu (bez modeli): python scripts/export_game_data.py --terrain
+Same modele obiektów i drzew map:  python scripts/export_game_data.py --scenery
 
 Formaty plików mapy według kodu gry (U3-SDK: LevelObjects.cs, LevelGround.cs, River.cs, Level.cs).
 """
@@ -223,6 +225,45 @@ def vertex_colors(v, uv, f, groups, palettes):
     return np.clip(colors, 0, 255)
 
 
+SHADER_NAMES = {}
+
+
+def cutout_textures(renderer):
+    """
+    Dla każdego materiału renderera: (tekstura, próg alfy) gdy materiał jest wycinany alfą
+    (liście drzew, krzaki, siatki płotów), inaczej None. Takich materiałów nie da się oddać
+    kolorem wierzchołka: kształt liści siedzi w przezroczystości tekstury.
+    """
+    out = []
+    for ptr in renderer.m_Materials if renderer is not None else []:
+        try:
+            mat = ptr.read()
+        except Exception:
+            out.append(None)
+            continue
+        sid = mat.m_Shader.path_id
+        if sid not in SHADER_NAMES:
+            try:
+                SHADER_NAMES[sid] = mat.m_Shader.read().m_ParsedForm.m_Name
+            except Exception:
+                SHADER_NAMES[sid] = ""
+        floats = dict(mat.m_SavedProperties.m_Floats)
+        foliage = "Foliage" in SHADER_NAMES[sid] or "Leaves" in SHADER_NAMES[sid]
+        tex = next((env.m_Texture for key, env in mat.m_SavedProperties.m_TexEnvs
+                    if key == "_MainTex" and env.m_Texture.path_id), None)
+        if tex is None or not (foliage or floats.get("_Mode") == 1.0):
+            out.append(None)
+            continue
+        out.append((tex, float(floats.get("_Cutoff", 0.5))))
+    return out
+
+
+def compact(v, f, *extra):
+    """Zostawia tylko wierzchołki użyte przez trójkąty f (z przenumerowaniem)."""
+    used, inv = np.unique(f, return_inverse=True)
+    return (v[used], inv.reshape(f.shape)) + tuple(e[used] for e in extra)
+
+
 def lod0_renderers(go):
     """path_id rendererów z pierwszego poziomu LOD (pozostałe poziomy pomijamy)."""
     lod = component(go, "LODGroup")
@@ -231,10 +272,12 @@ def lod0_renderers(go):
     return {r.renderer.path_id for r in lod.m_LODs[0].renderers}
 
 
-def collect_meshes(go, parent=np.eye(4), is_root=True, allowed=None, root_rotation=True):
+def collect_meshes(go, parent=np.eye(4), is_root=True, allowed=None, root_rotation=True, cutouts=None):
     """
     Siatki LOD0 pod prefabem w układzie korzenia (bez pozycji korzenia), z kolorami wierzchołków.
     root_rotation=False: obrót i skala korzenia są pomijane (gra nadpisuje je przy stawianiu obiektu na mapie).
+    cutouts: lista, do której trafiają części z materiałem wycinanym alfą (v, f, uv, tekstura, próg)
+    zamiast do zwykłych siatek z kolorami.
     """
     tr = component(go, "Transform")
     m = np.eye(4)
@@ -260,10 +303,24 @@ def collect_meshes(go, parent=np.eye(4), is_root=True, allowed=None, root_rotati
         v, uv, f, groups = mesh_arrays(mesh_ptr.read())
         colors = vertex_colors(v, uv, f, groups, material_palettes(renderer))
         v = (world[:3, :3] @ v.T).T + world[:3, 3]
-        parts.append((v, f, colors))
+        groups = np.array(groups, int)
+        solid = np.ones(len(f), bool)
+        if cutouts is not None and uv is not None and len(f):
+            for g, cut in enumerate(cutout_textures(renderer)):
+                # jak w vertex_colors: submesh bez własnego materiału bierze pierwszy
+                mask = (groups == g) | ((g == 0) & (groups >= len(renderer.m_Materials)))
+                if cut is None or not mask.any():
+                    continue
+                cv, cf, cuv = compact(v, f[mask], uv)
+                cutouts.append((cv, cf, cuv, cut[0], cut[1]))
+                solid &= ~mask
+        if solid.all():
+            parts.append((v, f, colors))
+        elif solid.any():
+            parts.append(compact(v, f[solid], colors))
     if tr is not None:
         for child in tr.m_Children:
-            parts += collect_meshes(child.read().m_GameObject.read(), world, False, allowed, root_rotation)
+            parts += collect_meshes(child.read().m_GameObject.read(), world, False, allowed, root_rotation, cutouts)
     return parts
 
 
@@ -496,29 +553,81 @@ def scan_scenery(bundles):
     return out
 
 
+def export_cutout_texture(tex_ptr):
+    """Tekstura części wycinanej alfą w public/game/scenery/tex (wspólna dla modeli). Zwraca ścieżkę względną."""
+    name = f"tex/{tex_ptr.path_id & 0xFFFFFFFFFFFFFFFF:x}.png"
+    path = os.path.join(PUBLIC, "game", "scenery", name)
+    if not os.path.exists(path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tex_ptr.read().image.convert("RGBA").save(path, optimize=True)
+    return name
+
+
 def export_scenery_model(env, key, out_path):
-    """Model obiektu/drzewa w układzie three.js, bez obrotu korzenia (nadaje go instancja)."""
+    """
+    Model obiektu/drzewa w układzie three.js, bez obrotu korzenia (nadaje go instancja).
+    "cut": części z teksturą wycinaną alfą (liście), po jednej na teksturę: t (plik), a (próg alfy), p, uv, i.
+    """
     if key not in env.container:
         return False
-    parts = collect_meshes(env.container[key].read(), root_rotation=False)
-    if not parts:
+    cutouts = []
+    parts = collect_meshes(env.container[key].read(), root_rotation=False, cutouts=cutouts)
+    if not parts and not cutouts:
         return False
-    verts, faces, cols, offset = [], [], [], 0
-    for v, f, c in parts:
-        verts.append(v)
-        faces.append(f + offset)
-        cols.append(c)
-        offset += len(v)
-    v = to_three(np.vstack(verts))
-    f = np.vstack(faces)[:, ::-1]
-    c = np.vstack(cols)
+    out = {"p": [], "i": [], "c": []}
+    if parts:
+        verts, faces, cols, offset = [], [], [], 0
+        for v, f, c in parts:
+            verts.append(v)
+            faces.append(f + offset)
+            cols.append(c)
+            offset += len(v)
+        out["p"] = [round(float(x), 3) for x in to_three(np.vstack(verts)).ravel()]
+        out["i"] = [int(x) for x in np.vstack(faces)[:, ::-1].ravel()]
+        out["c"] = [int(round(x)) for x in np.vstack(cols).ravel()]
+    by_tex = {}
+    for v, f, uv, tex, cutoff in cutouts:
+        by_tex.setdefault(tex.path_id, (tex, cutoff, []))[2].append((v, f, uv))
+    cut = []
+    for tex, cutoff, items in by_tex.values():
+        verts, faces, uvs, offset = [], [], [], 0
+        for v, f, uv in items:
+            verts.append(v)
+            faces.append(f + offset)
+            uvs.append(uv)
+            offset += len(v)
+        cut.append({
+            "t": export_cutout_texture(tex),
+            "a": round(cutoff, 3),
+            "p": [round(float(x), 3) for x in to_three(np.vstack(verts)).ravel()],
+            "uv": [round(float(x), 4) for x in np.vstack(uvs).ravel()],
+            "i": [int(x) for x in np.vstack(faces)[:, ::-1].ravel()],
+        })
+    if cut:
+        out["cut"] = cut
     with open(out_path, "w", encoding="utf-8") as fh:
-        json.dump({
-            "p": [round(float(x), 3) for x in v.ravel()],
-            "i": [int(x) for x in f.ravel()],
-            "c": [int(round(x)) for x in c.ravel()],
-        }, fh, separators=(",", ":"))
+        json.dump(out, fh, separators=(",", ":"))
     return True
+
+
+def export_scenery_models(unturned):
+    """Ponowny eksport modeli wszystkich typów obiektów i drzew z wyeksportowanych map (nadpisuje pliki)."""
+    import UnityPy
+
+    scenery = scan_scenery(os.path.join(unturned, "Bundles"))
+    env = UnityPy.load(os.path.join(unturned, "Bundles", "core.masterbundle"))
+    guids = set()
+    for name in os.listdir(os.path.join(PUBLIC, "maps")):
+        path = os.path.join(PUBLIC, "maps", name, "scene.json")
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as fh:
+                guids |= {t["guid"] for t in json.load(fh)["types"]}
+    model_dir = os.path.join(PUBLIC, "game", "scenery")
+    done = 0
+    for guid in sorted(guids):
+        if guid in scenery and export_scenery_model(env, scenery[guid][1], os.path.join(model_dir, f"{guid}.json")):
+            done += 1
+    print(f"  modele obiektów i drzew: {done}/{len(guids)}")
 
 
 def export_map_scene(env, map_dir, name, scenery):
@@ -1071,6 +1180,11 @@ def export_maps(unturned):
 def main():
     unturned = find_unturned()
     print(f"Unturned: {unturned}")
+    if "--scenery" in FLAGS:
+        print("Tylko modele obiektów i drzew...")
+        export_scenery_models(unturned)
+        print("Gotowe.")
+        return
     if "--terrain" in FLAGS:
         print("Tylko tekstury terenu...")
         export_maps_terrain(unturned)

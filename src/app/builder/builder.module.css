@@ -1055,3 +1055,30 @@
     left: 0;
   }
 }
+
+/* Mapa projektu w górnym pasku: zmiana mapy */
+.mapChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
+}
+
+.mapChip svg {
+  color: var(--muted);
+}
+
+.mapChip:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-3);
+}

@@ -13,6 +13,8 @@ export interface Project {
   scene?: SceneSettings;
   /** Pasek 9 slotów (id elementów, null = pusty). Brak: domyślny pasek. */
   hotbar?: (string | null)[];
+  /** Użytkownik świadomie wybrał budowanie bez mapy (nie pytamy znowu o mapę). */
+  noMap?: boolean;
   createdAt: string;
   updatedAt: string;
 }

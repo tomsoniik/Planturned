@@ -1,0 +1,298 @@
+/* Przybornik 2D: pasek kategorii + lista elementów z materiałami przy elemencie */
+.toolbox {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 100%;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--faint);
+  transition: border-color 0.2s var(--ease);
+}
+
+.search:focus-within {
+  border-color: var(--accent);
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.search input::placeholder {
+  color: var(--faint);
+}
+
+.search button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: var(--surface-3);
+  border: 0;
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+/* Pasek kategorii */
+.rail {
+  position: sticky;
+  top: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.rail button {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: 7px 2px 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  color: var(--faint);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.rail button img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  opacity: 0.7;
+  transition: opacity 0.2s var(--ease);
+}
+
+.rail button:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.rail button:hover img,
+.rail button[data-on] img {
+  opacity: 1;
+}
+
+.rail button[data-on] {
+  background: var(--accent-soft);
+  border-color: rgb(var(--accent-rgb) / 0.35);
+  color: var(--text);
+}
+
+/* Lista elementów */
+.list {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.list h3 {
+  margin: 2px 0 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.row {
+  display: grid;
+  gap: 6px;
+  padding: 6px;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
+}
+
+.row:hover {
+  background: var(--surface-3);
+}
+
+.row[data-on] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.row[data-remover][data-on] {
+  background: rgb(229 72 77 / 0.12);
+  border-color: var(--danger);
+}
+
+.main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.main:active {
+  transform: scale(0.98);
+}
+
+.thumb {
+  position: relative;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  background: var(--bg);
+  border-radius: var(--r-sm);
+}
+
+.thumb img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.remover {
+  color: var(--danger);
+}
+
+.key {
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  font-size: 9px;
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.text {
+  display: grid;
+  min-width: 0;
+}
+
+.text strong {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.text em {
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent);
+}
+
+.text kbd {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  font-size: 10px;
+}
+
+/* Materiał przy elemencie: ikony przedmiotów z gry */
+.materials {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.materials button {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 1px;
+  height: 36px;
+  padding: 3px 1px 2px;
+  color: var(--muted);
+  font: inherit;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
+}
+
+.materials button img {
+  width: 22px;
+  height: 14px;
+  object-fit: contain;
+}
+
+.materials button span {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 9.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.materials button:hover:not(:disabled) {
+  border-color: var(--line-strong);
+}
+
+.materials button[data-on] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.materials button:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+.muted {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail button,
+  .rail button img,
+  .row,
+  .materials button {
+    transition: none;
+  }
+}

@@ -66,7 +66,7 @@ npm run export:game   # jednorazowo: dane z lokalnej instalacji gry
 npm run dev           # http://localhost:3000
 ```
 
-Bez eksportu aplikacja też działa: struktury są wtedy prostymi bryłami, a zakładka Teren pokazuje instrukcję.
+Bez eksportu aplikacja też działa: struktury są wtedy prostymi bryłami, a okno wyboru mapy pokazuje instrukcję.
 
 ## Dane z gry
 

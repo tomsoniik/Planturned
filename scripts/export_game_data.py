@@ -432,7 +432,23 @@ def recolor(img, rgb):
     return Image.fromarray(a.astype(np.uint8), "RGBA")
 
 
+# Ikony materiałów w przyborniku: kłody, blacha, cegły (ID przedmiotów z Bundles/Items/Supplies)
+MATERIAL_ICONS = {"maple": 39, "birch": 37, "pine": 41, "metal": 68, "brick": 74}
+
+
+def export_material_icons():
+    out_dir = os.path.join(PUBLIC, "unturned", "items")
+    os.makedirs(out_dir, exist_ok=True)
+    for item_id in MATERIAL_ICONS.values():
+        path = os.path.join(out_dir, f"{item_id}.png")
+        if not os.path.exists(path):
+            img = fetch_icon(item_id)
+            if img is not None:
+                img.save(path)
+
+
 def export_icons(structures):
+    export_material_icons()
     out_dir = os.path.join(PUBLIC, "unturned", "items")
     os.makedirs(out_dir, exist_ok=True)
     by_folder = {s["folder"]: s for s in structures}

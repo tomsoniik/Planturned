@@ -179,6 +179,19 @@ const pl = {
     title: 'Changelog',
     sub: 'Co nowego w Planturned.',
   },
+  toolbox: {
+    categories: 'Kategorie',
+    category: { floors: 'Podłogi', walls: 'Ściany', roofs: 'Dachy', pillars: 'Filary', stairs: 'Schody', hatches: 'Klapy', tools: 'Narzędzia' },
+    placed: (n: number) => `${n} szt.`,
+    noVariant: (m: string) => `${m}: brak w grze`,
+  },
+  mapChooser: {
+    title: 'Na jakiej mapie budujesz?',
+    sub: 'Startujesz na spawnie z gry. Mapę zmienisz w górnym pasku.',
+    noMap: 'Bez mapy (łąka)',
+    change: 'Zmień mapę',
+    underlay: 'Satelita pod planem',
+  },
   bases: {
     empty: 'Nic tu jeszcze nie stoi. Każda grupa połączonych elementów pojawi się tu jako osobna baza.',
     name: (n: number) => `Baza ${n}`,
@@ -469,6 +482,19 @@ const en: Dict = {
     nav: 'Changelog',
     title: 'Changelog',
     sub: "What's new in Planturned.",
+  },
+  toolbox: {
+    categories: 'Categories',
+    category: { floors: 'Floors', walls: 'Walls', roofs: 'Roofs', pillars: 'Pillars', stairs: 'Stairs', hatches: 'Hatches', tools: 'Tools' },
+    placed: (n: number) => `${n} placed`,
+    noVariant: (m: string) => `${m}: not in the game`,
+  },
+  mapChooser: {
+    title: 'Which map are you building on?',
+    sub: 'You start at a game spawn. Change the map in the top bar.',
+    noMap: 'No map (meadow)',
+    change: 'Change map',
+    underlay: 'Satellite under the plan',
   },
   bases: {
     empty: 'Nothing here yet. Each group of connected pieces shows up here as a separate base.',

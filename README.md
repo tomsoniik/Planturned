@@ -66,7 +66,7 @@ npm run export:game   # once: game data from your local install
 npm run dev           # http://localhost:3000
 ```
 
-The app works without the export too: structures are simple boxes and the Terrain tab shows instructions.
+The app works without the export too: structures are simple boxes and the map picker shows instructions.
 
 ## Game data
 

@@ -12,10 +12,9 @@ import {
   Buildings,
   Cube,
   DownloadSimple,
+  GlobeHemisphereWest,
   GridFour,
-  Hammer,
   Keyboard,
-  MagnifyingGlass,
   MapTrifold,
   Moon,
   SunHorizon,
@@ -31,13 +30,15 @@ import { useAppStore } from '@/store/useAppStore';
 import { exportProject, getProject, updateProject, type Project } from '@/lib/projects';
 import { loadMap, type MapData, type Site } from '@/lib/terrain';
 import { DEFAULT_SCENE, SKY_HEIGHTS, type SceneSettings, type TimeOfDay } from '@/lib/scene';
-import { itemFullLabel, itemLabel, type PartGroupId, type SidebarTabId } from '@/lib/i18n';
+import { itemFullLabel, itemLabel, type SidebarTabId } from '@/lib/i18n';
 import { useI18n, useT } from '@/components/I18nProvider';
 import LangSwitch from '@/components/LangSwitch';
 import MapPicker from '@/components/MapPicker';
 import SiteUnderlay from '@/components/SiteUnderlay';
 import PlanCanvas, { layerOf } from '@/components/PlanCanvas';
 import KeybindsPanel from '@/components/KeybindsPanel';
+import Toolbox from '@/components/Toolbox';
+import MapChooser from '@/components/MapChooser';
 import BasesPanel, { baseWorld, type BaseInfo } from '@/components/BasesPanel';
 import { Chat, Hotbar, Inventory, MapScreen, PauseMenu, type ChatMessage } from '@/components/Hud3D';
 import hud from '@/components/Hud3D.module.css';
@@ -51,12 +52,10 @@ import {
   baseGroups,
   FLOORS,
   LEVEL_HEIGHT,
-  MATERIALS,
   REMOVER,
   computePaste,
   computePlacement,
   findDef,
-  itemsForMaterial,
   getPolygonVertices,
   newItemId,
   normalizeHotbar,
@@ -67,7 +66,6 @@ import {
   type BuildItem,
   type Hotbar as HotbarSlots,
   type MaterialId,
-  type PartId,
   type PlacedItem,
   isRoofLayer,
   roofSupported,
@@ -88,17 +86,8 @@ type SidebarTab = SidebarTabId;
 const TABS: { id: SidebarTab; Icon: typeof Cube }[] = [
   { id: 'blocks', Icon: Cube },
   { id: 'bases', Icon: Buildings },
-  { id: 'map', Icon: MapTrifold },
   { id: 'color', Icon: PaintBucket },
   { id: 'hotkeys', Icon: Keyboard },
-];
-
-/** Grupy w przyborniku. Klawisze 1-9 dalej idą po kolejności PARTS. */
-const PART_GROUPS: { id: PartGroupId; parts: PartId[] }[] = [
-  { id: 'slabs', parts: ['floor', 'tri_floor', 'roof', 'tri_roof', 'hole', 'tri_hole', 'hatch'] },
-  { id: 'walls', parts: ['wall', 'doorway', 'window', 'garage', 'rampart', 'ramp_wall'] },
-  { id: 'pillars', parts: ['pillar', 'post'] },
-  { id: 'stairs', parts: ['stairs', 'ramp'] },
 ];
 
 const shapeClassFor = (def: BuildItem) => {
@@ -208,7 +197,6 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
 
   const [selectedColor, setSelectedColor] = useState<string>(''); // '' = bez malowania, 'clear' = zdejmij kolor
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('blocks');
-  const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState('');
@@ -245,7 +233,6 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   const [history, setHistory] = useState<string[]>([]);
   const messageId = useRef(0);
 
-  const materialItems = useMemo(() => itemsForMaterial(material), [material]);
 
   const itemCounts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -256,11 +243,6 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
     return map;
   }, [placedItems]);
 
-  const filteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return materialItems;
-    const q = searchQuery.toLowerCase();
-    return materialItems.filter(i => itemLabel(i, t).toLowerCase().includes(q));
-  }, [searchQuery, materialItems, t]);
 
   // Wczytanie projektu z localStorage
   useEffect(() => {
@@ -336,9 +318,12 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
 
   const setSite = (site: Site | undefined) => {
     if (!project) return;
-    updateProject(id, { site });
-    setProject({ ...project, site });
+    updateProject(id, { site, noMap: !site });
+    setProject({ ...project, site, noMap: !site });
   };
+  // Nowy projekt bez mapy i bez elementów: najpierw pytamy, na jakiej mapie budujesz
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const needsMap = !!project && !project.site && !project.noMap && placedItems.length === 0;
 
   const saveName = () => {
     const name = editName.trim();
@@ -346,6 +331,14 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
     if (!project || !name || name === project.name) return;
     updateProject(id, { name });
     setProject({ ...project, name });
+  };
+
+  /** Przybornik: wybór elementu (bez odkładania przy drugim kliknięciu, to robi Esc). */
+  const pickItem = (itemId: string) => {
+    setPaste(null);
+    setMoving(null);
+    setActiveItem(itemId);
+    setTurn(0);
   };
 
   const selectItem = (itemId: string | null) => {
@@ -968,47 +961,6 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
 
   const shortName = (item: BuildItem) => itemLabel(item, t);
 
-  const renderCard = (item: BuildItem) => {
-    const count = itemCounts[item.id] || 0;
-    const idx = hotbar.indexOf(item.id);
-    return (
-      <button
-        key={item.id}
-        className={styles.itemCard}
-        data-on={activeItem === item.id || undefined}
-        onClick={() => selectItem(item.id)}
-        title={item.health ? `${shortName(item)}, ${item.health} HP` : shortName(item)}
-      >
-        {idx >= 0 && idx < 9 && <kbd className={styles.itemKey}>{keyName(binds[SLOT_ACTIONS[idx]])}</kbd>}
-        {count > 0 && <span className={styles.itemCount}>{count}</span>}
-        <span className={styles.itemThumb}>
-          <img src={item.icon} alt="" />
-        </span>
-        <span className={styles.itemName}>{shortName(item)}</span>
-      </button>
-    );
-  };
-
-  const renderTool = (item: BuildItem, hotkey: string) => (
-    <button
-      key={item.id}
-      className={styles.toolBtn}
-      data-on={activeItem === item.id || undefined}
-      data-remover={item.shape === 'remover' || undefined}
-      onClick={() => selectItem(item.id)}
-    >
-      {item.shape === 'remover' ? <Hammer size={16} weight="bold" /> : <Bed size={16} weight="bold" />}
-      <span>{shortName(item)}</span>
-      <kbd>{hotkey}</kbd>
-    </button>
-  );
-
-  const activeMaterial = MATERIALS.find(m => m.id === material);
-  const groupedItems = searchQuery.trim()
-    ? [{ label: t.editor.results, items: filteredItems }]
-    : PART_GROUPS.map(g => ({ label: t.editor.groups[g.id], items: filteredItems.filter(i => i.part && g.parts.includes(i.part)) }))
-        .filter(g => g.items.length > 0);
-
   return (
     <div className={styles.shell}>
       {/* Górny pasek: tylko w 2D, w 3D ustawienia są w menu (Esc) i komendach */}
@@ -1117,6 +1069,20 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
             <ArrowClockwise size={18} weight="bold" />
           </button>
           <span className={styles.divider} />
+          <button className={styles.mapChip} onClick={() => setChooserOpen(true)} title={t.mapChooser.change}>
+            <MapTrifold size={15} weight="bold" />
+            {project?.site?.map ?? t.mapChooser.noMap}
+          </button>
+          {project?.site && (
+            <button
+              className="icon-btn"
+              data-on={showUnderlay || undefined}
+              onClick={() => setShowUnderlay(v => !v)}
+              title={t.mapChooser.underlay}
+            >
+              <GlobeHemisphereWest size={18} weight="bold" />
+            </button>
+          )}
           <button
             className="icon-btn"
             data-on={showBedAreas || undefined}
@@ -1170,74 +1136,13 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
 
           <div className={styles.panel}>
             {tab === 'blocks' && (
-              <>
-                <div className={styles.tools}>
-                  {renderTool(REMOVER, keyName(binds.demolish))}
-                  {renderTool(BED, keyName(binds.bed))}
-                </div>
-
-                <div className={styles.groupHead}>
-                  <h3>{t.editor.material}</h3>
-                  <span>{activeMaterial && t.materials[activeMaterial.id]}</span>
-                </div>
-                <div className={styles.materials} role="radiogroup" aria-label={t.editor.material}>
-                  {MATERIALS.map(m => (
-                    <button
-                      key={m.id}
-                      role="radio"
-                      aria-checked={material === m.id}
-                      aria-label={t.materials[m.id]}
-                      title={t.materials[m.id]}
-                      data-on={material === m.id || undefined}
-                      style={{ '--swatch': m.color } as React.CSSProperties}
-                      onClick={() => {
-                        setMaterial(m.id);
-                        // zachowaj typ elementu przy zmianie materiału, jeśli istnieje
-                        const part = activeDef?.part;
-                        if (part) setActiveItem(itemsForMaterial(m.id).find(i => i.part === part)?.id ?? null);
-                      }}
-                    />
-                  ))}
-                </div>
-
-                <label className={styles.search}>
-                  <MagnifyingGlass size={14} weight="bold" />
-                  <input
-                    type="text"
-                    placeholder={t.editor.search}
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                  />
-                  {searchQuery && (
-                    <button onClick={() => setSearchQuery('')} aria-label={t.editor.clearSearch}>
-                      <X size={12} weight="bold" />
-                    </button>
-                  )}
-                </label>
-
-                {groupedItems.map(g => (
-                  <section key={g.label} className={styles.group}>
-                    <div className={styles.groupHead}>
-                      <h3>{g.label}</h3>
-                    </div>
-                    <div className={styles.itemsGrid}>{g.items.map(renderCard)}</div>
-                  </section>
-                ))}
-                {filteredItems.length === 0 && (
-                  <p className={styles.muted}>{t.editor.noMatch(searchQuery)}</p>
-                )}
-                {material === 'brick' && (
-                  <p className={styles.panelHint}>{t.editor.brickNoHatch}</p>
-                )}
-              </>
-            )}
-
-            {tab === 'map' && (
-              <MapPicker
-                site={project?.site}
-                onChange={setSite}
-                showUnderlay={showUnderlay}
-                onToggleUnderlay={() => setShowUnderlay(v => !v)}
+              <Toolbox
+                activeItem={activeItem}
+                material={material}
+                counts={itemCounts}
+                hotbar={hotbar}
+                onMaterial={setMaterial}
+                onSelect={pickItem}
               />
             )}
 
@@ -1632,6 +1537,16 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
           )}
         </div>
       </div>
+      {!is3DMode && (needsMap || chooserOpen) && (
+        <MapChooser
+          current={project?.site?.map}
+          onPick={site => {
+            setSite(site);
+            setChooserOpen(false);
+          }}
+          onClose={needsMap ? undefined : () => setChooserOpen(false)}
+        />
+      )}
     </div>
   );
 }

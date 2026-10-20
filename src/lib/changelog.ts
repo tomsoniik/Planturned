@@ -16,6 +16,21 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.9.0',
+    date: '2026-10-20',
+    title: { pl: 'Nowy przybornik 2D', en: 'New 2D toolbox' },
+    changes: [
+      {
+        pl: 'Przybornik z kategoriami w pionowym pasku: Podłogi, Ściany, Dachy, Filary, Schody, Klapy, Narzędzia. Materiał wybierasz przy elemencie, ikonami z gry (kłoda, blacha, cegły), zamiast kolorowych próbek.',
+        en: 'A toolbox with categories in a side rail: Floors, Walls, Roofs, Pillars, Stairs, Hatches, Tools. You pick the material next to each piece with game icons (log, sheet metal, bricks) instead of color swatches.',
+      },
+      {
+        pl: 'Wybór mapy przy nowym projekcie (podgląd każdej mapy) i z górnego paska. Zakładka Teren zniknęła, satelita pod planem to przełącznik obok.',
+        en: 'Pick the map when creating a project (with a preview of each map) and from the top bar. The Terrain tab is gone; the satellite under the plan is a toggle next to it.',
+      },
+    ],
+  },
+  {
     version: '0.8.0',
     date: '2026-10-20',
     title: { pl: 'Dachy jak w grze i /skybase', en: 'Roofs like in the game and /skybase' },

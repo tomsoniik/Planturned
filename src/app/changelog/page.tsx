@@ -6,7 +6,7 @@ import styles from './changelog.module.css';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getDict();
-  return { title: `${t.changelog.title} - Planturned` };
+  return { title: `${t.changelog.title} - Untmatica` };
 }
 
 export default async function ChangelogPage() {

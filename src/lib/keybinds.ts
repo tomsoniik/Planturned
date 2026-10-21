@@ -47,6 +47,7 @@ export const SLOT_ACTIONS: KeybindAction[] = ['slot1', 'slot2', 'slot3', 'slot4'
 /** Klawisze, których nie da się przypisać: zarezerwowane przez przeglądarkę lub stałe skróty. */
 export const RESERVED_CODES = new Set(['Escape', 'Tab', 'MetaLeft', 'MetaRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'ContextMenu', 'CapsLock']);
 
+// Klucz ze starej nazwy (Planturned): zmiana skasowałaby zapisane skróty.
 const STORAGE_KEY = 'planturned:keybinds';
 
 function load(): Keybinds {

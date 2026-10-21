@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="public/art/zombie.png" width="64" alt="" style="image-rendering: pixelated">
+  <img src="public/art/logo-mark.png" width="72" alt="">
 </p>
 
-<h1 align="center">Planturned</h1>
+<h1 align="center">Untmatica</h1>
 
 <p align="center">
   A base planner for <b>Unturned</b>. Draw your base in 2D, then walk through it in 3D on a real map from the game.
@@ -106,4 +106,4 @@ docs/             notes on game mechanics, demo recording
 
 **tomson** ([@tomsoniik](https://github.com/tomsoniik), [debskitomal@gmail.com](mailto:debskitomal@gmail.com))
 
-Unturned is a trademark of Smartly Dressed Games. Fan project, not affiliated with the game's developers. Game data is not part of this repository; the exceptions are the home page background in `public/art` (the in-game loading screen Washington Landscape by Phobia) and the zombie mark.
+Unturned is a trademark of Smartly Dressed Games. Fan project, not affiliated with the game's developers. Game data is not part of this repository; the exceptions are the home page background in `public/art` (the in-game loading screen Washington Landscape by Phobia).

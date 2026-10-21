@@ -16,6 +16,21 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.13.0',
+    date: '2026-10-21',
+    title: { pl: 'Untmatica', en: 'Untmatica' },
+    changes: [
+      {
+        pl: 'Nowa nazwa: Untmatica, ukłon w stronę Litematiki. Najpierw plan, potem budowa.',
+        en: 'New name: Untmatica, a nod to Litematica. Plan first, then build.',
+      },
+      {
+        pl: 'Nowy znak i ikona karty: kostka bazy, w połowie gotowa, w połowie jako hologram.',
+        en: 'New mark and tab icon: a base cube, half built and half a hologram.',
+      },
+    ],
+  },
+  {
     version: '0.12.0',
     date: '2026-10-21',
     title: { pl: 'Planner i Sandbox', en: 'Planner and Sandbox' },

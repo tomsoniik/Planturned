@@ -10,8 +10,8 @@ export function BrandMark() {
   return (
     <span className={styles.brand}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/art/zombie.png" alt="" width={22} height={23} className={styles.mark} />
-      Planturned
+      <img src="/art/logo-mark.png" alt="" width={22} height={24} className={styles.mark} />
+      Untmatica
     </span>
   );
 }

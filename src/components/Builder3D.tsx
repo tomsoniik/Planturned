@@ -753,7 +753,7 @@ function PlayerCamera({
     p.lastReport = now;
     onStatusRef.current({ ...p.vitals, stance: p.stance, dead: p.dead > 0 });
   };
-  // ?debug w adresie: stan kamery i postaci do testów (window.__planturned)
+  // ?debug w adresie: stan kamery i postaci do testów (window.__untmatica)
   useEffect(() => {
     if (!window.location.search.includes('debug')) return;
     const probe = () => {
@@ -763,7 +763,7 @@ function PlayerCamera({
       scene.traverse((o) => (o as THREE.Mesh).isMesh && hits.push(o));
       return ray.intersectObjects(hits, false).slice(0, 3).map((h) => ({ y: h.point.y, data: h.object.userData, name: h.object.type }));
     };
-    (window as unknown as { __planturned: unknown }).__planturned = { camera, phys: phys.current, groundAt, probe };
+    (window as unknown as { __untmatica: unknown }).__untmatica = { camera, phys: phys.current, groundAt, probe };
   }, [camera, groundAt, scene]);
   // Czat: /tp na punkt mapy, /pos czyta pozycję kamery w układzie świata gry
   useEffect(() => {

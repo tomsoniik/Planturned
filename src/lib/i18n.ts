@@ -31,7 +31,7 @@ export type PartGroupId = 'slabs' | 'walls' | 'pillars' | 'stairs';
 
 const pl = {
   meta: {
-    title: 'Planturned - planer baz do Unturned',
+    title: 'Untmatica - planer baz do Unturned',
     description: 'Zaprojektuj bazę do Unturned w 2D i obejrzyj ją w 3D. Działa w przeglądarce, bez konta.',
   },
   common: {
@@ -180,7 +180,7 @@ const pl = {
   changelog: {
     nav: 'Changelog',
     title: 'Changelog',
-    sub: 'Co nowego w Planturned.',
+    sub: 'Co nowego w Untmatica.',
   },
   toolbox: {
     title: 'Klocki',
@@ -354,7 +354,7 @@ export type Dict = typeof pl;
 
 const en: Dict = {
   meta: {
-    title: 'Planturned - Unturned base planner',
+    title: 'Untmatica - Unturned base planner',
     description: 'Design your Unturned base in 2D and walk through it in 3D. Runs in the browser, no account needed.',
   },
   common: {
@@ -494,7 +494,7 @@ const en: Dict = {
   changelog: {
     nav: 'Changelog',
     title: 'Changelog',
-    sub: "What's new in Planturned.",
+    sub: "What's new in Untmatica.",
   },
   toolbox: {
     title: 'Pieces',

@@ -40,11 +40,10 @@
   white-space: nowrap;
 }
 
-/* Znak: twarz zombie z gry, piksele bez wygładzania */
+/* Znak: kostka pół-blok, pół-hologram */
 .mark {
   width: 22px;
-  height: 23px;
-  image-rendering: pixelated;
+  height: 24px;
 }
 
 .links {

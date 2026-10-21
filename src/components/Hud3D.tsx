@@ -65,7 +65,7 @@ export function Hotbar({ hotbar, selected }: { hotbar: Hotbar; selected: number 
 // --- Ekwipunek ---
 
 type DragData = { from: 'item'; id: string } | { from: 'slot'; index: number };
-const DRAG_TYPE = 'application/x-planturned';
+const DRAG_TYPE = 'application/x-untmatica';
 
 export function Inventory({
   hotbar,

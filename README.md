@@ -20,7 +20,7 @@ The recording is a real session in the app (with the Polish UI): a new project, 
 
 ## Features
 
-- **A 2D plan that works like the game.** Floors, walls, pillars, roofs, stairs and ramps in five materials (maple, birch, pine, metal, brick). Walls and pillars snap to edges and corners, and collisions show up right away. The plan takes the whole screen: a 9-slot bar sits at the bottom and `E` opens a window with every piece (All first, then filters by category) and the material dock.
+- **A 2D plan that works like the game.** Floors, walls, pillars, roofs, stairs and ramps in five materials (maple, birch, pine, metal, brick). Walls and pillars snap to edges and corners, and collisions show up right away. The plan takes the whole screen: a 9-slot bar sits at the bottom and `E` opens a window with every piece (All first, then filters by category); materials are filters next to the categories.
 - **Floors.** Up to four levels; the ones below show through as a backdrop.
 - **3D view like in the game.** Original structure models from the Unturned files. Full screen with a 9-slot hotbar and an inventory (`E`), fly or walk, place and demolish from the crosshair.
 - **Chat commands.** `T` or `/` opens the chat: `/time night`, `/sky 150`, `/tp <x> <z>`, `/give metal_wall 3` and more (`/help`). `Esc` opens the menu with the scene, map and keys.

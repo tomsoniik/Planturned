@@ -16,6 +16,21 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.10.1',
+    date: '2026-10-20',
+    title: { pl: 'Materiały jako filtry', en: 'Materials as filters' },
+    changes: [
+      {
+        pl: 'Bez osobnego doku materiałów. Klon, Brzoza, Sosna, Metal i Cegła to filtry w tym samym pasku co kategorie i łączą się z nimi (np. Ściany + Metal). Każdy klocek ma własny kafelek w swoim materiale, z HP.',
+        en: 'No separate material dock. Maple, Birch, Pine, Metal and Brick are filters in the same rail as the categories and combine with them (e.g. Walls + Metal). Every piece has its own tile in its material, with HP.',
+      },
+      {
+        pl: 'Wszystko pokazuje każdą część w pięciu materiałach obok siebie. Wyszukiwarka zna też materiały ("metal").',
+        en: 'All shows each part in the five materials side by side. Search also knows materials ("metal").',
+      },
+    ],
+  },
+  {
     version: '0.10.0',
     date: '2026-10-20',
     title: { pl: 'Klocki w oknie zamiast panelu', en: 'Pieces in a window instead of a side panel' },
@@ -25,8 +40,8 @@ export const CHANGELOG: Release[] = [
         en: 'The 2D plan takes the whole screen. The bar at the bottom holds slots 1-9, the material and demolish. E (or the bar button) opens the pieces window: All first, then filters for Floors, Walls, Roofs, Pillars, Stairs, Hatches, Bed.',
       },
       {
-        pl: 'Klocek wybrany w oknie trafia do wybranego slotu, jak w ekwipunku gry. Zmiana materiału w doku przestawia trzymany klocek w tym samym slocie. PPM na slocie go czyści.',
-        en: 'A piece picked in the window goes into the selected slot, like the game inventory. Changing the material in the dock switches the held piece in the same slot. RMB on a slot clears it.',
+        pl: 'Klocek wybrany w oknie trafia do wybranego slotu, jak w ekwipunku gry. PPM na slocie go czyści.',
+        en: 'A piece picked in the window goes into the selected slot, like the game inventory. RMB on a slot clears it.',
       },
       {
         pl: 'Ikony Phosphor zamiast napisów i obrazków kategorii. Budowle, kolor i skróty są zakładkami tego samego okna.',

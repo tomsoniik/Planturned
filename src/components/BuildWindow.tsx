@@ -1,10 +1,11 @@
 "use client";
 
 /*
-  Przybornik 2D jako okno nad planem (E): pasek kategorii z ikonami (Wszystko, potem filtry),
-  siatka klocków i dok materiałów. Na dole planu zostaje pasek slotów 1-9 (BuildBar).
+  Przybornik 2D jako okno nad planem (E). Pasek po lewej filtruje po rodzaju (podłogi, ściany...) i po materiale,
+  filtry się łączą. Każdy klocek to osobny kafelek w swoim materiale, jak przedmioty w ekwipunku gry.
+  Na dole planu zostaje pasek slotów 1-9 (BuildBar).
 */
-import { useMemo, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   Bed,
   Buildings,
@@ -29,7 +30,7 @@ import {
   type Icon,
 } from '@phosphor-icons/react';
 import { BED, MATERIALS, REMOVER, findDef, type BuildItem, type Hotbar, type MaterialId, type PartId } from '@/lib/builder';
-import { itemLabel, type SidebarTabId } from '@/lib/i18n';
+import { itemFullLabel, itemLabel, type SidebarTabId } from '@/lib/i18n';
 import { SLOT_ACTIONS, keyLabel, useKeybinds } from '@/lib/keybinds';
 import { useT } from './I18nProvider';
 import styles from './BuildWindow.module.css';
@@ -54,12 +55,9 @@ const TABS: { id: WindowTab; Icon: Icon }[] = [
   { id: 'hotkeys', Icon: Keyboard },
 ];
 
-export const MATERIAL_ICON: Record<MaterialId, Icon> = { maple: Leaf, birch: Tree, pine: TreeEvergreen, metal: Nut, brick: Rows };
+const MATERIAL_ICON: Record<MaterialId, Icon> = { maple: Leaf, birch: Tree, pine: TreeEvergreen, metal: Nut, brick: Rows };
 
 const variant = (part: PartId, m: MaterialId) => findDef(`${m}_${part}`);
-/** Klocek części w wybranym materiale, a gdy go nie ma (cegła nie ma klapy), w pierwszym, który go ma. */
-const pieceOf = (part: PartId, m: MaterialId) => variant(part, m) ?? MATERIALS.map((x) => variant(part, x.id)).find(Boolean)!;
-const ALL_COUNT = CATEGORIES.reduce((n, c) => n + (c.id === 'bed' ? 1 : c.parts.length), 0);
 
 function useKeyName() {
   const t = useT();
@@ -69,30 +67,27 @@ function useKeyName() {
 export function BuildWindow({
   tab,
   activeItem,
-  material,
   hotbar,
   panels,
   onTab,
   onPick,
-  onMaterial,
   onClose,
 }: {
   tab: WindowTab;
   activeItem: string | null;
-  material: MaterialId;
   hotbar: Hotbar;
   /** Zawartość pozostałych zakładek (budowle, kolor, skróty). */
   panels: Record<Exclude<WindowTab, 'blocks'>, ReactNode>;
   onTab: (tab: WindowTab) => void;
   /** Wybór klocka z siatki: page wkłada go do slotu i zamyka okno. */
   onPick: (itemId: string) => void;
-  onMaterial: (m: MaterialId) => void;
   onClose: () => void;
 }) {
   const t = useT();
   const binds = useKeybinds((s) => s.binds);
   const keyName = useKeyName();
   const [category, setCategory] = useState<CategoryId | null>(null);
+  const [material, setMaterial] = useState<MaterialId | null>(null);
   const [query, setQuery] = useState('');
 
   const activeDef = activeItem ? findDef(activeItem) : undefined;
@@ -101,56 +96,71 @@ export function BuildWindow({
     return i >= 0 ? keyName(binds[SLOT_ACTIONS[i]]) : null;
   };
 
-  const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return null;
-    const parts = CATEGORIES.flatMap((c) => c.parts).filter((p) => t.parts[p].toLowerCase().includes(q));
-    return { parts, bed: itemLabel(BED, t).toLowerCase().includes(q) };
-  }, [query, t]);
+  // Szukanie po nazwie części i po materiale ("metal" pokazuje wszystkie metalowe)
+  const q = query.trim().toLowerCase();
+  const matches = (part: PartId, m: MaterialId) =>
+    !q || t.parts[part].toLowerCase().includes(q) || t.materials[m].toLowerCase().includes(q);
+  const bedMatches = !q || itemLabel(BED, t).toLowerCase().includes(q);
 
-  const tile = (def: BuildItem, label: string) => {
-    const on = def.part ? activeDef?.part === def.part : activeItem === def.id;
+  /** Sekcje do pokazania: rodzaj, w nim rzędy części, w rzędzie warianty materiałów (filtrowane). */
+  const mats = material ? MATERIALS.filter((m) => m.id === material) : MATERIALS;
+  const sections = CATEGORIES.filter((c) => !category || c.id === category)
+    .map((c) => {
+      if (c.id === 'bed') return { cat: c, rows: [], bed: !material && bedMatches };
+      const rows = c.parts
+        .map((part) => ({ part, cells: mats.map((m) => (matches(part, m.id) ? variant(part, m.id) ?? null : undefined)) }))
+        .filter((r) => r.cells.some((x) => x));
+      return { cat: c, rows, bed: false };
+    })
+    .filter((s) => s.rows.length > 0 || s.bed);
+  const count = sections.reduce((n, s) => n + (s.bed ? 1 : 0) + s.rows.reduce((k, r) => k + r.cells.filter(Boolean).length, 0), 0);
+  const columns = material ? 1 : MATERIALS.length;
+
+  const tile = (def: BuildItem) => {
     const key = slotKey(def.id);
+    const mat = def.material;
+    const MatGlyph = mat ? MATERIAL_ICON[mat] : null;
+    const name = def.part ? t.parts[def.part] : itemLabel(def, t);
     return (
       <button
         key={def.id}
         className={styles.tile}
-        data-on={on || undefined}
+        data-on={activeItem === def.id || undefined}
         onClick={() => onPick(def.id)}
-        title={def.health ? `${itemLabel(def, t)}, ${def.health} HP` : itemLabel(def, t)}
+        title={def.health ? `${itemFullLabel(def, t)}, ${def.health} HP` : itemFullLabel(def, t)}
       >
         {key && <span className={styles.tileKey}>{key}</span>}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={def.icon} alt="" />
-        <span className={styles.tileName}>{label}</span>
+        <span className={styles.tileName}>{name}</span>
+        {mat && MatGlyph && (
+          <span className={styles.tileMeta}>
+            <MatGlyph size={12} weight="duotone" />
+            {t.materials[mat]}
+            {def.health ? ` · ${def.health}` : ''}
+          </span>
+        )}
       </button>
     );
   };
-  const partTile = (part: PartId) => tile(pieceOf(part, material), t.parts[part]);
-  const bedTile = () => tile(BED, itemLabel(BED, t));
-  const tilesOf = (c: (typeof CATEGORIES)[number]) => (c.id === 'bed' ? [bedTile()] : c.parts.map(partTile));
 
-  const current = category ? CATEGORIES.find((c) => c.id === category)! : null;
-  const railButton = (id: CategoryId | null, Glyph: Icon, label: string) => (
+  const railButton = (key: string, Glyph: Icon, label: string, on: boolean, onClick: () => void) => (
     <button
-      key={id ?? 'all'}
+      key={key}
       className={styles.railBtn}
       aria-label={label}
+      aria-pressed={on}
       title={label}
-      aria-current={(!results && category === id) || undefined}
-      data-on={(!results && category === id) || undefined}
-      onClick={() => {
-        setCategory(id);
-        setQuery('');
-      }}
+      data-on={on || undefined}
+      onClick={onClick}
     >
       <Glyph size={22} weight="duotone" />
     </button>
   );
 
-  // Dok: HP każdego materiału dla trzymanej części; bez części tylko nazwa materiału
-  const dockPart = activeDef?.part;
-  const dockMaterial = activeDef?.material ?? material;
+  const title = [category ? t.toolbox.category[category] : null, material ? t.materials[material] : null]
+    .filter(Boolean)
+    .join(' · ') || (q ? t.editor.results : t.toolbox.category.all);
 
   return (
     <>
@@ -207,109 +217,78 @@ export function BuildWindow({
           <>
             <div className={styles.body}>
               <nav className={styles.rail} aria-label={t.toolbox.categories}>
-                {railButton(null, SquaresFour, t.toolbox.category.all)}
+                {railButton('all', SquaresFour, t.toolbox.category.all, !category && !material, () => {
+                  setCategory(null);
+                  setMaterial(null);
+                  setQuery('');
+                })}
                 <span className={styles.railRule} aria-hidden />
-                {CATEGORIES.map((c) => railButton(c.id, c.Icon, t.toolbox.category[c.id]))}
-                <button
-                  className={styles.railBtn}
-                  data-remover
-                  data-on={activeItem === REMOVER.id || undefined}
-                  aria-label={`${itemLabel(REMOVER, t)} (${keyName(binds.demolish)})`}
-                  title={`${itemLabel(REMOVER, t)} (${keyName(binds.demolish)})`}
-                  onClick={() => onPick(REMOVER.id)}
-                >
-                  <Hammer size={22} weight="duotone" />
-                </button>
+                {CATEGORIES.map((c) =>
+                  railButton(c.id, c.Icon, t.toolbox.category[c.id], category === c.id, () => {
+                    setCategory(category === c.id ? null : c.id);
+                    if (c.id === 'bed') setMaterial(null);
+                  }),
+                )}
+                <span className={styles.railRule} aria-hidden />
+                {MATERIALS.map((m) =>
+                  railButton(m.id, MATERIAL_ICON[m.id], t.materials[m.id], material === m.id, () => {
+                    setMaterial(material === m.id ? null : m.id);
+                    if (category === 'bed') setCategory(null);
+                  }),
+                )}
               </nav>
 
               <div className={styles.content}>
-                {results ? (
-                  <>
-                    <h3 className={styles.title}>
-                      {t.editor.results}
-                      <span>{results.parts.length + (results.bed ? 1 : 0)}</span>
-                    </h3>
-                    <div className={styles.grid}>
-                      {results.parts.map(partTile)}
-                      {results.bed && bedTile()}
-                    </div>
-                    {results.parts.length === 0 && !results.bed && <p className={styles.muted}>{t.editor.noMatch(query)}</p>}
-                  </>
-                ) : current ? (
-                  <>
-                    <h3 className={styles.title}>
-                      {t.toolbox.category[current.id]}
-                      <span>{current.id === 'bed' ? 1 : current.parts.length}</span>
-                      {current.id === 'walls' && <em>{t.toolbox.wallsNote}</em>}
-                    </h3>
-                    <div className={styles.grid} data-big>
-                      {tilesOf(current)}
-                    </div>
-                    {current.id === 'hatches' && <p className={styles.muted}>{t.editor.brickNoHatch}</p>}
-                  </>
-                ) : (
-                  <>
-                    <h3 className={styles.title}>
-                      {t.toolbox.category.all}
-                      <span>{ALL_COUNT}</span>
-                    </h3>
-                    {CATEGORIES.map((c) => (
-                      <section key={c.id} className={styles.section}>
-                        <h4>
-                          <c.Icon size={14} weight="duotone" />
-                          {t.toolbox.category[c.id]}
-                        </h4>
-                        <div className={styles.grid}>{tilesOf(c)}</div>
-                      </section>
-                    ))}
-                  </>
-                )}
+                <h3 className={styles.title}>
+                  {title}
+                  <span>{count}</span>
+                  {category === 'walls' && <em>{t.toolbox.wallsNote}</em>}
+                </h3>
+                {sections.map(({ cat, rows, bed }) => (
+                  <section key={cat.id} className={styles.section}>
+                    {!category && (
+                      <h4>
+                        <cat.Icon size={14} weight="duotone" />
+                        {t.toolbox.category[cat.id]}
+                      </h4>
+                    )}
+                    {bed ? (
+                      <div className={styles.grid}>{tile(BED)}</div>
+                    ) : material ? (
+                      <div className={styles.grid}>{rows.map((r) => r.cells.map((d) => d && tile(d)))}</div>
+                    ) : (
+                      <div className={styles.matrix} style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+                        {rows.flatMap((r) =>
+                          r.cells.map((d, i) =>
+                            d ? tile(d) : <span key={`${r.part}-${i}`} className={styles.gap} aria-hidden />,
+                          ),
+                        )}
+                      </div>
+                    )}
+                    {cat.id === 'hatches' && !material && <p className={styles.muted}>{t.editor.brickNoHatch}</p>}
+                  </section>
+                ))}
+                {count === 0 && <p className={styles.muted}>{t.editor.noMatch(query)}</p>}
               </div>
             </div>
 
-            <footer className={styles.dock}>
-              <div className={styles.held}>
-                {activeDef && activeDef.shape !== 'remover' ? (
-                  <>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={activeDef.icon} alt="" />
-                    <span>
-                      <strong>{activeDef.part ? t.parts[activeDef.part] : itemLabel(activeDef, t)}</strong>
-                      <em>{slotKey(activeDef.id) ? t.toolbox.slot(slotKey(activeDef.id)!) : t.toolbox.noSlot}</em>
-                    </span>
-                  </>
-                ) : (
-                  <span>
-                    <strong>{t.toolbox.materialOf(t.materials[material])}</strong>
-                  </span>
-                )}
-              </div>
-              <div className={styles.materials} role="radiogroup" aria-label={t.editor.material}>
-                {MATERIALS.map((m) => {
-                  const v = dockPart ? variant(dockPart, m.id) : undefined;
-                  const Glyph = MATERIAL_ICON[m.id];
-                  const missing = !!dockPart && !v;
-                  const label = missing
-                    ? t.toolbox.noVariant(t.materials[m.id])
-                    : v?.health ? `${t.materials[m.id]}, ${v.health} HP` : t.materials[m.id];
-                  return (
-                    <button
-                      key={m.id}
-                      role="radio"
-                      aria-checked={dockMaterial === m.id}
-                      aria-label={label}
-                      title={label}
-                      data-on={dockMaterial === m.id || undefined}
-                      disabled={missing}
-                      onClick={() => onMaterial(m.id)}
-                    >
-                      <Glyph size={19} weight="duotone" />
-                      <span>{v?.health ?? t.materials[m.id]}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </footer>
+            {activeDef && activeDef.shape !== 'remover' && (
+              <footer className={styles.dock}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={activeDef.icon} alt="" />
+                <span className={styles.held}>
+                  <strong>{itemFullLabel(activeDef, t)}</strong>
+                  <em>
+                    {[activeDef.health ? `${activeDef.health} HP` : null, slotKey(activeDef.id) ? t.toolbox.slot(slotKey(activeDef.id)!) : t.toolbox.noSlot]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </em>
+                </span>
+                <span className={styles.rotate}>
+                  <kbd>{keyName(binds.rotate)}</kbd> {t.editor.rotate}
+                </span>
+              </footer>
+            )}
           </>
         ) : (
           <div className={styles.panel}>{panels[tab]}</div>
@@ -319,13 +298,12 @@ export function BuildWindow({
   );
 }
 
-/** Pasek na dole planu 2D: okno klocków, sloty 1-9, materiał, wyburzanie, aktywne malowanie. */
+/** Pasek na dole planu 2D: okno klocków, sloty 1-9, wyburzanie, aktywne malowanie. */
 export function BuildBar({
   open,
   hotbar,
   selected,
   activeItem,
-  material,
   paint,
   onOpen,
   onSlot,
@@ -337,7 +315,6 @@ export function BuildBar({
   hotbar: Hotbar;
   selected: number | null;
   activeItem: string | null;
-  material: MaterialId;
   /** Kolor malowania ('' = wyłączone). */
   paint: string;
   onOpen: () => void;
@@ -349,9 +326,6 @@ export function BuildBar({
   const t = useT();
   const binds = useKeybinds((s) => s.binds);
   const keyName = useKeyName();
-  const activeDef = activeItem ? findDef(activeItem) : undefined;
-  const mat = activeDef?.material ?? material;
-  const MatGlyph = MATERIAL_ICON[mat];
   const paintLabel = paint === 'clear' ? t.editor.colorDefault : paint;
 
   return (
@@ -372,7 +346,7 @@ export function BuildBar({
         {hotbar.map((id, i) => {
           const def = id ? findDef(id) : undefined;
           const key = keyName(binds[SLOT_ACTIONS[i]]);
-          const name = def ? itemLabel(def, t) : null;
+          const name = def ? itemFullLabel(def, t) : null;
           return (
             <button
               key={i}
@@ -380,7 +354,7 @@ export function BuildBar({
               data-on={selected === i || undefined}
               data-empty={!def || undefined}
               aria-label={t.hud.slotAria(i + 1, name)}
-              title={name ?? undefined}
+              title={name ? `${name}${def?.health ? `, ${def.health} HP` : ''}` : undefined}
               onClick={() => onSlot(i)}
               onContextMenu={(e) => {
                 e.preventDefault();
@@ -395,21 +369,11 @@ export function BuildBar({
         })}
       </div>
       <span className={styles.barRule} aria-hidden />
-      {paint ? (
+      {paint && (
         <button className={styles.barPaint} onClick={onPaintOff} aria-label={t.toolbox.paintOff} title={t.toolbox.paintOff}>
           <span className={styles.paintSwatch} style={paint === 'clear' ? undefined : { background: paint }} data-clear={paint === 'clear' || undefined} />
           <span>{t.toolbox.paint(paintLabel)}</span>
           <X size={12} weight="bold" />
-        </button>
-      ) : (
-        <button
-          className={styles.barMaterial}
-          onClick={onOpen}
-          aria-label={t.toolbox.materialOf(t.materials[mat])}
-          title={t.toolbox.materialOf(t.materials[mat])}
-        >
-          <MatGlyph size={20} weight="duotone" />
-          {activeDef?.health && <span>{activeDef.health} HP</span>}
         </button>
       )}
       <button

@@ -386,14 +386,6 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
     setSlot(target);
   };
 
-  /** Materiał w oknie: trzymana część przechodzi na ten materiał (w tym samym slocie). */
-  const changeMaterial = (m: MaterialId) => {
-    setMaterial(m);
-    const part = activeDef?.part;
-    const v = part ? findDef(`${m}_${part}`) : undefined;
-    if (v) takeItem(v.id);
-  };
-
   const selectSlot = (i: number) => {
     setSlot(i);
     setPaste(null);
@@ -1449,14 +1441,12 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                 <BuildWindow
                   tab={windowTab}
                   activeItem={activeItem}
-                  material={material}
                   hotbar={hotbar}
                   onTab={setWindowTab}
                   onPick={itemId => {
                     takeItem(itemId);
                     setWindowOpen(false);
                   }}
-                  onMaterial={changeMaterial}
                   onClose={() => setWindowOpen(false)}
                   panels={{
                     color: (
@@ -1524,7 +1514,6 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                 hotbar={hotbar}
                 selected={heldSlot}
                 activeItem={activeItem}
-                material={material}
                 paint={selectedColor}
                 onOpen={() => setWindowOpen(o => !o)}
                 onSlot={selectSlot}

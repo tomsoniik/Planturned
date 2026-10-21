@@ -20,9 +20,9 @@ Nagranie pokazuje prawdziwą sesję w aplikacji: nowy projekt, 6 podłóg, ścia
 
 ## Co potrafi
 
-- **Plan 2D jak w grze.** Podłogi, ściany, filary, dachy, schody i rampy z pięciu materiałów (klon, brzoza, sosna, metal, cegła). Ściany i filary same przyklejają się do krawędzi i narożników, kolizja jest widoczna od razu. Plan zajmuje cały ekran: na dole pasek 9 slotów, a `E` otwiera okno ze wszystkimi klockami (najpierw Wszystko, potem filtry kategorii), materiały to filtry obok kategorii.
-- **Piętra.** Do czterech poziomów; niższe widać pod spodem jako tło.
-- **Widok 3D jak w grze.** Oryginalne modele struktur z plików Unturned. Pełny ekran z paskiem 9 slotów i ekwipunkiem (`E`), latanie albo chodzenie, stawianie i wyburzanie z celownika.
+- **Planner: plan 2D jak w grze.** Podłogi, ściany, filary, dachy, schody i rampy z pięciu materiałów (klon, brzoza, sosna, metal, cegła). Ściany i filary same przyklejają się do krawędzi i narożników, kolizja jest widoczna od razu. Plan zajmuje cały ekran z pływającymi wyspami u góry (projekt, przełącznik Planner / Sandbox, mapa i warstwy), paskiem pięter po prawej, na dole pasek 9 slotów, a `E` otwiera okno ze wszystkimi klockami (najpierw Wszystko, potem filtry kategorii), materiały to filtry obok kategorii.
+- **Piętra.** Pasek po prawej jak przyciski w windzie, `+` dodaje kolejne; niższe widać pod spodem jako tło.
+- **Sandbox: 3D jak w grze.** Oryginalne modele struktur z plików Unturned. Pełny ekran z paskiem 9 slotów i ekwipunkiem (`E`), latanie albo chodzenie, stawianie i wyburzanie z celownika.
 - **Komendy na czacie.** `T` albo `/` otwiera czat: `/time night`, `/sky 150`, `/tp <x> <z>`, `/give metal_wall 3` i inne (`/help`). `Esc` otwiera menu ze sceną, mapą i klawiszami.
 - **Prawdziwe mapy jako sandbox.** Russia, Washington, PEI, Germany, Yukon i inne: teren, satelita, budynki i drzewa w skali 1:1, oświetlenie z plików mapy. Start na spawnie z gry, budowanie gdziekolwiek: na ziemi i w powietrzu naraz. `M` pokazuje mapę z twoją pozycją, `Ctrl C` / `Ctrl V` w 3D kopiuje bazę w inne miejsce.
 - **Limity z gry.** Maksymalna wysokość budowania, granica tlenu i strefy zakazu budowy dla każdej mapy ([docs/sky-limits.md](docs/sky-limits.md)).
@@ -35,7 +35,7 @@ Nagranie pokazuje prawdziwą sesję w aplikacji: nowy projekt, 6 podłóg, ścia
 
 Klawisze można zmienić w zakładce **Skróty** w oknie pod `E` (zapis w przeglądarce). Domyślne:
 
-| Klawisz | Plan 2D | Widok 3D |
+| Klawisz | Planner (2D) | Sandbox (3D) |
 | --- | --- | --- |
 | `1`-`9` | slot paska | slot paska (kółko: następny slot) |
 | `E` | okno: wszystkie klocki, budowle, kolor i skróty | ekwipunek: elementy do slotów paska |

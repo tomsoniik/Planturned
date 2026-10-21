@@ -16,6 +16,25 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.12.0',
+    date: '2026-10-21',
+    title: { pl: 'Planner i Sandbox', en: 'Planner and Sandbox' },
+    changes: [
+      {
+        pl: '2D to teraz Planner, 3D to Sandbox. Przełącznik z ikonami siedzi na środku u góry, w Sandboxie wracasz przez menu (Esc, Planner).',
+        en: '2D is now Planner, 3D is Sandbox. The switch with icons sits at the top center; in Sandbox you go back from the menu (Esc, Planner).',
+      },
+      {
+        pl: 'Planner bez górnego paska: plan na cały ekran i pływające wyspy. Lewa: powrót i nazwa projektu z menu (zmiana nazwy, eksport, wyczyść). Prawa: cofnij, ponów, mapa, satelita, łóżka i menu z językiem i skrótami.',
+        en: 'Planner without the top bar: the plan fills the screen with floating islands. Left: back and the project name with a menu (rename, export, clear). Right: undo, redo, map, satellite, beds and a menu with language and keys.',
+      },
+      {
+        pl: 'Piętra w pionowym pasku po prawej, jak przyciski w windzie, najwyższe u góry. Plus dodaje kolejne piętro.',
+        en: 'Floors in a vertical rail on the right, like elevator buttons, highest on top. Plus adds the next floor.',
+      },
+    ],
+  },
+  {
     version: '0.11.0',
     date: '2026-10-21',
     title: { pl: 'Nowe skróty i menu', en: 'New keys and menu' },

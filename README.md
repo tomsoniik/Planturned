@@ -20,9 +20,9 @@ The recording is a real session in the app (with the Polish UI): a new project, 
 
 ## Features
 
-- **A 2D plan that works like the game.** Floors, walls, pillars, roofs, stairs and ramps in five materials (maple, birch, pine, metal, brick). Walls and pillars snap to edges and corners, and collisions show up right away. The plan takes the whole screen: a 9-slot bar sits at the bottom and `E` opens a window with every piece (All first, then filters by category); materials are filters next to the categories.
-- **Floors.** Up to four levels; the ones below show through as a backdrop.
-- **3D view like in the game.** Original structure models from the Unturned files. Full screen with a 9-slot hotbar and an inventory (`E`), fly or walk, place and demolish from the crosshair.
+- **Planner: a 2D plan that works like the game.** Floors, walls, pillars, roofs, stairs and ramps in five materials (maple, birch, pine, metal, brick). Walls and pillars snap to edges and corners, and collisions show up right away. The plan takes the whole screen with floating islands on top (project, the Planner / Sandbox switch, map and layers), a floor rail on the right, a 9-slot bar sits at the bottom and `E` opens a window with every piece (All first, then filters by category); materials are filters next to the categories.
+- **Floors.** A rail on the right like elevator buttons, `+` adds the next one; the floors below show through as a backdrop.
+- **Sandbox: 3D like in the game.** Original structure models from the Unturned files. Full screen with a 9-slot hotbar and an inventory (`E`), fly or walk, place and demolish from the crosshair.
 - **Chat commands.** `T` or `/` opens the chat: `/time night`, `/sky 150`, `/tp <x> <z>`, `/give metal_wall 3` and more (`/help`). `Esc` opens the menu with the scene, map and keys.
 - **Real maps as a sandbox.** Russia, Washington, PEI, Germany, Yukon and more: terrain, satellite, buildings and trees at 1:1 scale, lighting from the map files. You start at a game spawn and build anywhere: on the ground and in the sky at once. `M` shows the map with your position, `Ctrl C` / `Ctrl V` in 3D copies the base to another spot.
 - **Limits from the game.** Max build height, the oxygen line and no-build zones for each map ([docs/sky-limits.md](docs/sky-limits.md), in Polish).
@@ -35,7 +35,7 @@ The recording is a real session in the app (with the Polish UI): a new project, 
 
 Keys can be changed in the **Keys** tab of the `E` window (saved in your browser). Defaults:
 
-| Key | 2D plan | 3D view |
+| Key | Planner (2D) | Sandbox (3D) |
 | --- | --- | --- |
 | `1`-`9` | hotbar slot | hotbar slot (wheel: next slot) |
 | `E` | window with all pieces, builds, color and keys | inventory: put pieces in the hotbar slots |

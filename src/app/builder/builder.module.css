@@ -6,97 +6,7 @@
   background: var(--bg);
 }
 
-/* Górny pasek */
-.topbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: center;
-  gap: 16px;
-  height: 56px;
-  padding: 0 12px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
-}
-
-.topLeft,
-.topRight,
-.topCenter {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-}
-
-.topCenter {
-  gap: 8px;
-}
-
-.topRight {
-  justify-content: flex-end;
-}
-
-.topRight :global(.icon-btn:disabled) {
-  opacity: 0.35;
-  cursor: default;
-  background: transparent;
-}
-
-.divider {
-  width: 1px;
-  height: 20px;
-  margin: 0 6px;
-  background: var(--line-strong);
-}
-
-.projectName {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  margin-left: 6px;
-  padding: 6px 8px;
-  background: transparent;
-  border: 0;
-  border-radius: var(--r-sm);
-  color: var(--text);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.projectName span {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.projectName svg {
-  flex-shrink: 0;
-  color: var(--faint);
-  transition: color 0.2s var(--ease);
-}
-
-.projectName:hover {
-  background: var(--surface-2);
-}
-
-.projectName:hover svg {
-  color: var(--text);
-}
-
-.nameInput {
-  width: 220px;
-  margin-left: 6px;
-}
-
-.saveState {
-  margin-left: 4px;
-  font-size: 12px;
-  color: var(--faint);
-  white-space: nowrap;
-}
-
+/* Przełącznik segmentowy (pora dnia w menu Sandboxa) */
 .segmented {
   display: inline-flex;
   padding: 3px;
@@ -127,33 +37,6 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-}
-
-@media (max-width: 1280px) {
-  .segLabel {
-    display: none;
-  }
-}
-
-.skyInput {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 8px 0 4px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.skyInput input {
-  width: 56px;
-  height: 26px;
-  padding: 0 6px;
-  background: var(--surface-2);
-  border: 1px solid var(--line-strong);
-  border-radius: 4px;
-  color: var(--text);
-  font: inherit;
-  font-size: 12px;
 }
 
 .segmented button[data-on] {
@@ -827,11 +710,11 @@
   color: var(--muted);
 }
 
-/* Pasek stanu: lewy górny róg planu, dół zajmuje pasek slotów */
+/* Pasek stanu: pod wyspami Plannera, dół zajmuje pasek slotów */
 .statusbar {
   position: absolute;
   left: 12px;
-  top: 12px;
+  top: 70px;
   right: 12px;
   flex-wrap: wrap;
   display: flex;
@@ -908,46 +791,9 @@
   color: var(--muted);
 }
 
-@media (max-width: 1100px) {
-  .saveState {
-    display: none;
-  }
-}
-
 @media (max-width: 900px) {
-  .topbar {
-    grid-template-columns: minmax(0, 1fr) auto;
+  /* wyspy Plannera zajmują wtedy dwa rzędy */
+  .statusbar {
+    top: 116px;
   }
-
-  .topCenter {
-    display: none;
-  }
-
-}
-
-/* Mapa projektu w górnym pasku: zmiana mapy */
-.mapChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 10px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  color: var(--text);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
-}
-
-.mapChip svg {
-  color: var(--muted);
-}
-
-.mapChip:hover {
-  border-color: var(--line-strong);
-  background: var(--surface-3);
 }

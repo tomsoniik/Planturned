@@ -5,32 +5,25 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import {
-  ArrowClockwise,
-  ArrowCounterClockwise,
   ArrowLeft,
-  Bed,
   Buildings,
   DownloadSimple,
-  GlobeHemisphereWest,
   GridFour,
   Keyboard,
   MapTrifold,
   Moon,
   SunHorizon,
-  PencilSimple,
-  SquaresFour,
   Sun,
-  Trash,
   X,
 } from '@phosphor-icons/react';
 import styles from '../builder.module.css';
 import { useAppStore } from '@/store/useAppStore';
 import { exportProject, getProject, updateProject, type Project } from '@/lib/projects';
 import { loadMap, type MapData, type Site } from '@/lib/terrain';
-import { DEFAULT_SCENE, SKY_HEIGHTS, type SceneSettings, type TimeOfDay } from '@/lib/scene';
+import { DEFAULT_SCENE, type SceneSettings, type TimeOfDay } from '@/lib/scene';
 import { itemFullLabel, itemLabel } from '@/lib/i18n';
 import { useI18n, useT } from '@/components/I18nProvider';
-import LangSwitch from '@/components/LangSwitch';
+import PlannerChrome from '@/components/PlannerChrome';
 import MapPicker from '@/components/MapPicker';
 import SiteUnderlay from '@/components/SiteUnderlay';
 import PlanCanvas, { layerOf } from '@/components/PlanCanvas';
@@ -188,8 +181,6 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   // Okno klocków nad planem 2D (E) i jego zakładka
   const [windowTab, setWindowTab] = useState<WindowTab>('blocks');
   const [windowOpen, setWindowOpen] = useState(false);
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [editName, setEditName] = useState('');
   const [is3DMode, setIs3DMode] = useState(false);
   const [showBedAreas, setShowBedAreas] = useState(true);
   const [currentFloor, setCurrentFloor] = useState(0);
@@ -290,9 +281,9 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   // Lista: parter i 3 piętra, piętra z elementami oraz jedno nad najwyższym (bez setek pustych przycisków).
   const floorsList = useMemo(() => {
     const levels = placedItems.map(planFloor);
-    const set = new Set([...FLOORS.map(f => f + floorBase), ...levels, Math.max(floorBase + FLOORS.length - 1, ...levels) + 1]);
+    const set = new Set([...FLOORS.map(f => f + floorBase), ...levels, currentFloor, Math.max(floorBase + FLOORS.length - 1, ...levels) + 1]);
     return [...set].sort((a, b) => a - b);
-  }, [placedItems, floorBase]);
+  }, [placedItems, floorBase, currentFloor]);
 
   const setSite = (site: Site | undefined) => {
     if (!project) return;
@@ -303,13 +294,12 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   const [chooserOpen, setChooserOpen] = useState(false);
   const needsMap = !!project && !project.site && !project.noMap && placedItems.length === 0;
 
-  const saveName = () => {
-    const name = editName.trim();
-    setIsEditingName(false);
-    if (!project || !name || name === project.name) return;
+  const renameProject = (name: string) => {
+    if (!project) return;
     updateProject(id, { name });
     setProject({ ...project, name });
   };
+
 
   /** Przybornik: wybór elementu (bez odkładania przy drugim kliknięciu, to robi Esc). */
   const pickItem = (itemId: string) => {
@@ -967,158 +957,6 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
 
   return (
     <div className={styles.shell}>
-      {/* Górny pasek: tylko w 2D, w 3D ustawienia są w menu (Esc) i komendach */}
-      {!is3DMode && (
-      <header className={styles.topbar}>
-        <div className={styles.topLeft}>
-          <Link href="/builder" className="icon-btn" title={t.editor.back}>
-            <ArrowLeft size={18} weight="bold" />
-          </Link>
-          <button
-            className="icon-btn"
-            data-on={windowOpen || undefined}
-            onClick={() => setWindowOpen(o => !o)}
-            title={t.toolbox.open(keyName(binds.inventory))}
-          >
-            <SquaresFour size={18} weight="bold" />
-          </button>
-
-          {isEditingName ? (
-            <input
-              autoFocus
-              className={`input ${styles.nameInput}`}
-              value={editName}
-              onChange={e => setEditName(e.target.value)}
-              onBlur={saveName}
-              onKeyDown={e => {
-                if (e.key === 'Enter') saveName();
-                if (e.key === 'Escape') setIsEditingName(false);
-              }}
-              aria-label={t.editor.projectName}
-            />
-          ) : (
-            <button
-              className={styles.projectName}
-              onClick={() => { setEditName(project?.name || ''); setIsEditingName(true); }}
-              title={t.editor.rename}
-            >
-              <span>{project?.name || t.editor.loading}</span>
-              <PencilSimple size={14} />
-            </button>
-          )}
-          <span className={styles.saveState}>{savedAt ? t.editor.saved : t.editor.autosave}</span>
-        </div>
-
-        <div className={styles.topCenter}>
-          {is3DMode ? (
-            <>
-              <div className={styles.segmented} role="group" aria-label={t.editor.timeOfDay}>
-                {(['day', 'dusk', 'night'] as TimeOfDay[]).map(time => {
-                  const Icon = time === 'day' ? Sun : time === 'dusk' ? SunHorizon : Moon;
-                  return (
-                    <button key={time} data-on={scene.time === time || undefined} onClick={() => setScene({ time })} title={t.time[time]}>
-                      <Icon size={14} weight="bold" /> <span className={styles.segLabel}>{t.time[time]}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className={styles.segmented} role="group" aria-label={t.editor.baseType}>
-                {(['ground', 'sky'] as const).map(m => (
-                  <button key={m} data-on={scene.mode === m || undefined} onClick={() => setScene({ mode: m })}>
-                    {t.mode[m]}
-                  </button>
-                ))}
-              </div>
-              {scene.mode === 'sky' && (
-                <div className={styles.segmented} role="group" aria-label={t.editor.skyHeight}>
-                  {SKY_HEIGHTS.filter(hgt => hgt <= maxSkyHeight).map(hgt => (
-                    <button key={hgt} data-on={scene.skyHeight === hgt || undefined} onClick={() => setScene({ skyHeight: hgt })}>
-                      {hgt}
-                    </button>
-                  ))}
-                  <label className={styles.skyInput} title={t.editor.skyHeightTitle(maxSkyHeight)}>
-                    <input
-                      type="number"
-                      min={5}
-                      max={maxSkyHeight}
-                      step={5}
-                      value={scene.skyHeight}
-                      onChange={e => setScene({ skyHeight: Math.min(maxSkyHeight, Math.max(5, Number(e.target.value) || 5)) })}
-                    />
-                    m
-                  </label>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className={styles.segmented} role="group" aria-label={t.editor.floor}>
-              {floorsList.map(lvl => (
-                <button key={lvl} data-on={currentFloor === lvl || undefined} onClick={() => setCurrentFloor(lvl)}>
-                  {lvl === floorBase ? t.editor.groundFloor : lvl - floorBase}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className={styles.segmented} role="group" aria-label={t.editor.view}>
-            <button data-on={!is3DMode || undefined} onClick={() => setView3D(false)}>2D</button>
-            <button data-on={is3DMode || undefined} onClick={() => setView3D(true)}>3D</button>
-          </div>
-        </div>
-
-        <div className={styles.topRight}>
-          <button className="icon-btn" onClick={undo} disabled={past.length === 0} title={t.editor.undo}>
-            <ArrowCounterClockwise size={18} weight="bold" />
-          </button>
-          <button className="icon-btn" onClick={redo} disabled={future.length === 0} title={t.editor.redo}>
-            <ArrowClockwise size={18} weight="bold" />
-          </button>
-          <span className={styles.divider} />
-          <button className={styles.mapChip} onClick={() => setChooserOpen(true)} title={t.mapChooser.change}>
-            <MapTrifold size={15} weight="bold" />
-            {project?.site?.map ?? t.mapChooser.noMap}
-          </button>
-          {project?.site && (
-            <button
-              className="icon-btn"
-              data-on={showUnderlay || undefined}
-              onClick={() => setShowUnderlay(v => !v)}
-              title={t.mapChooser.underlay}
-            >
-              <GlobeHemisphereWest size={18} weight="bold" />
-            </button>
-          )}
-          <button
-            className="icon-btn"
-            data-on={showBedAreas || undefined}
-            onClick={() => setShowBedAreas(v => !v)}
-            title={t.editor.bedAreas}
-          >
-            <Bed size={18} weight="bold" />
-          </button>
-          <button
-            className="icon-btn"
-            onClick={() => project && exportProject({ ...project, items: placedItems })}
-            title={t.editor.export}
-          >
-            <DownloadSimple size={18} weight="bold" />
-          </button>
-          <button
-            className="icon-btn danger"
-            onClick={() => {
-              if (placedItems.length > 0 && window.confirm(t.editor.confirmClear)) {
-                commitAction([]);
-              }
-            }}
-            title={t.editor.clear}
-          >
-            <Trash size={18} weight="bold" />
-          </button>
-          <span className={styles.divider} />
-          <LangSwitch />
-        </div>
-      </header>
-      )}
-
       <div className={styles.body}>
         {/* Płótno */}
         <div
@@ -1213,7 +1051,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                   onResume={closeOverlay}
                   footer={t.hud.commandsHint(keyName(binds.chat))}
                   actions={[
-                    { label: t.hud.to2d, icon: <GridFour size={16} weight="bold" />, onClick: () => setView3D(false) },
+                    { label: t.hud.to2d, icon: <GridFour size={16} weight="duotone" />, onClick: () => setView3D(false) },
                     { label: t.editor.export, icon: <DownloadSimple size={16} weight="bold" />, onClick: () => project && exportProject({ ...project, items: placedItems }) },
                     { label: t.hud.projects, icon: <ArrowLeft size={16} weight="bold" />, onClick: () => router.push('/builder') },
                   ]}
@@ -1448,6 +1286,36 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
         </div>
           {!is3DMode && (
             <>
+              <PlannerChrome
+                name={project?.name ?? ''}
+                saved={!!savedAt}
+                onRename={renameProject}
+                canUndo={past.length > 0}
+                canRedo={future.length > 0}
+                onUndo={undo}
+                onRedo={redo}
+                mapLabel={project?.site?.map ?? t.mapChooser.noMap}
+                hasSite={!!project?.site}
+                underlay={showUnderlay}
+                bedAreas={showBedAreas}
+                onMap={() => setChooserOpen(true)}
+                onUnderlay={() => setShowUnderlay(v => !v)}
+                onBedAreas={() => setShowBedAreas(v => !v)}
+                onExport={() => project && exportProject({ ...project, items: placedItems })}
+                onClear={() => {
+                  if (placedItems.length > 0 && window.confirm(t.editor.confirmClear)) commitAction([]);
+                }}
+                onKeys={() => {
+                  setWindowTab('hotkeys');
+                  setWindowOpen(true);
+                }}
+                onSandbox={() => setView3D(true)}
+                floors={floorsList}
+                floorBase={floorBase}
+                floor={currentFloor}
+                onFloor={setCurrentFloor}
+                onAddFloor={() => setCurrentFloor(Math.max(...floorsList) + 1)}
+              />
               {windowOpen && (
                 <BuildWindow
                   tab={windowTab}

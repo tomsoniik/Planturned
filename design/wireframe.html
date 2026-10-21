@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wireframe - Untmatica</title>
+<style>
+  /* Szkic: tylko szarości, bez kolorów marki. Układ i treść do akceptacji. */
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 system-ui, sans-serif; color: #222; background: #f4f4f4; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
+  .label { display: inline-block; margin-bottom: 12px; padding: 4px 10px; border: 1px dashed #999; border-radius: 6px; font-size: 12px; color: #444; }
+  .block { background: #d6d6d6; border-radius: 8px; display: grid; place-items: center; color: #333; font-size: 13px; text-align: center; padding: 8px; }
+  .btn { display: inline-block; padding: 10px 18px; border-radius: 6px; font-weight: 600; font-size: 14px; }
+  .btn.primary { background: #444; color: #fff; }
+  .btn.ghost { border: 1px solid #888; }
+  section { padding: 96px 0; border-top: 1px dashed #bbb; }
+  h1 { font-size: 56px; line-height: 1.05; letter-spacing: -0.03em; margin: 0; }
+  h2 { font-size: 36px; line-height: 1.1; letter-spacing: -0.02em; margin: 0 0 12px; }
+  h3 { font-size: 18px; margin: 0 0 6px; }
+  p { margin: 0; color: #555; }
+
+  nav { height: 64px; display: flex; align-items: center; gap: 24px; border-bottom: 1px dashed #bbb; background: #e8e8e8; }
+  nav .sp { flex: 1; }
+
+  .hero { text-align: center; padding: 112px 0 64px; background: repeating-linear-gradient(45deg, #e2e2e2 0 12px, #dcdcdc 12px 24px); }
+  .hero p { max-width: 52ch; margin: 18px auto 0; }
+  .hero .ctas { margin-top: 28px; display: flex; gap: 12px; justify-content: center; }
+  .stage { margin: 48px auto 0; max-width: 1120px; aspect-ratio: 16/6; }
+
+  .how { display: grid; grid-template-columns: 4fr 8fr; gap: 48px; }
+  .how .sticky { position: sticky; top: 96px; align-self: start; }
+  .step { display: grid; grid-template-columns: 1fr 1.3fr; gap: 24px; align-items: center; padding: 24px 0; border-bottom: 1px solid #ddd; }
+  .step .block { aspect-ratio: 16/10; }
+
+  .bento { display: grid; grid-template-columns: 1.4fr 1fr 1fr; grid-template-rows: auto auto; gap: 12px; margin-top: 32px; }
+  .tile { background: #e6e6e6; border: 1px solid #ccc; border-radius: 8px; padding: 24px; display: grid; gap: 12px; align-content: start; }
+  .tile.big { grid-row: span 2; }
+  .tile .block { aspect-ratio: 16/9; }
+  .tile.big .block { aspect-ratio: 4/3; }
+  .tile.wide { grid-column: span 2; }
+
+  .strip { display: flex; justify-content: space-between; align-items: center; gap: 32px; padding: 32px 0; }
+  .facts { display: flex; flex-wrap: wrap; gap: 12px 28px; }
+  .fact { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .ico { width: 18px; height: 18px; border-radius: 4px; background: #bbb; }
+  .release { border: 1px solid #ccc; border-radius: 8px; padding: 16px 20px; background: #eee; min-width: 260px; }
+
+  .final { text-align: center; background: #e2e2e2; }
+  .final h2 { margin-bottom: 24px; }
+
+  footer { padding: 32px 0; background: #e8e8e8; color: #444; font-size: 13px; }
+  .note { font-size: 12px; color: #444; margin-top: 8px; }
+
+  @media (max-width: 767px) {
+    .wrap { padding: 0 16px; }
+    section { padding: 64px 0; }
+    h1 { font-size: 38px; }
+    h2 { font-size: 28px; }
+    nav .links { display: none; }
+    .stage { aspect-ratio: 4/3; }
+    .how, .step { grid-template-columns: 1fr; }
+    .how .sticky { position: static; }
+    .bento { grid-template-columns: 1fr; }
+    .tile.big, .tile.wide { grid-row: auto; grid-column: auto; }
+    .strip { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="wrap">
+  <strong>[logo] Untmatica</strong>
+  <span class="sp"></span>
+  <span class="links">Moje projekty &nbsp; Changelog</span>
+  <span>PL/EN</span>
+  <span class="btn primary">+ Nowy projekt</span>
+</nav>
+
+<div class="hero">
+  <div class="wrap">
+    <span class="label">1. Hero (zostaje) - tło: zwiastun gry pod ciemną warstwą</span>
+    <h1>Zaplanuj bazę,<br>zanim ją postawisz.</h1>
+    <p>Planer baz do Unturned. Rysujesz w 2D, potem chodzisz po bazie w 3D na prawdziwej mapie z gry.</p>
+    <div class="ctas"><span class="btn primary">+ Nowy projekt</span><span class="btn ghost">Moje projekty</span></div>
+    <div class="block stage">Obracana baza 3D (niższa scena 16:6, kamera bliżej)</div>
+  </div>
+</div>
+
+<section>
+  <div class="wrap how">
+    <div class="sticky">
+      <span class="label">2. Jak to działa (nowa)</span>
+      <h2>Od szkicu do bazy na mapie</h2>
+      <p>Tytuł zostaje przyklejony, kroki przewijają się obok.</p>
+    </div>
+    <div>
+      <div class="step"><div><h3>Narysuj w 2D</h3><p>Podłogi, ściany, filary i dachy z pięciu materiałów. Ściany same łapią krawędzie, kolizję widać od razu.</p></div><div class="block">Zrzut: planer 2D z piętrami</div></div>
+      <div class="step"><div><h3>Przejdź się w 3D</h3><p>Oryginalne modele z gry na prawdziwej mapie. Chodzisz albo latasz, stawiasz i burzysz z celownika.</p></div><div class="block">Zrzut: Sandbox na mapie</div></div>
+      <div class="step"><div><h3>Wyślij ekipie</h3><p>Eksportujesz bazę do pliku .baseplan.json. Ekipa wczytuje go jednym kliknięciem.</p></div><div class="block">Zrzut: eksport / "Wczytaj plik"</div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <span class="label">3. Zasady z gry (nowa) - 4 pola, nierówna siatka</span>
+    <h2>Wiesz, co przejdzie w grze, zanim postawisz pierwszą ścianę</h2>
+    <div class="bento">
+      <div class="tile big"><div class="block">Zrzut: mapa z satelitą i bazą</div><h3>Prawdziwe mapy 1:1</h3><p>Russia, Washington, PEI, Germany, Yukon i inne: teren, satelita, budynki i drzewa w skali gry.</p></div>
+      <div class="tile"><div class="block">Zrzut: skybase + limit</div><h3>Limity mapy</h3><p>Maksymalna wysokość budowania (1024 m), granica tlenu i strefy zakazu budowy.</p></div>
+      <div class="tile"><div class="block">Zrzut: okrąg łóżka</div><h3>Zasięg łóżka</h3><p>Okrąg pokazuje, gdzie nikt spoza grupy nic nie postawi.</p></div>
+      <div class="tile wide"><div class="block" style="aspect-ratio:auto;height:120px">Zrzut: pasek 1-9 / czat z komendą</div><h3>Sterowanie jak w grze</h3><p>Pasek 1-9, ekwipunek pod E, komendy /time, /tp, /give. Klawisze ustawisz po swojemu.</p></div>
+    </div>
+  </div>
+</section>
+
+<section style="padding:0">
+  <div class="wrap strip">
+    <div>
+      <span class="label">4. Bez konta (nowa, wąski pas)</span>
+      <div class="facts">
+        <span class="fact"><span class="ico"></span>Działa w przeglądarce</span>
+        <span class="fact"><span class="ico"></span>Bez konta i za darmo</span>
+        <span class="fact"><span class="ico"></span>Projekty zostają u ciebie</span>
+        <span class="fact"><span class="ico"></span>Polski i angielski</span>
+      </div>
+    </div>
+    <div class="release"><strong>Ostatnia aktualizacja</strong><p>0.13.0, 21 października 2026 (z CMS)</p><p><u>Zobacz changelog</u></p></div>
+  </div>
+</section>
+
+<section class="final">
+  <div class="wrap">
+    <span class="label">5. Końcowe CTA (nowa)</span>
+    <h2>Następna baza zaczyna się od planu</h2>
+    <span class="btn primary">+ Nowy projekt</span>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">[logo] Untmatica - Planer baz do Unturned. Darmowy, bez konta. &nbsp;|&nbsp; Moje projekty, Changelog, GitHub, Steam &nbsp;|&nbsp; drobny druk + źródło filmu
+    <p class="note">6. Stopka (bez zmian)</p>
+  </div>
+</footer>
+
+</body>
+</html>

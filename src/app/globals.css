@@ -1,5 +1,5 @@
 /*
-  Untmatica - tokeny.
+  Untmatica - tokeny. Źródło prawdy: design/brand-guardrails.md (zmiany w obu miejscach naraz).
   Motyw: tylko ciemny (edytor to ciemne płótno; strona i edytor mają jeden wygląd).
   Zaokrąglenia: --r-sm 6px (przyciski, pola, klawisze), --r-md 8px (panele, karty).
   Neutralne: chłodna zieleń lasu. Akcent: jeden, zieleń liści (jak hologram w logo).
@@ -18,7 +18,8 @@
 
   --text: #e9efe4;
   --muted: #9aa894;
-  --faint: #66745f;
+  /* min. 4.5:1 na --bg, --surface i --surface-2 (WCAG AA); nie na --surface-3 */
+  --faint: #808f78;
 
   --accent: #8dc46f;
   --accent-hover: #a2d486;
@@ -26,9 +27,37 @@
   --accent-soft: rgb(141 196 111 / 0.13);
   --accent-rgb: 141 196 111;
   --danger: #e5484d;
+  --danger-text: #f2a7a9;
+  --warn-text: #ecd29a;
+  --warn-rgb: 229 180 72;
 
   --r-sm: 6px;
   --r-md: 8px;
+
+  /* Skala typografii: mobile -> desktop */
+  --text-display: clamp(2.375rem, 5vw, 4rem);
+  --text-h1: clamp(2.25rem, 4vw, 3rem);
+  --text-h2: clamp(1.75rem, 3.2vw, 2.5rem);
+  --text-h3: 1.25rem;
+  --text-h4: 1.0625rem;
+  --text-lead: clamp(1rem, 1.4vw, 1.125rem);
+  --text-body: clamp(0.9375rem, 1.1vw, 1rem);
+  --text-ui: 0.875rem;
+  --text-small: 0.8125rem;
+  --text-micro: 0.75rem;
+
+  /* Skala odstępów: 4, 8, 12, 16, 24, 32, 48, 64, 96, 128 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
+  --space-10: 128px;
+  --section-gap: var(--space-9);
 
   --font-sans: var(--font-geist-sans), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
@@ -91,12 +120,16 @@ img {
   width: 100%;
   max-width: 1240px;
   margin: 0 auto;
-  padding: 0 24px;
+  padding: 0 var(--space-5);
 }
 
 @media (max-width: 767px) {
+  :root {
+    --section-gap: var(--space-8);
+  }
+
   .wrap {
-    padding: 0 16px;
+    padding: 0 var(--space-4);
   }
 }
 
@@ -120,6 +153,14 @@ img {
 
 .btn:active {
   transform: scale(0.98);
+}
+
+.btn:disabled,
+.icon-btn:disabled,
+.input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .btn-primary {

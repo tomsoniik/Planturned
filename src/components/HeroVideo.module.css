@@ -1,0 +1,58 @@
+/*
+  Tło stron: zwiastun gry z YouTube pod ciemną warstwą. Rodzic musi mieć position: relative i isolation: isolate.
+  Film na wysokość ekranu, dół wygasa w tło strony.
+*/
+.video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: -1;
+  height: 100dvh;
+  overflow: hidden;
+  container-type: size;
+  pointer-events: none;
+  mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
+}
+
+/* Przyciemnienie: najmocniej pod tekstem */
+.video::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 50% 45% at 50% 35%, rgb(11 16 12 / 0.5), transparent 100%),
+    rgb(11 16 12 / 0.55);
+}
+
+/* Kadr 16:9 przycięty jak object-fit: cover; lekkie powiększenie chowa napisy YouTube przy krawędziach */
+.videoPoster,
+.videoFrame {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100cqw, 177.78cqh);
+  height: max(100cqh, 56.25cqw);
+  transform: translate(-50%, -50%) scale(1.2);
+}
+
+.videoPoster {
+  object-fit: cover;
+  filter: saturate(0.85);
+}
+
+.videoFrame {
+  opacity: 0;
+  transition: opacity 1.2s var(--ease);
+}
+
+.videoFrame[data-playing] {
+  opacity: 1;
+}
+
+.videoFrame iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}

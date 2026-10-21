@@ -1,0 +1,229 @@
+/* Zasady z gry: 3 kolumny, duży kafelek z mapami na 2 rzędy, sterowanie na 2 kolumny. Dokładnie 4 pola. */
+.section {
+  padding-bottom: var(--section-gap);
+}
+
+.title {
+  max-width: 24ch;
+  margin-bottom: var(--space-7);
+  font-size: var(--text-h2);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.bento {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-auto-flow: dense;
+  gap: var(--space-3);
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.maps {
+  grid-row: span 2;
+}
+
+.controls {
+  grid-column: span 2;
+}
+
+.copy {
+  margin-top: auto;
+}
+
+.copy h3 {
+  font-size: var(--text-h3);
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  font-weight: 600;
+}
+
+.copy p {
+  margin-top: var(--space-2);
+  max-width: 48ch;
+  font-size: var(--text-body);
+  color: var(--muted);
+}
+
+/* Mapy: 3x2 miniatury z nazwą */
+.mapGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mapGrid li {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.mapGrid img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  object-fit: cover;
+  transition: transform 0.6s var(--ease);
+}
+
+.mapGrid li:hover img {
+  transform: scale(1.03);
+}
+
+.mapGrid span {
+  font-size: var(--text-small);
+  color: var(--muted);
+}
+
+/* Limity: pionowa skala wysokości, linie na proporcjonalnej wysokości */
+.scale {
+  position: relative;
+  height: 168px;
+  margin: var(--space-4) 0 var(--space-2);
+  border-left: 1px solid var(--line-strong);
+}
+
+.line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0 0 var(--space-1) var(--space-3);
+  border-bottom: 1px dashed var(--line-strong);
+  font-size: var(--text-small);
+  color: var(--muted);
+  transform: translateY(50%);
+}
+
+.line b {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--text);
+}
+
+.line[data-kind="ceiling"] {
+  border-bottom-style: solid;
+  border-bottom-color: var(--muted);
+}
+
+.line[data-kind="oxygen"] {
+  border-bottom-color: var(--accent);
+}
+
+.line[data-kind="ground"] {
+  border-bottom-style: solid;
+}
+
+/* Łóżko: kadr z planu, kwadrat */
+.bedShot {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  max-height: 220px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  object-fit: cover;
+}
+
+/* Sterowanie: prawdziwe klawisze */
+.keys {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-5) var(--space-6);
+}
+
+.keyGroup {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+}
+
+.keyGroup > span {
+  font-size: var(--text-small);
+  color: var(--muted);
+}
+
+.keyRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.keys kbd {
+  min-width: 30px;
+  height: 30px;
+  font-size: var(--text-small);
+}
+
+.command {
+  margin-left: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  color: var(--accent);
+}
+
+@media (max-width: 1023px) {
+  .bento {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .maps,
+  .controls {
+    grid-column: span 2;
+    grid-row: auto;
+  }
+}
+
+@media (max-width: 767px) {
+  .title {
+    margin-bottom: var(--space-6);
+  }
+
+  .bento {
+    grid-template-columns: 1fr;
+  }
+
+  .maps,
+  .controls {
+    grid-column: auto;
+  }
+
+  .bedShot {
+    max-height: none;
+  }
+
+  /* 9 klawiszy musi zmieścić się w kafelku na 375 px */
+  .keys kbd {
+    min-width: 26px;
+    height: 28px;
+    padding: 0 4px;
+  }
+
+  .keyRow {
+    gap: 3px;
+  }
+}

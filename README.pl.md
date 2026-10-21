@@ -106,4 +106,4 @@ docs/             notatki o mechanice gry, nagranie demo
 
 **tomson** ([@tomsoniik](https://github.com/tomsoniik), [debskitomal@gmail.com](mailto:debskitomal@gmail.com))
 
-Unturned to znak towarowy Smartly Dressed Games. Projekt fanowski, niezwiązany z twórcami gry. Dane z gry nie są częścią repozytorium; wyjątek to tło strony głównej w `public/art` (ekran ładowania z gry Washington Landscape, autor: Phobia).
+Unturned to znak towarowy Smartly Dressed Games. Projekt fanowski, niezwiązany z twórcami gry. Dane z gry nie są częścią repozytorium.

@@ -106,4 +106,4 @@ docs/             notes on game mechanics, demo recording
 
 **tomson** ([@tomsoniik](https://github.com/tomsoniik), [debskitomal@gmail.com](mailto:debskitomal@gmail.com))
 
-Unturned is a trademark of Smartly Dressed Games. Fan project, not affiliated with the game's developers. Game data is not part of this repository; the exceptions are the home page background in `public/art` (the in-game loading screen Washington Landscape by Phobia).
+Unturned is a trademark of Smartly Dressed Games. Fan project, not affiliated with the game's developers. Game data is not part of this repository.

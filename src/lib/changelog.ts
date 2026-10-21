@@ -16,6 +16,33 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.14.0',
+    date: '2026-10-22',
+    title: { pl: 'Nowa strona główna i panel', en: 'New home page and admin panel' },
+    changes: [
+      {
+        pl: 'Strona główna pokazuje, co potrafi planer: rysowanie w 2D, Sandbox na mapie i plik dla ekipy, prawdziwe mapy, limity wysokości i tlenu, zasięg łóżka, sterowanie jak w grze. Zrzuty pochodzą z aplikacji.',
+        en: 'The home page shows what the planner does: drawing in 2D, Sandbox on a map and a file for your crew, real maps, height and oxygen limits, bed claim radius, controls like in the game. Screenshots come from the app.',
+      },
+      {
+        pl: 'W tle strony głównej, listy projektów i changeloga leci zwiastun Unturned z YouTube. Na telefonie zostaje sam kadr.',
+        en: 'The Unturned trailer from YouTube plays behind the home page, project list and changelog. Phones get a still frame.',
+      },
+      {
+        pl: 'Changelog: u góry jedna wersja, pod nią lista wszystkich. Każda wersja ma swój link, przyciski Nowsza / Starsza nie przewijają strony.',
+        en: 'Changelog: one version on top, the full list below. Every version has its own link, Newer / Older buttons do not scroll the page.',
+      },
+      {
+        pl: 'Moje projekty: kafelek Nowy projekt na początku siatki, plik .baseplan.json można upuścić w dowolnym miejscu strony.',
+        en: 'My projects: a New project tile first in the grid, a .baseplan.json file can be dropped anywhere on the page.',
+      },
+      {
+        pl: 'Na telefonie linki i język są w menu pod przyciskiem. Link wysłany na Discordzie pokazuje obrazek z logo.',
+        en: 'On phones, links and language sit in a menu behind a button. A link shared on Discord shows an image with the logo.',
+      },
+    ],
+  },
+  {
     version: '0.13.0',
     date: '2026-10-21',
     title: { pl: 'Untmatica', en: 'Untmatica' },

@@ -1,44 +1,56 @@
 import Link from 'next/link';
-import SiteNav, { BrandMark } from '@/components/SiteNav';
+import SiteNav from '@/components/SiteNav';
+import SiteFooter from '@/components/SiteFooter';
 import NewProjectButton from '@/components/NewProjectButton';
 import HeroPreview from '@/components/HeroPreview';
+import HeroVideo from '@/components/HeroVideo';
+import HowItWorks from '@/components/home/HowItWorks';
+import GameRules from '@/components/home/GameRules';
+import NoAccount from '@/components/home/NoAccount';
+import FinalCta from '@/components/home/FinalCta';
+import { getContent } from '@/lib/cms/store';
 import { getDict } from '@/lib/i18n-server';
 import styles from './page.module.css';
 
 export default async function Home() {
-  const t = await getDict();
+  const [t, media] = await Promise.all([getDict(), getContent('media')]);
   return (
     <>
       <SiteNav overlay />
-      <div className={styles.heroBand}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/art/washington.jpg" alt="" className={styles.heroArt} fetchPriority="high" />
+      <div className={styles.page}>
+        <HeroVideo media={media} />
         <main className={`wrap ${styles.hero}`}>
-          <div className={styles.heroCopy}>
-            <h1 className={`${styles.heroTitle} ${styles.enter}`}>{t.home.title}</h1>
-            <p className={`${styles.heroSub} ${styles.enter}`} style={{ animationDelay: '80ms' }}>
-              {t.home.sub}
-            </p>
-            <div className={`${styles.heroCtas} ${styles.enter}`} style={{ animationDelay: '160ms' }}>
-              <NewProjectButton size="lg" />
-              <Link href="/builder" className="btn btn-ghost btn-lg">
-                {t.common.myProjects}
-              </Link>
-            </div>
-          </div>
-
-          <div className={`${styles.heroVisual} ${styles.enter}`} style={{ animationDelay: '120ms' }}>
-            <div className={styles.previewFrame}>
-              <HeroPreview />
-            </div>
-            <p className={styles.previewCaption}>{t.home.previewCaption}</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/art/logo-mark.png" alt="" width={56} height={60} className={`${styles.mark} ${styles.enter}`} />
+          <h1 className={`${styles.heroTitle} ${styles.enter}`} style={{ animationDelay: '60ms' }}>
+            {t.home.title}
+          </h1>
+          <p className={`${styles.heroSub} ${styles.enter}`} style={{ animationDelay: '120ms' }}>
+            {t.home.sub}
+          </p>
+          <div className={`${styles.heroCtas} ${styles.enter}`} style={{ animationDelay: '180ms' }}>
+            <NewProjectButton size="lg" />
+            <Link href="/builder" className="btn btn-ghost btn-lg">
+              {t.common.myProjects}
+            </Link>
           </div>
         </main>
 
-        <footer className={`wrap ${styles.footer}`}>
-          <BrandMark />
-          <p>{t.home.footer}</p>
-        </footer>
+        {media.preview3d && (
+          <section className={`wrap ${styles.stageWrap}`}>
+            <div className={`${styles.stage} ${styles.stageEnter}`}>
+              <HeroPreview />
+            </div>
+            <p className={styles.previewCaption}>{t.home.previewCaption}</p>
+          </section>
+        )}
+
+        <HowItWorks />
+        <GameRules />
+        <NoAccount />
+        <FinalCta />
+
+        <SiteFooter />
       </div>
     </>
   );

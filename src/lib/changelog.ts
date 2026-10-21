@@ -16,6 +16,25 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.11.0',
+    date: '2026-10-21',
+    title: { pl: 'Nowe skróty i menu', en: 'New keys and menu' },
+    changes: [
+      {
+        pl: 'Skróty w kartach: Budowanie, Plan 2D, Ruch w 3D, Widok 3D i stałe skróty. Sloty to rząd klawiszy jak pasek w grze, ruch to układ WASD. Klawisze wyglądają jak nasadki klawiatury.',
+        en: 'Keys in cards: Building, 2D plan, 3D movement, 3D view and fixed shortcuts. Slots are a row of keys like the game hotbar, movement is a WASD layout. Keys look like keyboard keycaps.',
+      },
+      {
+        pl: 'Przy zmianie klawisza u góry trzyma się pasek "Naciśnij nowy klawisz dla: ..." z przyciskiem Anuluj. Reset wszystkich pokazuje, ile klawiszy zmieniłeś.',
+        en: 'While changing a key, a bar stays on top: "Press a new key for: ..." with a Cancel button. Reset all shows how many keys you changed.',
+      },
+      {
+        pl: 'Menu pauzy w 3D z ikonami sekcji, jasnym przyciskiem Wróć do gry i ustawieniami sceny w wierszach z przełącznikiem.',
+        en: 'The 3D pause menu has section icons, a bright Back to game button and scene settings as rows with a switch.',
+      },
+    ],
+  },
+  {
     version: '0.10.1',
     date: '2026-10-20',
     title: { pl: 'Materiały jako filtry', en: 'Materials as filters' },

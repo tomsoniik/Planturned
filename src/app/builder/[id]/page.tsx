@@ -9,9 +9,11 @@ import {
   ArrowCounterClockwise,
   ArrowLeft,
   Bed,
+  Buildings,
   DownloadSimple,
   GlobeHemisphereWest,
   GridFour,
+  Keyboard,
   MapTrifold,
   Moon,
   SunHorizon,
@@ -1219,9 +1221,10 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                     {
                       id: 'scene',
                       label: t.hud.sections.scene,
+                      icon: <SunHorizon size={17} weight="duotone" />,
                       content: (
                         <>
-                          <div className={hud.field}>
+                          <div className={hud.setting}>
                             <span>{t.editor.timeOfDay}</span>
                             <div className={styles.segmented} role="group" aria-label={t.editor.timeOfDay}>
                               {(['day', 'dusk', 'night'] as TimeOfDay[]).map(time => {
@@ -1234,9 +1237,15 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                               })}
                             </div>
                           </div>
-                          <label className={hud.toggle}>
-                            <input type="checkbox" checked={showBedAreas} onChange={e => setShowBedAreas(e.target.checked)} />
-                            {t.editor.bedAreas}
+                          <label className={hud.setting}>
+                            <span>{t.editor.bedAreas}</span>
+                            <input
+                              type="checkbox"
+                              role="switch"
+                              className={hud.switch}
+                              checked={showBedAreas}
+                              onChange={e => setShowBedAreas(e.target.checked)}
+                            />
                           </label>
                         </>
                       ),
@@ -1244,6 +1253,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                     {
                       id: 'map',
                       label: t.hud.sections.map,
+                      icon: <MapTrifold size={17} weight="duotone" />,
                       content: (
                         <MapPicker
                           site={project?.site}
@@ -1260,6 +1270,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                     {
                       id: 'bases',
                       label: t.hud.sections.bases,
+                      icon: <Buildings size={17} weight="duotone" />,
                       content: (
                         <BasesPanel
                           items={placedItems}
@@ -1280,7 +1291,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
                         />
                       ),
                     },
-                    { id: 'keys', label: t.hud.sections.keys, content: <KeybindsPanel /> },
+                    { id: 'keys', label: t.hud.sections.keys, icon: <Keyboard size={17} weight="duotone" />, content: <KeybindsPanel /> },
                   ]}
                 />
               )}

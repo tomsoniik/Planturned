@@ -125,7 +125,7 @@ const pl = {
   keys: {
     hint: 'Kliknij klawisz, żeby go zmienić. Zmiany zapisują się w tej przeglądarce.',
     press: 'Naciśnij klawisz',
-    cancelHint: 'Esc anuluje',
+    cancelHint: 'Anuluj (Esc)',
     reserved: 'Tego klawisza nie można przypisać',
     swapped: (action: string) => `Zamieniono z: ${action}`,
     resetAll: 'Przywróć domyślne',
@@ -133,7 +133,9 @@ const pl = {
     changeAria: (action: string, key: string) => `${action}: ${key}. Kliknij, żeby zmienić`,
     space: 'Spacja',
     shift: 'Shift',
-    groups: { build: 'Budowanie', plan: 'Plan 2D', view3d: 'Widok 3D', fixed: 'Stałe' },
+    groups: { build: 'Budowanie', plan: 'Plan 2D', move: 'Ruch w 3D', view3d: 'Widok 3D', fixed: 'Stałe, bez zmiany' },
+    waiting: 'Naciśnij nowy klawisz dla:',
+    short: { forward: 'Przód', back: 'Tył', left: 'Lewo', right: 'Prawo' },
     slots: 'Sloty paska',
     slot: (n: number) => `Slot ${n}`,
     actions: {
@@ -434,7 +436,7 @@ const en: Dict = {
   keys: {
     hint: 'Click a key to change it. Changes are saved in this browser.',
     press: 'Press a key',
-    cancelHint: 'Esc cancels',
+    cancelHint: 'Cancel (Esc)',
     reserved: "This key can't be assigned",
     swapped: (action: string) => `Swapped with: ${action}`,
     resetAll: 'Restore defaults',
@@ -442,7 +444,9 @@ const en: Dict = {
     changeAria: (action: string, key: string) => `${action}: ${key}. Click to change`,
     space: 'Space',
     shift: 'Shift',
-    groups: { build: 'Building', plan: '2D plan', view3d: '3D view', fixed: 'Fixed' },
+    groups: { build: 'Building', plan: '2D plan', move: '3D movement', view3d: '3D view', fixed: 'Fixed' },
+    waiting: 'Press a new key for:',
+    short: { forward: 'Forward', back: 'Back', left: 'Left', right: 'Right' },
     slots: 'Hotbar slots',
     slot: (n: number) => `Slot ${n}`,
     actions: {

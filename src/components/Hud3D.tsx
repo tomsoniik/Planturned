@@ -5,7 +5,7 @@
   Stan (pasek, wiadomości, ustawienia sceny) trzyma edytor; tu jest tylko wygląd i obsługa myszy/klawiszy w nakładkach.
 */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Hammer, MagnifyingGlass, X } from '@phosphor-icons/react';
+import { Hammer, MagnifyingGlass, Play, X } from '@phosphor-icons/react';
 import { BED, HOTBAR_SIZE, MATERIALS, REMOVER, findDef, itemsForMaterial, type BuildItem, type Hotbar, type MaterialId, type PartId } from '@/lib/builder';
 import { itemLabel, type PartGroupId } from '@/lib/i18n';
 import { SLOT_ACTIONS, keyLabel, useKeybinds } from '@/lib/keybinds';
@@ -455,6 +455,7 @@ export function MapScreen({
 export interface MenuSection {
   id: string;
   label: string;
+  icon?: React.ReactNode;
   content: React.ReactNode;
 }
 
@@ -485,12 +486,14 @@ export function PauseMenu({
       <section className={styles.menu} role="dialog" aria-label={t.hud.menuTitle}>
         <nav className={styles.menuNav}>
           <p className={styles.menuTitle}>{title}</p>
-          <button className="btn btn-primary" onClick={onResume} autoFocus>
+          <button className={styles.resume} onClick={onResume} autoFocus>
+            <Play size={15} weight="fill" />
             {t.hud.resume}
           </button>
           <div className={styles.menuTabs} role="tablist">
             {sections.map((s) => (
               <button key={s.id} role="tab" aria-selected={s.id === current?.id} data-on={s.id === current?.id || undefined} onClick={() => setSection(s.id)}>
+                {s.icon}
                 {s.label}
               </button>
             ))}
@@ -505,7 +508,10 @@ export function PauseMenu({
           </div>
         </nav>
         <div className={styles.menuBody}>
-          <h2>{current?.label}</h2>
+          <h2>
+            {current?.icon}
+            {current?.label}
+          </h2>
           {current?.content}
         </div>
         <p className={styles.menuFoot}>{footer}</p>

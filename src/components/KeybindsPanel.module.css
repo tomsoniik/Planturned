@@ -9,9 +9,6 @@
 
 /* Pasek u góry: podpowiedź i reset, w trakcie przypisywania: na co czekamy */
 .top {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -32,6 +29,10 @@
 }
 
 .top[data-capturing] {
+  /* przy zmianie klawisza pasek zostaje u góry, nawet gdy przewiniesz do klawisza na dole */
+  position: sticky;
+  top: 0;
+  z-index: 1;
   /* pełne tło: przyklejony pasek nie może prześwitywać */
   background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--surface-2);
   box-shadow: 0 8px 20px rgb(4 8 5 / 0.45);
@@ -178,11 +179,6 @@
   font-size: 13px;
   line-height: 1.35;
   color: var(--text);
-}
-
-.card[data-fixed] .name {
-  color: var(--muted);
-  font-size: 12.5px;
 }
 
 /* Nasadka klawisza: klik zmienia przypisanie */

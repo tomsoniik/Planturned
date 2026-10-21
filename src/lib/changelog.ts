@@ -32,6 +32,10 @@ export const CHANGELOG: Release[] = [
         pl: 'Menu pauzy w 3D z ikonami sekcji, jasnym przyciskiem Wróć do gry i ustawieniami sceny w wierszach z przełącznikiem.',
         en: 'The 3D pause menu has section icons, a bright Back to game button and scene settings as rows with a switch.',
       },
+      {
+        pl: 'Pozostałe skróty (myszka, Esc, Ctrl) mają zwykłe nazwy jak reszta: Kopiuj, Wklej, Cofnij, Przesuń plan.',
+        en: 'Other shortcuts (mouse, Esc, Ctrl) have plain names like the rest: Copy, Paste, Undo, Pan the plan.',
+      },
     ],
   },
   {

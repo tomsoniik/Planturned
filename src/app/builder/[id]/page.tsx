@@ -5,20 +5,16 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import {
   ArrowCounterClockwise,
-  ArrowLeft,
   ArrowsOutCardinal,
   Bed,
   Bird,
-  Buildings,
   ChartBar,
   Copy,
   CopySimple,
   CornersOut,
-  Crosshair,
   Cube,
   Cursor,
   DownloadSimple,
-  Eye,
   FloppyDisk,
   FolderOpen,
   FrameCorners,
@@ -35,7 +31,6 @@ import {
   Moon,
   PaintBrush,
   PaintBucket,
-  PencilSimple,
   PersonSimpleWalk,
   Planet,
   Plus,
@@ -58,14 +53,14 @@ import { itemFullLabel, itemLabel } from '@/lib/i18n';
 import { useI18n, useT } from '@/components/I18nProvider';
 import TopBar, { Dialog, type MenuEntry } from '@/components/editor/TopBar';
 import { ToolRail, ViewBar, ViewMenu, type ToolDef, type ViewItem } from '@/components/editor/ViewportChrome';
-import { Actions, Field, Fields, Inspector, ObjHead, Palette, PanelSlot, RaidSection, Section, SectionTool, Seg, SwitchRow, type InspectorTab } from '@/components/editor/Inspector';
-import Dock, { LayersAdd, Transport, type DockView, type LayerRow } from '@/components/editor/Dock';
+import { Actions, Field, Fields, Inspector, ObjHead, Palette, PanelSlot, RaidSection, Section, SectionTool, type InspectorTab } from '@/components/editor/Inspector';
+import Dock, { Transport, type LayerRow } from '@/components/editor/Dock';
 import sh from '@/components/editor/EditorShell.module.css';
 import LangSwitch from '@/components/LangSwitch';
 import SiteUnderlay from '@/components/SiteUnderlay';
 import PlanCanvas, { layerOf } from '@/components/PlanCanvas';
 import KeybindsPanel from '@/components/KeybindsPanel';
-import { BuildWindow, type WindowTab } from '@/components/BuildWindow';
+import { BuildWindow } from '@/components/BuildWindow';
 import MapChooser from '@/components/MapChooser';
 import BasesPanel, { baseWorld, useBases, type BaseInfo } from '@/components/BasesPanel';
 import MaterialsPanel from '@/components/MaterialsPanel';
@@ -233,8 +228,7 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   };
 
   const [selectedColor, setSelectedColor] = useState<string>(''); // '' = bez malowania, 'clear' = zdejmij kolor
-  // Okno klocków nad planem 2D (E) i jego zakładka
-  const [windowTab, setWindowTab] = useState<WindowTab>('blocks');
+  // Okno klocków nad planem 2D (E, narzędzie Wstaw)
   const [windowOpen, setWindowOpen] = useState(false);
   const [is3DMode, setIs3DMode] = useState(false);
   const [showBedAreas, setShowBedAreas] = useState(true);
@@ -244,13 +238,12 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   // Shell edytora: inspektor, dolny panel, siatka, narzędzie przesuwania widoku, okna Pomocy
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('props');
   const [inspectorOpen, setInspectorOpen] = useState(true);
-  const [dockView, setDockView] = useState<DockView>('bar');
   const [dockCollapsed, setDockCollapsed] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
   const [panTool, setPanTool] = useState(false);
   const [dialog, setDialog] = useState<'help' | 'keys' | 'commands' | 'settings3d' | null>(null);
   /** Ostatni kolor malowania: narzędzie Maluj wraca do niego po wyłączeniu. */
-  const lastPaintRef = useRef(PAINT_COLORS[0]);
+  const [lastPaint, setLastPaint] = useState(PAINT_COLORS[0]);
   // Wąski ekran: inspektor zasłaniałby plan, więc startuje schowany (przełącznik na pasku widoku)
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -941,10 +934,6 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   };
 
 
-  const floorCount = useMemo(
-    () => placedItems.filter(i => planFloor(i) === currentFloor).length,
-    [placedItems, currentFloor],
-  );
 
   const selectedSet = useMemo(
     () => new Set(selectedItemId ? [...selectedItemIds, selectedItemId] : selectedItemIds),
@@ -1042,32 +1031,29 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
     setActiveItem(null);
     setPanTool(false);
     if (selectedColor) {
-      lastPaintRef.current = selectedColor;
+      setLastPaint(selectedColor);
       setSelectedColor('');
     }
   };
   const togglePaint = () => {
     if (selectedColor) {
-      lastPaintRef.current = selectedColor;
+      setLastPaint(selectedColor);
       setSelectedColor('');
       return;
     }
     setPaste(null);
     setActiveItem(null);
     setPanTool(false);
-    setSelectedColor(lastPaintRef.current);
+    setSelectedColor(lastPaint);
     setInspectorTab('props');
   };
   const pickPaint = (color: string) => {
-    if (color && color !== 'clear') lastPaintRef.current = color;
+    if (color && color !== 'clear') setLastPaint(color);
     setSelectedColor(color);
   };
   const openBlocks = () => {
     if (is3DMode) openOverlay('inventory');
-    else {
-      setWindowTab('blocks');
-      setWindowOpen(true);
-    }
+    else setWindowOpen(true);
   };
   const orbitBase = (b: BaseInfo) =>
     sendSceneCommand({ kind: 'orbit', on: true, target: [b.cx / UNITS_PER_METER, b.floor * LEVEL_HEIGHT, b.cy / UNITS_PER_METER] });
@@ -1271,8 +1257,6 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   const hasSelection = selectedList.length > 0;
   const menus: Record<'file' | 'edit' | 'view' | 'help', MenuEntry[]> = {
     file: [
-      { label: t.common.myProjects, icon: <ArrowLeft size={16} weight="bold" />, href: '/builder' },
-      'rule',
       { label: t.shell.save, icon: <FloppyDisk size={16} weight="duotone" />, hint: 'Ctrl S', onClick: saveNow },
       { label: t.editor.export, icon: <DownloadSimple size={16} weight="duotone" />, onClick: exportNow },
       { label: t.mapChooser.change, icon: <MapTrifold size={16} weight="duotone" />, onClick: () => setChooserOpen(true) },
@@ -1344,9 +1328,9 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
         ],
         [
           ...(activeMapData ? [{ id: 'map', label: t.shell.map, icon: <MapTrifold size={15} weight="duotone" />, kbd: keyName(binds.map), onClick: () => openOverlay('map') }] : []),
-          { id: 'orbit', label: t.shell.orbit, icon: <Planet size={15} weight="duotone" />, on: orbiting, onClick: () => sendSceneCommand({ kind: 'orbit', on: !orbiting }) },
+          fullscreenBtn,
+          inspectorToggle,
         ],
-        [fullscreenBtn, inspectorToggle],
       ]
     : [
         [
@@ -1403,23 +1387,25 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
         ]),
   ];
 
-  // --- Inspektor: właściwości zaznaczenia, trzymanego elementu albo projektu ---
-  const paintPalette = (
-    <Palette
-      colors={PAINT_COLORS}
-      value={selectedColor}
-      onPick={c => {
-        setActiveItem(null);
-        pickPaint(c);
-      }}
-      extra={[
-        { id: 'off', label: t.editor.colorOff, on: selectedColor === '', onClick: () => pickPaint('') },
-        { id: 'clear', label: t.editor.colorDefault, on: selectedColor === 'clear', onClick: () => pickPaint('clear') },
-      ]}
-    />
-  );
+  // --- Inspektor: właściwości zaznaczenia, opcje narzędzia Maluj, trzymany element albo projekt ---
   const renderProps = () => {
     const selIds = selectedList.map(i => i.id);
+    // narzędzie Maluj: jego jedyne ustawienie to kolor (trafia na klikane elementy i na nowe)
+    if (!is3DMode && selectedColor && !activeItem) {
+      return (
+        <>
+          <ObjHead glyph={<PaintBucket size={18} weight="duotone" />} title={t.shell.tool.paint} sub={t.shell.paintHint} />
+          <Section icon={<PaintBrush size={15} weight="duotone" />} title={t.shell.color}>
+            <Palette
+              colors={PAINT_COLORS}
+              value={selectedColor}
+              onPick={pickPaint}
+              extra={[{ id: 'clear', label: t.editor.colorDefault, on: selectedColor === 'clear', onClick: () => pickPaint('clear') }]}
+            />
+          </Section>
+        </>
+      );
+    }
     if (!is3DMode && selectedList.length > 0) {
       const single = selectedList.length === 1 ? selectedList[0] : null;
       const def = single ? findDef(single.itemId) : undefined;
@@ -1486,77 +1472,16 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
       );
     }
     if (activeDef) {
-      const heldColor = selectedColor.startsWith('#') ? selectedColor : activeDef.color;
       return (
         <>
           <ObjHead def={activeDef} title={itemFullLabel(activeDef, t)} sub={`${t.shell.holding}, ${t.shell.rotateKey(keyName(binds.rotate))}`} />
-          {!is3DMode && (
-            <Section icon={<PaintBrush size={15} weight="duotone" />} title={t.shell.appearance}>
-              <Fields>
-                <Field label={t.shell.color} value={heldColor.toUpperCase()} lead={<span className={sh.swatchDot} style={{ background: heldColor }} />} />
-                {activeDef.material && <Field label={t.shell.material} value={t.materials[activeDef.material]} />}
-              </Fields>
-              <Palette
-                colors={PAINT_COLORS}
-                value={selectedColor}
-                onPick={pickPaint}
-                extra={[{ id: 'def', label: t.editor.colorDefault, on: !selectedColor.startsWith('#'), onClick: () => setSelectedColor('') }]}
-              />
-            </Section>
-          )}
           <RaidSection def={activeDef} />
         </>
       );
     }
     return (
       <>
-        <ObjHead glyph={<Cube size={18} weight="duotone" />} title={project?.name || t.editor.loading} sub={t.projects.elements(placedItems.length)} />
-        <Section
-          icon={<MapTrifold size={15} weight="duotone" />}
-          title={t.shell.map}
-          tool={<SectionTool label={t.mapChooser.change} icon={<PencilSimple size={14} weight="bold" />} onClick={() => setChooserOpen(true)} />}
-        >
-          <Fields>
-            <Field label={t.shell.map} value={mapName} wide />
-          </Fields>
-          {!is3DMode && project?.site && <SwitchRow label={t.mapChooser.underlay} checked={showUnderlay} onChange={setShowUnderlay} />}
-          {is3DMode && activeMapData && (
-            <button className={`${sh.textBtn} ${sh.sectionBtn}`} onClick={() => openOverlay('map')}>
-              <MapTrifold size={15} weight="duotone" />
-              {t.shell.mapScreen} ({keyName(binds.map)})
-            </button>
-          )}
-        </Section>
-        {is3DMode ? (
-          <>
-            <Section icon={<SunHorizon size={15} weight="duotone" />} title={t.shell.scene}>
-              <Seg label={t.editor.timeOfDay} value={scene.time} options={timeOptions} onChange={time => setScene({ time })} />
-              <SwitchRow label={t.editor.bedAreas} checked={showBedAreas} onChange={setShowBedAreas} />
-            </Section>
-            <Section icon={<PersonSimpleWalk size={15} weight="duotone" />} title={t.hud.quick.move}>
-              <Seg
-                label={t.shell.walk}
-                value={walk3d ? 'walk' : 'fly'}
-                options={[
-                  { id: 'fly', label: t.shell.fly, icon: <Bird size={13} weight="bold" /> },
-                  { id: 'walk', label: t.shell.walk, icon: <PersonSimpleWalk size={13} weight="bold" /> },
-                ]}
-                onChange={v => sendSceneCommand({ kind: 'fly', on: v === 'fly' })}
-              />
-            </Section>
-          </>
-        ) : (
-          <>
-            <Section icon={<Eye size={15} weight="duotone" />} title={t.shell.view}>
-              <SwitchRow label={t.editor.bedAreas} checked={showBedAreas} onChange={setShowBedAreas} />
-              <SwitchRow label={t.shell.grid} checked={showGrid} onChange={setShowGrid} />
-            </Section>
-            <Section icon={<PaintBucket size={15} weight="duotone" />} title={t.shell.paint}>
-              <p className={sh.lead}>{t.shell.paintHint}</p>
-              {paintPalette}
-            </Section>
-          </>
-        )}
+        <ObjHead glyph={<Cube size={18} weight="duotone" />} title={project?.name || t.editor.loading} />
         <Section icon={<ChartBar size={15} weight="duotone" />} title={t.shell.stats}>
           <Fields>
             <Field label={t.shell.statElements} value={placedItems.length} wide />
@@ -1579,21 +1504,9 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
     </button>
   );
 
-  // --- Dolny panel: w 2D piętra (najwyższe u góry), w 3D budowle z orbitą i teleportem ---
-  const layers: LayerRow[] = is3DMode
-    ? bases.map((b, i) => ({
-        id: b.items[0].id,
-        label: t.bases.name(i + 1),
-        icon: <Buildings size={14} weight="duotone" />,
-        count: b.items.length,
-        title: t.bases.orbit,
-        onClick: () => orbitBase(b),
-        tools: project?.site ? (
-          <button className={sh.layerTool} onClick={() => teleportBase(b)} title={t.bases.teleport} aria-label={t.bases.teleport}>
-            <Crosshair size={13} weight="bold" />
-          </button>
-        ) : undefined,
-      }))
+  // --- Dolny panel: piętra (tylko Planner, najwyższe u góry) i sloty ---
+  const layers: LayerRow[] | undefined = is3DMode
+    ? undefined
     : [...floorsList].reverse().map(lvl => ({
         id: `f${lvl}`,
         label: floorName(lvl),
@@ -1841,38 +1754,13 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
           )}
           {!is3DMode && windowOpen && (
             <BuildWindow
-              tab={windowTab}
               activeItem={activeItem}
               hotbar={hotbar}
-              onTab={setWindowTab}
               onPick={itemId => {
                 takeItem(itemId);
                 setWindowOpen(false);
               }}
               onClose={() => setWindowOpen(false)}
-              panels={{
-                color: (
-                  <>
-                    <p className={styles.panelHint}>{t.editor.colorHint}</p>
-                    {paintPalette}
-                  </>
-                ),
-                bases: (
-                  <BasesPanel
-                    items={placedItems}
-                    site={project?.site}
-                    map={activeMapData}
-                    hint={t.bases.hint2d}
-                    onShow={b => {
-                      showBase(b);
-                      setWindowOpen(false);
-                    }}
-                    onDelete={deleteBase}
-                  />
-                ),
-                materials: <MaterialsPanel items={placedItems} projectName={project?.name ?? ''} />,
-                hotkeys: <KeybindsPanel />,
-              }}
             />
           )}
         </div>
@@ -1908,63 +1796,23 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
       </div>
 
       <Dock
-        view={dockView}
-        onView={setDockView}
         collapsed={dockCollapsed}
         onCollapse={setDockCollapsed}
-        action={!is3DMode ? (
-          <button className={sh.textBtn} onClick={addFloor}>
-            <Plus size={14} weight="bold" />
-            {t.shell.addFloor}
-          </button>
-        ) : undefined}
-        center={is3DMode ? (
-          activeDef && <span className={sh.transportNow}>{itemFullLabel(activeDef, t)}</span>
-        ) : (
+        center={!is3DMode && (
           <Transport
             label={floorName(currentFloor)}
-            meta={t.projects.elements(floorCount)}
             onFirst={() => setCurrentFloor(floorsList[0])}
             onPrev={() => setCurrentFloor(f => [...floorsList].reverse().find(l => l < f) ?? f)}
             onNext={() => setCurrentFloor(f => floorsList.find(l => l > f) ?? f)}
             onLast={() => setCurrentFloor(floorsList[floorsList.length - 1])}
           />
         )}
-        right={!is3DMode ? (
-          <div className={sh.zoomCtl}>
-            <button className={sh.iconBtn} onClick={() => zoomTo(scale / 1.2)} title={t.editor.zoomOut} aria-label={t.editor.zoomOut}>
-              <MagnifyingGlassMinus size={15} weight="bold" />
-            </button>
-            <input
-              type="range"
-              min={20}
-              max={400}
-              step={5}
-              value={Math.round(scale * 100)}
-              onChange={e => zoomTo(Number(e.target.value) / 100)}
-              aria-label={t.shell.zoomReset}
-            />
-            <button className={sh.iconBtn} onClick={() => zoomTo(scale * 1.2)} title={t.editor.zoomIn} aria-label={t.editor.zoomIn}>
-              <MagnifyingGlassPlus size={15} weight="bold" />
-            </button>
-            <output>{Math.round(scale * 100)}%</output>
-            <button className={sh.iconBtn} onClick={fitView} title={t.shell.fit} aria-label={t.shell.fit}>
-              <FrameCorners size={15} weight="bold" />
-            </button>
-          </div>
-        ) : undefined}
-        layersTitle={is3DMode ? t.shell.tabs.bases : t.shell.floors}
-        layersTool={!is3DMode ? <LayersAdd label={t.shell.addFloor} onClick={addFloor} /> : undefined}
         layers={layers}
+        onAddLayer={addFloor}
         hotbar={hotbar}
         selected={heldSlot}
-        activeItem={activeItem}
-        demolishOn={isRemoverActive}
         onSlot={selectSlot}
         onClearSlot={i => setHotbar(hotbar.map((v, k) => (k === i ? null : v)))}
-        onDemolish={() => selectItem(REMOVER.id)}
-        onAll={openBlocks}
-        onPick={takeItem}
       />
 
       {((!is3DMode && needsMap) || chooserOpen) && (

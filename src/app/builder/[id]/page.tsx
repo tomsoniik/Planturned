@@ -155,6 +155,12 @@ const hitPolygon = (item: PlacedItem, def: BuildItem) => {
 const isTypingTarget = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
 
+/** Baza (połączone elementy) z ostatnio postawionym elementem: na niej otwiera się plan. */
+const newestBase = (items: PlacedItem[]) => {
+  const last = items.at(-1);
+  return last ? baseGroups(items).find(g => g.some(i => i.id === last.id)) : undefined;
+};
+
 /** Losowy spawn dla /spawn bez numeru (1..n). */
 const randomSpawn = (n: number) => Math.floor(Math.random() * n) + 1;
 
@@ -299,8 +305,8 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
     }
     setProject(p);
     setPlacedItems(p.items);
-    // plan otwiera się na najniższym poziomie z elementami (skybase stoi np. na poziomie 9, nie na 0)
-    if (p.items.length) setCurrentFloor(Math.min(...p.items.map(planFloor)));
+    // plan otwiera się na ostatnio budowanej bazie, na jej najniższym poziomie (skybase stoi np. na poziomie 9, nie na 0)
+    if (p.items.length) setCurrentFloor(Math.min(...(newestBase(p.items) ?? p.items).map(planFloor)));
     lastSavedRef.current = JSON.stringify(p.items);
   }, [id]);
 
@@ -409,21 +415,42 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Wyśrodkowanie widoku na bazie przy pierwszym wczytaniu
-  const centeredRef = useRef(false);
-  useEffect(() => {
-    if (!project || centeredRef.current || is3DMode) return;
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    centeredRef.current = true;
-    const items = project.items;
+  /** Plan dopasowany do elementów (zoom i środek), z marginesem; bez elementów: punkt 0,0 na środku. */
+  const fitItems = (items: PlacedItem[]) => {
+    const r = containerRef.current?.getBoundingClientRect();
+    if (!r) return;
     if (items.length === 0) {
-      setPan({ x: rect.width / 2, y: rect.height / 2 });
+      setScale(1);
+      setPan({ x: r.width / 2, y: r.height / 2 });
       return;
     }
     const xs = items.map(i => i.x), ys = items.map(i => i.y);
-    const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-    const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-    setPan({ x: rect.width / 2 - cx, y: rect.height / 2 - cy });
+    const w = Math.max(...xs) - Math.min(...xs) + 120, h = Math.max(...ys) - Math.min(...ys) + 120;
+    // mała baza nie wypełnia całego ekranu (max 150%)
+    const next = Math.min(1.5, Math.max(0.2, Math.min(r.width / w, r.height / h) * 0.85));
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+    setScale(next);
+    setPan({ x: r.width / 2 - cx * next, y: r.height / 2 - cy * next });
+  };
+  /**
+   * Plan pokazuje bazę: jeśli na bieżącym piętrze nic nie ma (np. baza postawiona w Sandboxie stoi na terenie albo w powietrzu),
+   * przechodzi na najniższe piętro z elementami, i dopasowuje widok do elementów tego piętra.
+   */
+  const focusPlan = (items: PlacedItem[], floor: number) => {
+    const level = items.length && !items.some(i => planFloor(i) === floor) ? Math.min(...items.map(planFloor)) : floor;
+    if (level !== floor) setCurrentFloor(level);
+    fitItems(items.filter(i => planFloor(i) === level));
+  };
+
+  // Widok na bazie przy pierwszym wczytaniu
+  const centeredRef = useRef(false);
+  useEffect(() => {
+    if (!project || centeredRef.current || is3DMode) return;
+    centeredRef.current = true;
+    // piętro (najniższe ostatnio budowanej bazy) ustawia efekt wczytania projektu
+    const base = newestBase(project.items) ?? [];
+    const level = base.length ? Math.min(...base.map(planFloor)) : 0;
+    fitItems(base.filter(i => planFloor(i) === level));
   }, [project, is3DMode]);
 
   // Blokada przewijania strony kółkiem nad płótnem
@@ -471,12 +498,25 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
     setTurn(0);
   };
 
+  /** Ostatni element w chwili wejścia do 3D: po powrocie widać, czy coś tam postawiono. */
+  const lastBefore3DRef = useRef<string | undefined>(undefined);
   const setView3D = (on: boolean) => {
+    if (on) lastBefore3DRef.current = placedItemsRef.current.at(-1)?.id;
     setIs3DMode(on);
     setOverlay('none');
     setWindowOpen(false);
     setPanTool(false);
-    if (!on) unlockPointer();
+    if (!on) {
+      unlockPointer();
+      // to, co postawiono w 3D, od razu widać na planie: piętro i widok na bazie z najnowszym elementem
+      const items = placedItemsRef.current;
+      const group = items.at(-1)?.id !== lastBefore3DRef.current ? newestBase(items) : undefined;
+      if (group) {
+        const level = Math.min(...group.map(planFloor));
+        setCurrentFloor(level);
+        fitItems(group.filter(i => planFloor(i) === level));
+      } else focusPlan(items, currentFloor);
+    }
   };
 
   // --- Czat i komendy (3D) ---
@@ -989,21 +1029,8 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
   };
   /** Wyśrodkuj: plan dopasowany do elementów bieżącego piętra (albo całego projektu). */
   const fitView = () => {
-    const r = containerRef.current?.getBoundingClientRect();
-    if (!r) return;
     const onFloor = placedItems.filter(i => planFloor(i) === currentFloor);
-    const items = onFloor.length ? onFloor : placedItems;
-    if (items.length === 0) {
-      setScale(1);
-      setPan({ x: r.width / 2, y: r.height / 2 });
-      return;
-    }
-    const xs = items.map(i => i.x), ys = items.map(i => i.y);
-    const w = Math.max(...xs) - Math.min(...xs) + 120, h = Math.max(...ys) - Math.min(...ys) + 120;
-    const next = Math.min(4, Math.max(0.2, Math.min(r.width / w, r.height / h) * 0.85));
-    const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-    setScale(next);
-    setPan({ x: r.width / 2 - cx * next, y: r.height / 2 - cy * next });
+    fitItems(onFloor.length ? onFloor : placedItems);
   };
   const toggleFullscreen = () => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});

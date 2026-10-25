@@ -5,7 +5,7 @@
   Katalog klocków jest w oknie E (narzędzie Wstaw), wyburzanie w railu narzędzi, zoom na pasku widoku.
 */
 import { useEffect, useRef, type ReactNode } from 'react';
-import { CaretDown, CaretLeft, CaretRight, CaretUp, Plus, SkipBack, SkipForward } from '@phosphor-icons/react';
+import { CaretDown, CaretLeft, CaretRight, CaretUp, Plus, SkipBack, SkipForward, X } from '@phosphor-icons/react';
 import { findDef, type Hotbar } from '@/lib/builder';
 import { itemFullLabel, itemLabel } from '@/lib/i18n';
 import { SLOT_ACTIONS, keyLabel, useKeybinds } from '@/lib/keybinds';
@@ -141,23 +141,30 @@ export default function Dock({
               const def = id ? findDef(id) : undefined;
               const name = def ? itemFullLabel(def, t) : null;
               return (
-                <button
-                  key={i}
-                  className={s.slot}
-                  data-on={selected === i || undefined}
-                  data-empty={!def || undefined}
-                  aria-label={t.hud.slotAria(i + 1, name)}
-                  title={name ? `${name}${def?.health ? `, ${def.health} HP` : ''}` : undefined}
-                  onClick={() => onSlot(i)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    if (def) onClearSlot(i);
-                  }}
-                >
-                  <span className={s.slotKey}>{key(binds[SLOT_ACTIONS[i]])}</span>
-                  {def && <ItemIcon src={def.icon} name={name ?? ''} size={36} eager />}
-                  {def && <span className={s.slotName}>{def.part ? t.parts[def.part] : itemLabel(def, t)}</span>}
-                </button>
+                // x obok przycisku slotu, nie w nim (przycisk w przycisku to niepoprawny HTML)
+                <div key={i} className={s.slotCell}>
+                  <button
+                    className={s.slot}
+                    data-on={selected === i || undefined}
+                    data-empty={!def || undefined}
+                    aria-label={t.hud.slotAria(i + 1, name)}
+                    title={name ? `${name}${def?.health ? `, ${def.health} HP` : ''}` : undefined}
+                    onClick={() => onSlot(i)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      if (def) onClearSlot(i);
+                    }}
+                  >
+                    <span className={s.slotKey}>{key(binds[SLOT_ACTIONS[i]])}</span>
+                    {def && <ItemIcon src={def.icon} name={name ?? ''} size={36} eager />}
+                    {def && <span className={s.slotName}>{def.part ? t.parts[def.part] : itemLabel(def, t)}</span>}
+                  </button>
+                  {def && (
+                    <button className={s.slotClear} onClick={() => onClearSlot(i)} title={t.shell.clearSlot} aria-label={`${t.shell.clearSlot} ${i + 1}`}>
+                      <X size={10} weight="bold" />
+                    </button>
+                  )}
+                </div>
               );
             })}
           </div>

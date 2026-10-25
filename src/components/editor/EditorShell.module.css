@@ -1343,6 +1343,48 @@ button.field:hover {
   gap: 6px;
 }
 
+.slotCell {
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* x w rogu zajętego slotu: widoczny po najechaniu, przy wybranym slocie i z klawiatury */
+.slotClear {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: var(--surface-3);
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease), background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.slotCell:hover .slotClear,
+.slotClear:focus-visible,
+.slot[data-on] + .slotClear {
+  opacity: 1;
+}
+
+.slotClear:hover {
+  background: var(--danger);
+  border-color: transparent;
+  color: #fff;
+}
+
+@media (hover: none) {
+  .slotClear {
+    opacity: 1;
+  }
+}
+
 .slot {
   position: relative;
   width: 72px;

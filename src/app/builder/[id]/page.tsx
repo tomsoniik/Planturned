@@ -1812,7 +1812,11 @@ export default function BuilderCanvas({ params }: { params: Promise<{ id: string
         hotbar={hotbar}
         selected={heldSlot}
         onSlot={selectSlot}
-        onClearSlot={i => setHotbar(hotbar.map((v, k) => (k === i ? null : v)))}
+        onClearSlot={i => {
+          setHotbar(hotbar.map((v, k) => (k === i ? null : v)));
+          // wyczyszczony slot w ręku: ręka pusta (jak po wybraniu pustego slotu)
+          if (i === heldSlot) setActiveItem(null);
+        }}
       />
 
       {((!is3DMode && needsMap) || chooserOpen) && (

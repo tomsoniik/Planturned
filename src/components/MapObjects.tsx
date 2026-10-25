@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { instanceMatrix, loadMapScene, loadSceneryModel, type MapScene, type SceneryModel } from '@/lib/mapScene';
 import type { Site } from '@/lib/terrain';
+import { markSceneDirty } from '@/lib/collision';
 
 // Jeden materiał dla wszystkich obiektów mapy: kolory z palety gry siedzą w wierzchołkach.
 const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true });
@@ -74,6 +75,11 @@ function InstancedType({
       alive = false;
     };
   }, [guid]);
+
+  // doczytany model to nowe siatki w scenie: kolizja i celowanie muszą je zobaczyć
+  useEffect(() => {
+    if (model) markSceneDirty();
+  }, [model]);
 
   if (!model) return null;
   const tree = kind === 'tree';

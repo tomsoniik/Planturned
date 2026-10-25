@@ -1,57 +1,3 @@
-.shell {
-  display: flex;
-  flex-direction: column;
-  height: 100dvh;
-  overflow: hidden;
-  background: var(--bg);
-}
-
-/* Przełącznik segmentowy (pora dnia w menu Sandboxa) */
-.segmented {
-  display: inline-flex;
-  padding: 3px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-}
-
-.segmented button {
-  height: 28px;
-  padding: 0 12px;
-  background: transparent;
-  border: 0;
-  border-radius: 4px;
-  color: var(--muted);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.2s var(--ease), color 0.2s var(--ease);
-}
-
-.segmented button:hover {
-  color: var(--text);
-}
-
-.segmented button {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.segmented button[data-on] {
-  background: var(--surface-3);
-  color: var(--text);
-}
-
-/* Układ */
-.body {
-  position: relative;
-  flex: 1;
-  display: flex;
-  min-height: 0;
-}
-
 .panelHint {
   font-size: 13px;
   color: var(--muted);
@@ -344,77 +290,6 @@
   color: var(--text);
 }
 
-/* Kolory */
-.swatches {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-  max-width: 360px;
-}
-
-.swatch {
-  aspect-ratio: 1;
-  border: 2px solid transparent;
-  border-radius: var(--r-sm);
-  cursor: pointer;
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
-  transition: transform 0.15s var(--ease);
-}
-
-.swatch:hover {
-  transform: scale(1.05);
-}
-
-.swatch[data-on] {
-  border-color: var(--text);
-}
-
-.swatchText {
-  grid-column: span 2;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 34px;
-  background: var(--bg);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-sm);
-  color: var(--muted);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.swatchText[data-on] {
-  border-color: var(--accent);
-  color: var(--text);
-}
-
-.customColor {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 16px;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.customColor input {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-}
-
-.customColor code {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text);
-}
-
 /* Skróty */
 .hotkeys {
   display: grid;
@@ -442,8 +317,8 @@
 
 /* Płótno 2D: siatka gruba co 120, drobna co 30 jednostek planu */
 .canvasContainer {
-  flex: 1;
-  position: relative;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
   touch-action: none;
   background-color: var(--canvas);
@@ -475,6 +350,14 @@
 
 .canvasContainer[data-mode="remove"] {
   cursor: not-allowed;
+}
+
+.canvasContainer[data-mode="pan"] {
+  cursor: grab;
+}
+
+.canvasContainer[data-mode="pan"]:active {
+  cursor: grabbing;
 }
 
 .canvas {
@@ -710,58 +593,6 @@
   color: var(--muted);
 }
 
-/* Pasek stanu: pod wyspami Plannera, dół zajmuje pasek slotów */
-.statusbar {
-  position: absolute;
-  left: 12px;
-  top: 70px;
-  right: 12px;
-  flex-wrap: wrap;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--muted);
-  pointer-events: none;
-}
-
-.statusbar > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px;
-  background: rgb(17 24 19 / 0.9);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-}
-
-.zoom {
-  pointer-events: auto;
-  padding: 0 4px !important;
-}
-
-.zoom button {
-  width: 20px;
-  height: 20px;
-  background: transparent;
-  border: 0;
-  border-radius: 4px;
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
-}
-
-.zoom button:hover {
-  background: var(--surface-3);
-}
-
-.statusActive {
-  color: var(--text);
-  font-family: var(--font-sans);
-}
-
 .loading3d {
   display: grid;
   place-items: center;
@@ -789,11 +620,4 @@
 
 .missing p {
   color: var(--muted);
-}
-
-@media (max-width: 900px) {
-  /* wyspy Plannera zajmują wtedy dwa rzędy */
-  .statusbar {
-    top: 116px;
-  }
 }

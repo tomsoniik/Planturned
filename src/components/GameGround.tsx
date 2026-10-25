@@ -15,6 +15,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { MapData, MapMeta, Site } from '@/lib/terrain';
+import { markSceneDirty } from '@/lib/collision';
+import { loadTexture } from '@/lib/textures';
 
 const mapBase = (id: string) => `/maps/${encodeURIComponent(id)}`;
 
@@ -456,7 +458,8 @@ function RoadMesh({
   const [tex, setTex] = useState<THREE.Texture | null>(null);
   useEffect(() => {
     let alive = true;
-    new THREE.TextureLoader().load(url, (t) => {
+    // bez pliku: szary asfalt zamiast czarnej drogi
+    loadTexture(url, '#5b5a55', (t) => {
       if (!alive) return;
       t.colorSpace = THREE.SRGBColorSpace;
       t.wrapS = THREE.ClampToEdgeWrapping;
@@ -471,6 +474,8 @@ function RoadMesh({
   useEffect(() => () => geometries.forEach((g) => g.dispose()), [geometries]);
   const material = useMemo(() => (tex ? maskedMaterial({ map: tex, roughness: 0.95 }, mask, site, extent, true) : null), [tex, mask, site, extent]);
   useEffect(() => () => material?.dispose(), [material]);
+  // drogi to podłoże przy chodzeniu: po wczytaniu lista siatek kolizji do przebudowy
+  useEffect(() => markSceneDirty(), [material, geometries]);
 
   // kubełki daleko od kamery nie idą do rysowania (i tak byłyby odrzucone przez maskę)
   const group = useRef<THREE.Group>(null);

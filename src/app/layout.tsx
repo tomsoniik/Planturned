@@ -6,6 +6,7 @@ import MotionProvider from "@/components/MotionProvider";
 import I18nProvider from "@/components/I18nProvider";
 import { getLang } from "@/lib/i18n-server";
 import { getContent } from "@/lib/cms/store";
+import { SITE_URL } from "@/lib/site";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,11 +17,6 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin", "latin-ext"],
 });
-
-// Adres produkcji na Vercelu; lokalnie localhost. Potrzebny, żeby obrazek OG miał pełny adres.
-const SITE_URL = process.env.VERCEL_PROJECT_PRODUCTION_URL
-  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-  : 'http://localhost:3000';
 
 // Tytuł, opis i obrazek do udostępniania z panelu /admin (domyślnie ze słownika i public/og.png)
 export async function generateMetadata(): Promise<Metadata> {

@@ -39,7 +39,8 @@ function loadApi(): Promise<YTNamespace> {
   return apiPromise;
 }
 
-export default function HeroVideo({ media }: { media: Media }) {
+/** still: tylko kadr, bez odtwarzacza (podstrony: lista projektów, changelog). */
+export default function HeroVideo({ media, still }: { media: Media; still?: boolean }) {
   const { videoId, start, end, poster } = media;
   const reduce = useReducedMotion();
   const host = useRef<HTMLDivElement>(null);
@@ -49,7 +50,7 @@ export default function HeroVideo({ media }: { media: Media }) {
     // Sama klatka przy ograniczonych animacjach, oszczędzaniu danych i na telefonie (dane, bateria)
     const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
     const phone = window.matchMedia('(max-width: 767px)').matches;
-    if (reduce || saveData || phone || !host.current) return;
+    if (still || reduce || saveData || phone || !host.current) return;
 
     let player: YTPlayer | null = null;
     let cancelled = false;
@@ -84,7 +85,7 @@ export default function HeroVideo({ media }: { media: Media }) {
       player?.destroy();
       el.remove();
     };
-  }, [reduce, videoId, start, end]);
+  }, [still, reduce, videoId, start, end]);
 
   return (
     <div className={styles.video} aria-hidden>

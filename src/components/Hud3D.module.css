@@ -1,50 +1,4 @@
-/* Interfejs widoku 3D: pasek slotów, ekwipunek, czat, menu pauzy. Tokeny z globals.css. */
 
-/* --- Pasek --- */
-.hotbar {
-  position: absolute;
-  left: 50%;
-  bottom: 14px;
-  display: grid;
-  grid-template-columns: repeat(9, 52px);
-  gap: 4px;
-  transform: translateX(-50%);
-  pointer-events: none;
-  z-index: var(--z-overlay);
-}
-
-.slot {
-  position: relative;
-  display: grid;
-  place-items: center;
-  height: 52px;
-  background: rgb(11 16 12 / 0.8);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-sm);
-  transition: transform 0.18s var(--ease), border-color 0.18s var(--ease), background 0.18s var(--ease);
-}
-
-.slot img {
-  width: 36px;
-  height: 36px;
-  object-fit: contain;
-}
-
-.slot[data-empty] {
-  background: transparent;
-  border-color: transparent;
-}
-
-.slot[data-empty][data-on] {
-  border-color: rgb(255 255 255 / 0.28);
-}
-
-.slot[data-on]:not([data-empty]) {
-  background: rgb(20 31 18 / 0.92);
-  border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
-  transform: translateY(-3px);
-}
 
 .slotKey {
   position: absolute;
@@ -53,7 +7,8 @@
   font-family: var(--font-mono);
   font-size: 10px;
   line-height: 1.4;
-  color: var(--faint);
+  color: rgb(244 244 240 / 0.7);
+  text-shadow: 0 1px 1px rgb(0 0 0 / 0.8);
 }
 
 .toolIcon {
@@ -64,26 +19,13 @@
   color: var(--danger);
 }
 
-.hotbarEmpty {
-  position: absolute;
-  left: 50%;
-  bottom: 18px;
-  padding: 6px 12px;
-  background: rgb(11 16 12 / 0.8);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  font-size: 12px;
-  color: var(--muted);
-  transform: translateX(-50%);
-  pointer-events: none;
-  z-index: var(--z-overlay);
-}
-
 /* --- Nakładki (ekwipunek, menu) --- */
 .backdrop {
   position: absolute;
   inset: 0;
   display: grid;
+  /* jedna komórka o rozmiarze tła: bez tego wiersz rośnie z treścią i max-height: 100% okien nic nie ogranicza */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
   background: rgb(6 10 7 / 0.55);
   z-index: calc(var(--z-overlay) + 5);
@@ -108,7 +50,7 @@
   display: flex;
   flex-direction: column;
   width: min(780px, calc(100% - 32px));
-  max-height: calc(100% - 48px);
+  max-height: min(calc(100% - 48px), calc(100dvh - 48px));
   background: var(--surface);
   border: 1px solid var(--line-strong);
   border-radius: var(--r-md);
@@ -270,6 +212,55 @@
   text-align: center;
 }
 
+/* materiał pod nazwą części (kolumny siatki klocków, jak w oknie 2D) */
+.tile .tileMeta {
+  margin-top: -3px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+/* Klocki bez filtra materiału: wiersz = część, kolumna = materiał, brak wariantu to puste miejsce */
+.matrix {
+  display: grid;
+  gap: 6px;
+}
+
+.gap {
+  min-height: 92px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-md);
+}
+
+/* Filtr kategorii klocków (łączy się z materiałem) */
+.catChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.catChips button {
+  padding: 4px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+
+.catChips button:hover {
+  color: var(--text);
+}
+
+.catChips button[data-on] {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
 .muted {
   font-size: 13px;
   color: var(--muted);
@@ -364,7 +355,7 @@
 /* --- Czat --- */
 .chat {
   position: absolute;
-  top: 58px;
+  top: 12px;
   left: 12px;
   display: grid;
   gap: 6px;
@@ -387,7 +378,7 @@
 .chatLog p {
   justify-self: start;
   padding: 3px 9px;
-  background: rgb(11 16 12 / 0.78);
+  background: rgb(0 0 0 / 0.5);
   border-radius: 4px;
   font-size: 13px;
   line-height: 1.45;
@@ -437,7 +428,7 @@
 .chatInput {
   height: 36px;
   padding: 0 10px;
-  background: rgb(11 16 12 / 0.94);
+  background: rgb(0 0 0 / 0.75);
   border: 1px solid var(--accent);
   border-radius: var(--r-sm);
   outline: none;
@@ -453,154 +444,89 @@
 .chatHint {
   justify-self: start;
   padding: 2px 8px;
-  background: rgb(11 16 12 / 0.78);
+  background: rgb(0 0 0 / 0.5);
   border-radius: 4px;
   font-size: 11px;
   color: var(--muted);
 }
 
-/* --- Menu pauzy --- */
-.menu {
+/* --- Jak grać --- */
+.quick {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) auto;
-  width: min(920px, calc(100% - 32px));
-  height: min(640px, calc(100% - 48px));
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  box-shadow: 0 24px 60px rgb(0 0 0 / 0.35);
-  overflow: hidden;
-  animation: rise 0.22s var(--ease);
+  gap: 18px;
 }
 
-.menuNav {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 18px 14px;
-  border-right: 1px solid var(--line);
+.quickGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 10px 28px;
 }
 
-.menuTitle {
-  padding: 0 4px;
+.quickGroup h3 {
+  margin-bottom: 4px;
   font-size: 13px;
   font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.menuTabs,
-.menuActions {
-  display: grid;
-  gap: 2px;
+.quickGroup ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.menuActions {
-  margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-}
-
-.menuTabs button,
-.menuActions button {
+.quickGroup li {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 10px;
-  background: transparent;
-  border: 0;
-  border-radius: var(--r-sm);
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
+  padding: 6px 0;
+  font-size: 13px;
   color: var(--muted);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.2s var(--ease), color 0.2s var(--ease);
 }
 
-.menuTabs button:hover,
-.menuActions button:hover {
-  background: var(--surface-2);
-  color: var(--text);
-}
-
-.menuTabs button[data-on] {
-  background: var(--surface-3);
-  color: var(--text);
-}
-
-.menuBody {
-  min-height: 0;
-  overflow-y: auto;
-  padding: 20px 22px 24px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--surface-3) transparent;
-}
-
-.menuBody h2 {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin-bottom: 16px;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.menuBody h2 svg {
-  color: var(--accent);
-}
-
-.menuTabs button svg {
-  flex-shrink: 0;
-  color: var(--faint);
-  transition: color 0.2s var(--ease);
-}
-
-.menuTabs button[data-on] svg {
-  color: var(--accent);
-}
-
-/* Wróć do gry: jasny, ale bez zielonej poświaty */
-.resume {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  height: 40px;
-  background: var(--text);
-  border: 0;
-  border-radius: var(--r-sm);
-  color: var(--accent-ink);
-  font: inherit;
-  font-size: 13.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s var(--ease), transform 0.12s var(--ease);
-}
-
-.resume:hover {
-  background: #ffffff;
-}
-
-.resume:active {
-  transform: scale(0.98);
-}
-
-.resume:focus-visible {
-  outline: 2px solid rgb(var(--accent-rgb) / 0.6);
-  outline-offset: 2px;
-}
-
-.menuFoot {
-  grid-column: 1 / -1;
-  padding: 10px 18px;
+.quickGroup li + li {
   border-top: 1px solid var(--line);
-  font-size: 12px;
-  color: var(--faint);
+}
+
+.quickKeys {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+.tips {
+  padding: 14px 16px;
+  background: var(--accent-soft);
+  border: 1px solid rgb(var(--accent-rgb) / 0.22);
+  border-radius: var(--r-md);
+}
+
+.tips h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tips h3 svg {
+  color: var(--accent);
+}
+
+.tips ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.tips li::marker {
+  color: var(--accent);
 }
 
 /* Ustawienia w menu: wiersze z kontrolką po prawej */
@@ -674,19 +600,19 @@ label.setting {
 }
 
 @media (max-width: 640px) {
-  .menu {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) auto;
-  }
+  
 
-  .menuNav {
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-  }
+  
 
-  .menuActions {
-    display: none;
-  }
+  
+
+  
+
+  
+
+  
+
+  
 
   .invHead {
     flex-wrap: wrap;
@@ -696,24 +622,18 @@ label.setting {
     width: 100%;
   }
 
-  .hotbar {
-    grid-template-columns: repeat(9, 36px);
-  }
+  
 
-  .slot {
-    height: 36px;
-  }
+  
 
-  .slot img {
-    width: 26px;
-    height: 26px;
-  }
+  
 }
 
 @media (prefers-reduced-motion: reduce) {
   .backdrop,
   .inventory,
   .menu,
+  .menuBody,
   .chatLog p {
     animation: none;
   }
@@ -723,4 +643,46 @@ label.setting {
   .swatches button {
     transition: none;
   }
+}
+
+/* Ekwipunek: przełącznik Budowle / Rekwizyty */
+.invTabs {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+
+.invTabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease);
+}
+
+.invTabs button:hover {
+  color: var(--text);
+}
+
+.invTabs button[data-on] {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.invCount {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint);
 }

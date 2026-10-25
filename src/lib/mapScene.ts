@@ -8,6 +8,7 @@
 */
 import * as THREE from 'three';
 import { buildGeometry } from './gameModels';
+import { loadTexture } from './textures';
 
 export interface SceneType {
   guid: string;
@@ -51,17 +52,39 @@ export interface SceneryModel {
 
 // Liście kilku gatunków drzew dzielą teksturę: jeden materiał na plik.
 const cutoutMaterials = new Map<string, THREE.Material>();
-const textureLoader = new THREE.TextureLoader();
+
+/**
+ * Liście z daleka: mniejsze poziomy mipmap uśredniają alfę, która spada poniżej progu alphaTest, i na karcie
+ * graficznej z drzew zostają same pnie. Alfa rośnie z poziomem mipmapy (ok. 25% na poziom), więc karta liści
+ * zachowuje kształt na każdej odległości.
+ */
+function keepCoverage(m: THREE.Material) {
+  m.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <alphatest_fragment>',
+      `#ifdef USE_MAP
+        vec2 texel = vMapUv * vec2(textureSize(map, 0));
+        vec2 ddx = dFdx(texel), ddy = dFdy(texel);
+        float mip = max(0.0, 0.5 * log2(max(dot(ddx, ddx), dot(ddy, ddy))));
+        diffuseColor.a *= 1.0 + mip * 0.25;
+      #endif
+      #include <alphatest_fragment>`,
+    );
+  };
+  m.customProgramCacheKey = () => 'leaf-coverage';
+}
 
 function cutoutMaterial(file: string, alphaTest: number) {
   const key = `${file}@${alphaTest}`;
   let m = cutoutMaterials.get(key);
   if (!m) {
-    const map = textureLoader.load(`/game/scenery/${file}`);
+    // bez pliku: zieleń liści (karty bez tekstury są wtedy pełne, ale nie czarne)
+    const map = loadTexture(`/game/scenery/${file}`, '#4f6b3a');
     map.colorSpace = THREE.SRGBColorSpace;
     map.anisotropy = 4;
     // DoubleSide: karty liści widać z obu stron, cień też rzucają obie strony
     m = new THREE.MeshStandardMaterial({ map, alphaTest, side: THREE.DoubleSide, roughness: 0.9 });
+    keepCoverage(m);
     cutoutMaterials.set(key, m);
   }
   return m;

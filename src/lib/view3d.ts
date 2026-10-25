@@ -13,6 +13,10 @@ interface View3DState {
   setOverlay: (o: Overlay) => void;
   /** Element w celowniku (do chwytania bazy klawiszem). */
   lookId: string | null;
+  /** Kamera krąży wokół bazy (orbita): bez stawiania i bez sterowania postacią. */
+  orbit: boolean;
+  /** Chodzenie z fizyką gry (false: latanie); pasek widoku nad sceną pokazuje i przełącza. */
+  walk: boolean;
 }
 
 export const useView3D = create<View3DState>((set) => ({
@@ -20,6 +24,8 @@ export const useView3D = create<View3DState>((set) => ({
   changedAt: 0,
   setOverlay: (overlay) => set({ overlay, changedAt: performance.now() }),
   lookId: null,
+  orbit: false,
+  walk: false,
 }));
 
 // --- Kursor (pointer lock) ---
@@ -55,7 +61,11 @@ export type SceneCommand =
   /** Kamera na tej wysokości nad terenem (m). */
   | { kind: 'height'; above: number }
   /** Dach startowy skybase'a pod graczem, piętro pod limitem budowania mapy. */
-  | { kind: 'skybase'; itemId: string };
+  | { kind: 'skybase'; itemId: string }
+  /** PNG sceny bez HUD-u. */
+  | { kind: 'screenshot' }
+  /** Kamera krąży wokół punktu sceny (x, y, z); bez punktu: wokół całego projektu. on: false kończy orbitę. */
+  | { kind: 'orbit'; on: boolean; target?: [number, number, number]; radius?: number };
 
 /** Pozycja kamery w układzie świata gry (x, wysokość, z) i obrót (yaw sceny, rad) albo null, gdy scena nie działa. */
 export type CameraProbe = () => [number, number, number, number] | null;

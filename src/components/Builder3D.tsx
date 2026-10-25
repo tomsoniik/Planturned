@@ -2,6 +2,8 @@
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { PerformanceMonitor } from '@react-three/drei';
+import { Bone, Heart, PersonSimple, PersonSimpleRun, PersonSimpleSwim, Wind } from '@phosphor-icons/react';
 import * as THREE from 'three';
 import styles from './Builder3D.module.css';
 import {
@@ -21,21 +23,36 @@ import {
   sameLevel,
   wallMissingPillars,
   isRoofLayer,
+  isClaim,
+  isDoorLike,
+  isGlass,
+  isOpenable,
+  isLadder,
+  openStyle,
+  type OpenStyle,
+  findDoorSlot,
+  findLadderSlot,
   type BuildItem,
   type PasteResult,
   type PlacedItem,
 } from '@/lib/builder';
 import { resolveLighting } from '@/lib/lighting';
-import { loadGameModels, type GameModel } from '@/lib/gameModels';
+import { loadGameModels, loadedPropModels, onPropModels, requestPropModels, type GameModel } from '@/lib/gameModels';
+import { loadProps, usePropsStore } from '@/lib/props';
+import { DEFAULT_SWING, itemSound, loadSoundTable, playItemSound, preloadItemSounds, resumeAudio, setListener } from '@/lib/sounds';
+import { useSettings3D } from '@/lib/settings3d';
+import { loadTexture } from '@/lib/textures';
+import { castFirst, createNearby, headroom, markSceneDirty, moveCapsule, pushOut, sceneMeshes } from '@/lib/collision';
 import { loadMap, mapOverviewUrl, type MapData, type Site } from '@/lib/terrain';
 import { DEFAULT_SCENE, type SceneSettings } from '@/lib/scene';
 import { itemLabel, type AimReason, type AimWarn } from '@/lib/i18n';
 import { useT } from './I18nProvider';
+import RaidInfo from './RaidInfo';
 import { keyLabel, useKeybinds } from '@/lib/keybinds';
-import { onSceneCommand, registerCameraProbe, registerContainer, useView3D } from '@/lib/view3d';
+import { onSceneCommand, registerCameraProbe, registerContainer, sendSceneCommand, useView3D } from '@/lib/view3d';
 import {
   AIR_ACCEL, AIR_DECEL, EYES, EYES_LERP, FALL_DAMAGE_MAX, FALL_DAMAGE_SPEED, GRAVITY, HEIGHT, JUMP_SPEED, MAX_SLOPE_DEG,
-  RADIUS, SLIDE_ACCEL, SPEED, SWIM_BODY_DEPTH, SWIM_MULTIPLIER, SWIM_SURFACE_OFFSET, SWIM_UP_SPEED, TERMINAL_VELOCITY, TICK,
+  CLIMB_SPEED, LADDER_REACH, RADIUS, SLIDE_ACCEL, SPEED, SWIM_BODY_DEPTH, SWIM_MULTIPLIER, SWIM_SURFACE_OFFSET, SWIM_UP_SPEED, TERMINAL_VELOCITY, TICK,
   breathAtHeight, oxygenTick, type OxygenState, type Stance, type Vitals,
 } from '@/lib/playerPhysics';
 import { Meadow, SkyAndLight, meadowHeight } from './Scenery';
@@ -57,13 +74,21 @@ const CHUNK = 128; // co ile metrów obszar obiektów mapy przesuwa się za kame
 
 type Models = Map<number, GameModel>;
 
+/** Struktury z eksportu gry + wczytane już rekwizyty (dochodzą na żądanie, requestPropModels). */
 export function useGameModels() {
   const [models, setModels] = useState<Models>(new Map());
   useEffect(() => {
     let alive = true;
-    loadGameModels().then((m) => alive && setModels(m));
+    let structures: Models = new Map();
+    const merge = () => alive && setModels(new Map([...structures, ...loadedPropModels()]));
+    loadGameModels().then((m) => {
+      structures = m;
+      merge();
+    });
+    const off = onPropModels(merge);
     return () => {
       alive = false;
+      off();
     };
   }, []);
   return models;
@@ -72,10 +97,163 @@ export function useGameModels() {
 /** Wysokość pivotu elementu nad poziomem (konwencje z gry). */
 function pieceY(def: BuildItem, model?: GameModel) {
   if (def.shape === 'bed') return TOP;
+  if (def.shape === 'prop') return 0; // spód modelu na y = 0, stoi na powierzchni pod celownikiem
   if (def.shape === 'hatch') return H - 0.1; // w otworze dachu
   if (def.shape === 'wall' || def.shape === 'pillar') return WALL_BASE - (model ? model.minY : 0);
   if (isRoofLayer(def)) return H;
   return 0;
+}
+
+/**
+ * Otwarcie w lokalnym układzie elementu (styl z openStyle, jak animacje z gry); `amount` 0..1 to postęp otwarcia.
+ * Drzwi i skrzydła obracają się o 90° na pionowej krawędzi, brama unosi się na górnej, klapa na krawędzi +Z.
+ * Wszystko otwiera się na stronę -Z (R przy stawianiu przekłada element na drugą stronę ściany).
+ * Kolizja liczy się z siatki, więc otwarty element sam przestaje blokować przejście.
+ */
+function openMatrix(style: OpenStyle, def: BuildItem, model: GameModel | undefined, leaf: number, amount: number, out: THREE.Matrix4): THREE.Matrix4 {
+  const bb = model?.geometry.boundingBox;
+  const w = (def.size?.[0] ?? 2) / 2;
+  const angle = (Math.PI / 2) * amount;
+  let hx = 0, hy = 0, hz = 0;
+  if (style === 'hatch') {
+    hz = bb ? bb.max.z : 0.8;
+    swingTmp.makeRotationX(angle);
+  } else if (style === 'gate') {
+    hy = bb ? bb.max.y : def.size?.[1] ?? 3.75;
+    swingTmp.makeRotationX(angle);
+  } else if (style === 'double' && leaf === 1) {
+    hx = bb ? bb.max.x : w;
+    swingTmp.makeRotationY(-angle);
+  } else {
+    hx = bb ? bb.min.x : -w;
+    swingTmp.makeRotationY(angle);
+  }
+  return out.makeTranslation(hx, hy, hz).multiply(swingTmp).multiply(swingTmp2.makeTranslation(-hx, -hy, -hz));
+}
+const swingTmp = new THREE.Matrix4();
+const swingTmp2 = new THREE.Matrix4();
+
+/**
+ * Połowa siatki po jednej stronie płaszczyzny x = 0 (side -1: lewa, 1: prawa), z dociętymi trójkątami
+ * i zaślepką w miejscu cięcia. Okiennice i drzwi podwójne są w eksporcie jedną bryłą, a w grze mają dwa skrzydła.
+ */
+function splitAtX(geometry: THREE.BufferGeometry, side: -1 | 1) {
+  const pos = geometry.getAttribute('position');
+  const col = geometry.getAttribute('color');
+  const outP: number[] = [], outC: number[] = [];
+  let y0 = Infinity, y1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  const cutColor = [0, 0, 0];
+  let cuts = 0;
+  type V = { p: number[]; c: number[] };
+  const vert = (k: number): V => ({
+    p: [pos.getX(k), pos.getY(k), pos.getZ(k)],
+    c: col ? [col.getX(k), col.getY(k), col.getZ(k)] : [],
+  });
+  const lerp = (a: V, b: V, t: number): V => ({
+    p: a.p.map((v, n) => v + (b.p[n] - v) * t),
+    c: a.c.map((v, n) => v + (b.c[n] - v) * t),
+  });
+  const onCut = (v: V) => {
+    y0 = Math.min(y0, v.p[1]); y1 = Math.max(y1, v.p[1]);
+    z0 = Math.min(z0, v.p[2]); z1 = Math.max(z1, v.p[2]);
+    v.c.forEach((c, n) => (cutColor[n] += c));
+    cuts++;
+  };
+  for (let k = 0; k < pos.count; k += 3) {
+    const tri = [vert(k), vert(k + 1), vert(k + 2)];
+    // Sutherland-Hodgman dla jednej płaszczyzny: zostaje część, gdzie side * x >= 0
+    const poly: V[] = [];
+    for (let n = 0; n < 3; n++) {
+      const a = tri[n], b = tri[(n + 1) % 3];
+      const da = side * a.p[0], db = side * b.p[0];
+      if (da >= 0) poly.push(a);
+      if ((da >= 0) !== (db >= 0)) {
+        const v = lerp(a, b, da / (da - db));
+        v.p[0] = 0;
+        onCut(v);
+        poly.push(v);
+      }
+    }
+    for (let n = 1; n + 1 < poly.length; n++) {
+      for (const v of [poly[0], poly[n], poly[n + 1]]) {
+        outP.push(...v.p);
+        outC.push(...v.c);
+      }
+    }
+  }
+  if (cuts > 0) {
+    // zaślepka: prostokąt przekroju zwrócony na zewnątrz skrzydła (normalna -side * X)
+    const c = cutColor.map((v) => v / cuts);
+    const quad = side > 0
+      ? [[y0, z0], [y1, z1], [y1, z0], [y0, z0], [y0, z1], [y1, z1]]
+      : [[y0, z0], [y1, z0], [y1, z1], [y0, z0], [y1, z1], [y0, z1]];
+    for (const [y, z] of quad) {
+      outP.push(0, y, z);
+      if (col) outC.push(...c);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(outP, 3));
+  if (col) g.setAttribute('color', new THREE.Float32BufferAttribute(outC, 3));
+  g.computeVertexNormals();
+  g.computeBoundingBox();
+  g.computeBoundingSphere();
+  return g;
+}
+
+/** Skrzydła modelu (lewe, prawe) liczone raz na geometrię. */
+const leafCache = new WeakMap<THREE.BufferGeometry, [GameModel, GameModel]>();
+function modelLeaves(model: GameModel): [GameModel, GameModel] {
+  let leaves = leafCache.get(model.geometry);
+  if (!leaves) {
+    leaves = [{ ...model, geometry: splitAtX(model.geometry, -1) }, { ...model, geometry: splitAtX(model.geometry, 1) }];
+    leafCache.set(model.geometry, leaves);
+  }
+  return leaves;
+}
+
+/** Drzwi, bramy, okiennice i klapy: płynny ruch do stanu `open`; po wczytaniu projektu od razu w docelowym położeniu. */
+function Swing({ def, model, open, render }: { def: BuildItem; model?: GameModel; open: boolean; render: (model?: GameModel) => React.ReactNode }) {
+  const style = openStyle(def) ?? 'door';
+  const leaves = style === 'double' && model ? modelLeaves(model) : null;
+  const left = useRef<THREE.Group>(null);
+  const right = useRef<THREE.Group>(null);
+  const progress = useRef(open ? 1 : 0);
+  const shown = useRef(-1);
+  // zawias zależy od modelu: po jego wczytaniu macierz trzeba policzyć od nowa
+  useEffect(() => {
+    shown.current = -1;
+  }, [def, model]);
+  useFrame((_, delta) => {
+    const target = open ? 1 : 0;
+    const p = progress.current;
+    // czas animacji Open/Close tego przedmiotu z gry (drzwi 0,63 s, skarbiec 0,8 s)
+    const s = itemSound(def.gameId);
+    const time = (open ? s?.open : s?.close) ?? DEFAULT_SWING;
+    if (p !== target) progress.current = target > p ? Math.min(1, p + delta / time) : Math.max(0, p - delta / time);
+    if (shown.current === progress.current) return;
+    shown.current = progress.current;
+    // wygładzenie: szybki start, miękkie dojście do framugi
+    const t = progress.current;
+    const eased = t * t * (3 - 2 * t);
+    [left.current, right.current].forEach((g, leaf) => {
+      if (!g) return;
+      openMatrix(style, def, model, leaf, eased, g.matrix);
+      g.matrixWorldNeedsUpdate = true;
+    });
+  });
+  return (
+    <>
+      <group ref={left} matrixAutoUpdate={false}>
+        {render(leaves ? leaves[0] : model)}
+      </group>
+      {leaves && (
+        <group ref={right} matrixAutoUpdate={false}>
+          {render(leaves[1])}
+        </group>
+      )}
+    </>
+  );
 }
 
 // --- Bryły zastępcze (gdy nie ma eksportu modeli z gry) ---
@@ -102,6 +280,10 @@ function FallbackGeometry({ def }: { def: BuildItem }) {
       return <boxGeometry args={[1.6, 0.12, 1.6]} />;
     case 'bed':
       return <boxGeometry args={[1, 0.5, 2]} />;
+    case 'prop': {
+      const [w, h, d] = def.size ?? [1, 1, 1];
+      return <boxGeometry args={[w, h, d]} />;
+    }
     default:
       return <boxGeometry args={[S, 0.5, S]} />;
   }
@@ -112,6 +294,7 @@ function fallbackOffset(def: BuildItem): [number, number, number] {
   if (def.shape === 'wall') return [0, (def.part === 'rampart' ? 1.5 : 4.25) / 2, 0];
   if (def.shape === 'pillar') return [0, (def.part === 'post' ? 1.86 : 4.25) / 2, 0];
   if (def.shape === 'bed') return [0, 0.25, 0];
+  if (def.shape === 'prop') return [0, (def.size?.[1] ?? 1) / 2, 0];
   return [0, 0, 0];
 }
 
@@ -127,8 +310,79 @@ interface PieceProps {
 }
 
 /** Jeden element w lokalnym układzie (pivot w 0, bez obrotu). */
+/*
+  Szyby z gry to pojedyncza płaszczyzna bez grubości: przezroczysty materiał widoczny z obu stron.
+  Jednostronna (lustro weneckie): z jednej strony ciemne lustro, z drugiej prawie przezroczysta; R odwraca stronę.
+*/
+const GLASS: Record<number, { color: string; opacity: number }> = {
+  1297: { color: '#a8e4ec', opacity: 0.22 },
+  1298: { color: '#c3cbcf', opacity: 0.32 },
+  1299: { color: '#5b6a70', opacity: 0.18 },
+};
+
+/** Trójkąty siatki zwrócone na +Z albo na -Z (lokalnie): szyby z gry mają każdą ścianę podwójnie, po jednej na stronę. */
+function facesBySide(geometry: THREE.BufferGeometry) {
+  const pos = geometry.getAttribute('position');
+  const index = geometry.getIndex();
+  const front: number[] = [], back: number[] = [];
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  const count = index ? index.count : pos.count;
+  for (let i = 0; i < count; i += 3) {
+    const ia = index ? index.getX(i) : i, ib = index ? index.getX(i + 1) : i + 1, ic = index ? index.getX(i + 2) : i + 2;
+    a.fromBufferAttribute(pos, ia);
+    b.fromBufferAttribute(pos, ib);
+    c.fromBufferAttribute(pos, ic);
+    const nz = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    (nz >= 0 ? front : back).push(ia, ib, ic);
+  }
+  const part = (ids: number[]) => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', pos);
+    if (geometry.getAttribute('normal')) g.setAttribute('normal', geometry.getAttribute('normal'));
+    g.setIndex(ids);
+    g.computeBoundingSphere();
+    return g;
+  };
+  return front.length && back.length ? { front: part(front), back: part(back) } : null;
+}
+
+function GlassPiece({ def, model, highlight, itemId }: { def: BuildItem; model: GameModel; highlight?: 'target' | 'selected'; itemId?: string }) {
+  const g = GLASS[def.gameId ?? 0] ?? GLASS[1297];
+  const tint = highlight === 'target' ? '#e5484d' : highlight === 'selected' ? '#8dc46f' : g.color;
+  const oneWay = def.gameId === 1299;
+  const sides = useMemo(() => facesBySide(model.geometry), [model.geometry]);
+  useEffect(() => () => {
+    sides?.front.dispose();
+    sides?.back.dispose();
+  }, [sides]);
+  const clear = (side: THREE.Side) => (
+    <meshStandardMaterial color={tint} transparent opacity={g.opacity} depthWrite={false} roughness={0.05} metalness={0.1} side={side} />
+  );
+  // Każda strona ma własne trójkąty: rysujemy tylko te zwrócone do kamery (jedna warstwa szkła z każdej strony).
+  // Lustro weneckie: strona +Z to ciemne lustro, strona -Z zwykła przezroczysta szyba (R obraca element).
+  if (sides) {
+    return (
+      <>
+        <mesh geometry={sides.back} userData={{ itemId }} renderOrder={1}>
+          {clear(THREE.FrontSide)}
+        </mesh>
+        <mesh geometry={sides.front} userData={{ itemId }} renderOrder={1}>
+          {oneWay ? <meshStandardMaterial color="#1c2124" roughness={0.08} metalness={0.85} side={THREE.FrontSide} /> : clear(THREE.FrontSide)}
+        </mesh>
+      </>
+    );
+  }
+  // pojedyncza płaszczyzna (bez podwójnych ścian): widoczna z obu stron
+  return (
+    <mesh geometry={model.geometry} userData={{ itemId }} renderOrder={1}>
+      {clear(THREE.DoubleSide)}
+    </mesh>
+  );
+}
+
 function Piece({ def, model, color, clip, ghost, highlight, itemId }: PieceProps) {
   const palette = !!model?.hasColors && highlight !== 'target';
+  if (!ghost && model && isGlass(def)) return <GlassPiece def={def} model={model} highlight={highlight} itemId={itemId} />;
   const material = ghost ? (
     <meshStandardMaterial
       color={ghost === 'ok' ? '#8dc46f' : '#e5484d'}
@@ -136,6 +390,8 @@ function Piece({ def, model, color, clip, ghost, highlight, itemId }: PieceProps
       opacity={0.45}
       depthWrite={false}
       flatShading
+      // szyba to płaszczyzna bez grubości: podgląd widać z obu stron
+      side={isGlass(def) ? THREE.DoubleSide : THREE.FrontSide}
     />
   ) : (
     <meshStandardMaterial
@@ -157,7 +413,7 @@ function Piece({ def, model, color, clip, ghost, highlight, itemId }: PieceProps
 
   if (model) {
     return (
-      <mesh geometry={model.geometry} receiveShadow={shadow} userData={{ itemId }}>
+      <mesh geometry={model.geometry} receiveShadow={shadow} userData={ghost ? {} : { itemId, ladder: isLadder(def) }}>
         {material}
       </mesh>
     );
@@ -204,21 +460,24 @@ export function Item3D({
   const model = def.gameId !== undefined ? models.get(def.gameId) : undefined;
   // W 3D zawsze wygląd z gry: kolory z zakładki Kolor są tylko oznaczeniami w planie 2D.
   const color = model?.color || def.color;
+  const piece = (m: GameModel | undefined) => (
+    <MemoPiece
+      def={def}
+      model={m}
+      color={color}
+      clip={clip}
+      highlight={isTargeted ? 'target' : isSelected ? 'selected' : undefined}
+      itemId={item.id}
+    />
+  );
 
   return (
     <group
       position={[item.x * SCALE, (item.floor || 0) * H + pieceY(def, model), item.y * SCALE]}
       rotation={[0, (-item.rotation * Math.PI) / 180, 0]}
     >
-      <MemoPiece
-        def={def}
-        model={model}
-        color={color}
-        clip={clip}
-        highlight={isTargeted ? 'target' : isSelected ? 'selected' : undefined}
-        itemId={item.id}
-      />
-      {def.shape === 'bed' && showBedAreas && (
+      {isOpenable(def) ? <Swing def={def} model={model} open={!!item.open} render={piece} /> : piece(model)}
+      {isClaim(def) && showBedAreas && (
         <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <ringGeometry args={[27 - 0.15, 27, 96]} />
           <meshBasicMaterial color="#8dc46f" transparent opacity={0.7} depthWrite={false} />
@@ -237,6 +496,8 @@ interface BatchGroup {
   /** Wysokość pivotu nad poziomem piętra. */
   y: number;
   items: PlacedItem[];
+  /** Drabina: postać się po niej wspina. */
+  ladder?: boolean;
 }
 
 // Materiały wspólne dla wszystkich instancji: bez podświetlenia, jak Piece.
@@ -274,12 +535,13 @@ function InstancedGroup({ group, hidden, ghost = false }: { group: BatchGroup; h
       if (hidden.has(item.id)) continue;
       p.set(item.x * SCALE, (item.floor || 0) * H + group.y, item.y * SCALE);
       q.setFromAxisAngle(up, (-item.rotation * Math.PI) / 180);
-      mesh.setMatrixAt(ids.length, m.compose(p, q, one));
+      m.compose(p, q, one);
+      mesh.setMatrixAt(ids.length, m);
       ids.push(item.id);
     }
     mesh.count = ids.length;
     // podgląd wklejania nie jest celem celownika ani podłożem
-    mesh.userData = ghost ? {} : { itemIds: ids };
+    mesh.userData = ghost ? {} : { itemIds: ids, ladder: !!group.ladder };
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
   }, [group, hidden, ghost]);
@@ -344,7 +606,9 @@ function Structures({
     for (const item of items) {
       const def = findDef(item.itemId);
       const model = def?.gameId !== undefined ? models.get(def.gameId) : undefined;
-      if (!def || !model) {
+      // drzwi i klapy osobno: każde ma własną animację otwierania
+      // drzwi i klapy (animacja) oraz szyby (przezroczyste, obie strony) rysujemy osobno
+      if (!def || !model || isOpenable(def) || isGlass(def)) {
         loose.push(item);
         continue;
       }
@@ -356,13 +620,15 @@ function Structures({
       if (!g) {
         const palette = model.hasColors;
         const material = batchMaterial(palette, model.color || def.color, def.material === 'metal', clipY);
-        byKey.set(key, (g = { key, geometry: model.geometry, material, y: pieceY(def, model), items: [] }));
+        byKey.set(key, (g = { key, geometry: model.geometry, material, y: pieceY(def, model), items: [], ladder: isLadder(def) }));
       }
       g.items.push(item);
     }
     return { groups: [...byKey.values()], loose };
   }, [items, models, noSkirt]);
 
+  // nowe albo usunięte siatki: listy do kolizji i celowania trzeba przebudować
+  useEffect(() => markSceneDirty(), [items, models]);
   const hidden = useMemo(() => new Set(targetId ? [...selected, targetId] : selected), [selected, targetId]);
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
   const special = [...hidden].map((id) => byId.get(id)).filter((i): i is PlacedItem => !!i && !loose.includes(i));
@@ -384,9 +650,13 @@ function Structures({
       ))}
       {showBedAreas &&
         items
-          .filter((i) => findDef(i.itemId)?.shape === 'bed')
+          .filter((i) => isClaim(findDef(i.itemId)))
           .map((i) => (
-            <mesh key={i.id} position={[i.x * SCALE, (i.floor || 0) * H + TOP + 0.05, i.y * SCALE]} rotation={[-Math.PI / 2, 0, 0]}>
+            <mesh
+              key={i.id}
+              position={[i.x * SCALE, (i.floor || 0) * H + (findDef(i.itemId)?.shape === 'bed' ? TOP : 0) + 0.05, i.y * SCALE]}
+              rotation={[-Math.PI / 2, 0, 0]}
+            >
               <ringGeometry args={[27 - 0.15, 27, 96]} />
               <meshBasicMaterial color="#8dc46f" transparent opacity={0.7} depthWrite={false} />
             </mesh>
@@ -424,7 +694,8 @@ function useOverviewTexture(meta: MapData['meta']) {
   useEffect(() => {
     if (meta.terrain) return;
     let alive = true;
-    new THREE.TextureLoader().load(mapOverviewUrl(meta.id), (tex) => {
+    // bez pliku: zieleń zbliżona do podglądu mapy
+    loadTexture(mapOverviewUrl(meta.id), '#4d6b3c', (tex) => {
       if (!alive) return;
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.anisotropy = 8;
@@ -667,6 +938,19 @@ function FarTerrain({ site, map, material }: { site: Site; map: MapData; materia
 
 // --- Kamera: latanie (noclip) albo chodzenie z grawitacją ---
 
+// osobne pule brył w pobliżu postaci: ściany do ruchu i podłoże pod stopami
+const nearSolids = createNearby();
+const nearFloors = createNearby();
+
+/** ?debug: łączny czas (ms) i liczba klatek fizyki postaci i celowania, do porównań wydajności. */
+const perf = { phys: { ms: 0, n: 0 }, aim: { ms: 0, n: 0 } };
+function timed(key: keyof typeof perf, fn: () => void) {
+  const t = performance.now();
+  fn();
+  perf[key].ms += performance.now() - t;
+  perf[key].n++;
+}
+
 /** Pointer lock bywa niedostępny (iframe, odmowa przeglądarki). Wtedy działamy bez niego. */
 const lockState = { failed: false, listeners: new Set<() => void>() };
 function markLockFailed() {
@@ -684,6 +968,38 @@ interface WalkEnv {
   legacyOxygen: boolean;
 }
 
+/** Drabina w układzie sceny: środek podstawy, obrót (rad, jak w planie), pół szerokości i grubości, spód i góra. */
+interface LadderBox {
+  x: number;
+  z: number;
+  rot: number;
+  half: number;
+  depth: number;
+  bottom: number;
+  top: number;
+}
+
+/**
+ * Drabina, której dotyka postać (PlayerStance.checkLadder: do 0,75 m przed sobą, przodem do drabiny).
+ * Zwraca przesunięcie w bok od osi drabiny (do wyśrodkowania postaci w otworze) albo null.
+ */
+function touchedLadder(ladders: LadderBox[], x: number, feet: number, z: number, fx: number, fz: number) {
+  for (const l of ladders) {
+    if (feet < l.bottom - 0.5 || feet > l.top - 0.1) continue;
+    const dx = x - l.x, dz = z - l.z;
+    const c = Math.cos(l.rot), s = Math.sin(l.rot);
+    const lx = dx * c + dz * s;
+    const lz = -dx * s + dz * c;
+    if (Math.abs(lx) > l.half + 0.15 || Math.abs(lz) > l.depth + LADDER_REACH) continue;
+    // przodem do drabiny: kierunek patrzenia w stronę jej płaszczyzny
+    const side = lz >= 0 ? 1 : -1;
+    const toward = -side * (-s * fx + c * fz);
+    if (toward < 0.5) continue;
+    return { ladder: l, lx, lz };
+  }
+  return null;
+}
+
 export interface WalkStatus {
   health: number;
   oxygen: number;
@@ -695,6 +1011,10 @@ export interface WalkStatus {
 function PlayerCamera({
   containerRef,
   start,
+  beds,
+  ladders,
+  focus,
+  touchOnly,
   walk,
   groundAt,
   env,
@@ -703,6 +1023,14 @@ function PlayerCamera({
 }: {
   containerRef: React.RefObject<HTMLDivElement | null>;
   start: [number, number, number];
+  /** Łóżka w projekcie (punkt stóp w układzie sceny): miejsce odrodzenia po śmierci. */
+  beds: [number, number, number][];
+  /** Drabiny do wspinania. */
+  ladders: LadderBox[];
+  /** Środek i promień całego projektu: domyślny cel orbity. */
+  focus: { center: [number, number, number]; radius: number };
+  /** Urządzenie bez myszy i klawiatury: start na orbicie. */
+  touchOnly: boolean;
   walk: boolean;
   groundAt: (x: number, z: number) => number;
   env: WalkEnv;
@@ -737,8 +1065,18 @@ function PlayerCamera({
     tick: 0,
     tickAcc: 0,
     dead: 0,
+    /** Na drabinie; detach: czas po odskoczeniu, w którym drabina nie łapie. */
+    climbing: false,
+    detach: 0,
+    deathAt: new THREE.Vector3(),
     lastReport: 0,
   });
+  const bedsRef = useRef(beds);
+  const laddersRef = useRef(ladders);
+  useEffect(() => {
+    bedsRef.current = beds;
+    laddersRef.current = ladders;
+  }, [beds, ladders]);
   const resetVitals = () => {
     const p = phys.current;
     p.vitals = { health: 100, oxygen: 100, legsBroken: false };
@@ -763,7 +1101,63 @@ function PlayerCamera({
       scene.traverse((o) => (o as THREE.Mesh).isMesh && hits.push(o));
       return ray.intersectObjects(hits, false).slice(0, 3).map((h) => ({ y: h.point.y, data: h.object.userData, name: h.object.type }));
     };
-    (window as unknown as { __untmatica: unknown }).__untmatica = { camera, phys: phys.current, groundAt, probe };
+    // promień jak w kolizji ruchu: pierwsze trafione bryły (elementy i obiekty mapy) i odległość
+    const cast = (x: number, y: number, z: number, dx: number, dy: number, dz: number, far = 6) => {
+      const ray = new THREE.Raycaster(new THREE.Vector3(x, y, z), new THREE.Vector3(dx, dy, dz).normalize(), 0, far);
+      return ray.intersectObjects(sceneMeshes(scene).solids, false).slice(0, 3).map((h) => ({
+        d: +h.distance.toFixed(2),
+        id: h.object.userData.itemId ?? h.object.userData.itemIds?.[h.instanceId ?? 0] ?? (h.object.userData.mapObject ? 'mapa' : '?'),
+      }));
+    };
+    (window as unknown as { __untmatica: unknown }).__untmatica = {
+      camera, phys: phys.current, groundAt, probe, cast, perf, cmd: sendSceneCommand,
+      // kolizja kapsuły na aktualnej scenie (testy bez czekania na klatki)
+      col: {
+        move: (x: number, feet: number, z: number, h: number, dx: number, dz: number) => moveCapsule(sceneMeshes(scene).solids, x, feet, z, RADIUS, h, dx, dz),
+        push: (x: number, feet: number, z: number, h: number) => pushOut(sceneMeshes(scene).solids, x, feet, z, RADIUS, h),
+        headroom: (x: number, top: number, z: number, up: number) => headroom(sceneMeshes(scene).solids, x, top, z, RADIUS, up),
+        // porównanie pracy jednej klatki ruchu: dawniej przejście sceny + 6 promieni, teraz lista w pamięci + kapsuła
+        bench: (n = 200) => {
+          const p = camera.position;
+          const feet = p.y - phys.current.eyes;
+          const old = new THREE.Raycaster();
+          let t = performance.now();
+          for (let i = 0; i < n; i++) {
+            const meshes: THREE.Object3D[] = [];
+            scene.traverse((o) => {
+              if ((o as THREE.Mesh).isMesh && (o.userData.itemId || o.userData.itemIds || o.userData.road || o.userData.mapObject)) meshes.push(o);
+            });
+            const solids = meshes.filter((m) => !m.userData.road && !m.userData.cutout);
+            const floors = meshes.filter((m) => !m.userData.tree);
+            for (const [dx, dz] of [[1, 0], [1, 0], [0, 1]]) {
+              for (const h of [0.55, 1.7]) {
+                old.set(new THREE.Vector3(p.x, feet + h, p.z), new THREE.Vector3(dx, 0, dz));
+                old.far = 0.6;
+                old.intersectObjects(solids, false);
+              }
+            }
+            old.set(new THREE.Vector3(p.x, feet + 0.5, p.z), new THREE.Vector3(0, -1, 0));
+            old.far = 80;
+            old.intersectObjects(floors, false);
+          }
+          const before = (performance.now() - t) / n;
+          t = performance.now();
+          for (let i = 0; i < n; i++) {
+            const all = sceneMeshes(scene);
+            const solids = nearSolids(all.solids, p.x, feet + 1, p.z, 4);
+            const floors = nearFloors(all.floors, p.x, feet, p.z, 4);
+            moveCapsule(solids, p.x, feet, p.z, RADIUS, 2, 0.15, 0.1);
+            pushOut(solids, p.x, feet, p.z, RADIUS, 2);
+            headroom(solids, p.x, feet + 2, p.z, RADIUS, 0.2);
+            castFirst(floors, p.x, feet + 0.5, p.z, 0, -1, 0, 80);
+          }
+          const after = (performance.now() - t) / n;
+          return { przed: +before.toFixed(3), po: +after.toFixed(3) };
+        },
+        // grunt jak w fizyce: najwyższa powierzchnia do 0,5 m nad stopami albo teren
+        ground: (x: number, feet: number, z: number) => Math.max(groundAt(x, z), castFirst(sceneMeshes(scene).floors, x, feet + 0.5, z, 0, -1, 0, 80)?.point.y ?? -Infinity),
+      },
+    };
   }, [camera, groundAt, scene]);
   // Czat: /tp na punkt mapy, /pos czyta pozycję kamery w układzie świata gry
   useEffect(() => {
@@ -786,6 +1180,13 @@ function PlayerCamera({
       registerCameraProbe(null);
     };
   }, [camera, groundAt, origin, walk]);
+  // Pole widzenia z ustawień
+  const fov = useSettings3D((st) => st.fov);
+  useEffect(() => {
+    const cam = camera as THREE.PerspectiveCamera;
+    // setFocalLength ustawia fov i macierz rzutowania (bez przypisywania pola kamery z hooka)
+    cam.setFocalLength(cam.getFilmHeight() / 2 / Math.tan(THREE.MathUtils.degToRad(fov) / 2));
+  }, [camera, fov]);
   // Otwarta nakładka (ekwipunek, czat, menu): puszczamy wszystkie klawisze ruchu
   useEffect(() => useView3D.subscribe((s) => s.overlay !== 'none' && (keys.current = {})), []);
   // Wejście w chodzenie: pełne zdrowie, stopy na wysokości oczu kamery
@@ -794,9 +1195,130 @@ function PlayerCamera({
     resetVitals();
     phys.current.eyes = EYES.stand;
   }, [walk]);
+  // --- Orbita: kamera krąży wokół bazy (komenda /orbit, przycisk na liście Budowle, telefon i tablet) ---
+  const orbit = useRef<{
+    target: THREE.Vector3;
+    theta: number;
+    phi: number;
+    dist: number;
+    back: { pos: THREE.Vector3; quat: THREE.Quaternion } | null;
+  } | null>(null);
+  const focusRef = useRef(focus);
+  useEffect(() => {
+    focusRef.current = focus;
+  }, [focus]);
+  const orbitApi = useRef({
+    start: (target?: [number, number, number], radius?: number) => {
+      const f = focusRef.current;
+      const t = target ?? f.center;
+      const r = radius ?? f.radius;
+      // kąt startowy od strony, z której patrzy gracz
+      const theta = Math.atan2(camera.position.x - t[0], camera.position.z - t[2]);
+      orbit.current = {
+        target: new THREE.Vector3(...t),
+        theta: Number.isFinite(theta) ? theta : 0,
+        phi: 1.0,
+        dist: Math.min(400, Math.max(12, r * 2.4)),
+        back: orbit.current?.back ?? { pos: camera.position.clone(), quat: camera.quaternion.clone() },
+      };
+      if (document.pointerLockElement) document.exitPointerLock();
+      useView3D.setState({ orbit: true });
+    },
+    stop: () => {
+      const o = orbit.current;
+      if (!o) return;
+      // powrót do miejsca gracza sprzed orbity
+      if (o.back) {
+        camera.position.copy(o.back.pos);
+        camera.quaternion.copy(o.back.quat);
+      }
+      orbit.current = null;
+      phys.current.vel.set(0, 0, 0);
+      useView3D.setState({ orbit: false });
+    },
+  });
+  useEffect(() => {
+    const off = onSceneCommand((c) => {
+      if (c.kind !== 'orbit') return;
+      // /orbit drugi raz kończy orbitę; przycisk przy bazie przełącza cel
+      if (c.on && !(orbit.current && !c.target)) orbitApi.current.start(c.target, c.radius);
+      else orbitApi.current.stop();
+    });
+    return () => {
+      off();
+      useView3D.setState({ orbit: false });
+    };
+  }, []);
+  // Telefon i tablet: bez klawiatury i przechwycenia myszy Sandbox startuje na orbicie sterowanej palcami
+  useEffect(() => {
+    if (touchOnly) orbitApi.current.start();
+  }, [touchOnly]);
+  // Sterowanie orbitą: przeciąganie (mysz albo palec) obraca, kółko albo szczypnięcie przybliża
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const pointers = new Map<number, { x: number; y: number }>();
+    let pinch = 0;
+    const down = (e: PointerEvent) => {
+      if (!orbit.current || (e.target as HTMLElement).closest('[data-ui]')) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      container.setPointerCapture(e.pointerId);
+      if (pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        pinch = Math.hypot(a.x - b.x, a.y - b.y);
+      }
+    };
+    const drag = (e: PointerEvent) => {
+      const o = orbit.current;
+      const prev = pointers.get(e.pointerId);
+      if (!o || !prev) return;
+      const cur = { x: e.clientX, y: e.clientY };
+      pointers.set(e.pointerId, cur);
+      if (pointers.size === 1) {
+        o.theta -= (cur.x - prev.x) * 0.006;
+        o.phi = Math.max(0.15, Math.min(1.5, o.phi - (cur.y - prev.y) * 0.006));
+      } else if (pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (pinch > 0 && d > 0) o.dist = Math.min(400, Math.max(3, o.dist * (pinch / d)));
+        pinch = d;
+      }
+    };
+    const up = (e: PointerEvent) => {
+      pointers.delete(e.pointerId);
+      pinch = 0;
+    };
+    const wheel = (e: WheelEvent) => {
+      const o = orbit.current;
+      if (!o) return;
+      e.preventDefault();
+      o.dist = Math.min(400, Math.max(3, o.dist * (1 + Math.sign(e.deltaY) * 0.1)));
+    };
+    const key = (e: KeyboardEvent) => {
+      if (!orbit.current || useView3D.getState().overlay !== 'none') return;
+      // klawisz latania kończy orbitę (zamiast przełączać latanie)
+      if (e.code === bindsRef.current.toggleFly) {
+        e.stopImmediatePropagation();
+        orbitApi.current.stop();
+      }
+    };
+    container.addEventListener('pointerdown', down);
+    container.addEventListener('pointermove', drag);
+    container.addEventListener('pointerup', up);
+    container.addEventListener('pointercancel', up);
+    container.addEventListener('wheel', wheel, { passive: false });
+    window.addEventListener('keydown', key, true);
+    return () => {
+      container.removeEventListener('pointerdown', down);
+      container.removeEventListener('pointermove', drag);
+      container.removeEventListener('pointerup', up);
+      container.removeEventListener('pointercancel', up);
+      container.removeEventListener('wheel', wheel);
+      window.removeEventListener('keydown', key, true);
+    };
+  }, [containerRef]);
+
   const initialized = useRef(false);
-  const down = useMemo(() => new THREE.Raycaster(), []);
-  const ahead = useMemo(() => new THREE.Raycaster(), []);
 
   useEffect(() => {
     if (!initialized.current) {
@@ -808,7 +1330,7 @@ function PlayerCamera({
     const container = containerRef.current;
 
     const lock = (e: MouseEvent) => {
-      if ((e.target as HTMLElement).closest('[data-ui]') || lockState.failed) return;
+      if ((e.target as HTMLElement).closest('[data-ui]') || lockState.failed || orbit.current) return;
       if (document.pointerLockElement === container || useView3D.getState().overlay !== 'none') return;
       try {
         const res = container?.requestPointerLock() as unknown as Promise<void> | undefined;
@@ -831,9 +1353,12 @@ function PlayerCamera({
     const move = (e: MouseEvent) => {
       // Bez przechwyconej myszki kamerą kręci się przeciągając prawym przyciskiem.
       if (document.pointerLockElement !== container && !(e.buttons & 2)) return;
-      if (useView3D.getState().overlay !== 'none') return;
-      yaw.current -= e.movementX * 0.0025;
-      pitch.current = Math.max(-1.52, Math.min(1.52, pitch.current - e.movementY * 0.0025));
+      if (useView3D.getState().overlay !== 'none' || orbit.current) return;
+      // czułość i odwrócenie osi Y z menu Esc > Ustawienia
+      const { sensitivity, invertY } = useSettings3D.getState();
+      const k = 0.0025 * sensitivity;
+      yaw.current -= e.movementX * k;
+      pitch.current = Math.max(-1.52, Math.min(1.52, pitch.current - e.movementY * k * (invertY ? -1 : 1)));
       camera.quaternion.setFromEuler(new THREE.Euler(pitch.current, yaw.current, 0, 'YXZ'));
     };
     const blur = () => {
@@ -856,11 +1381,19 @@ function PlayerCamera({
     };
   }, [camera, start, containerRef, walk]);
 
-  useFrame((_, rawDelta) => {
+  useFrame((_, rawDelta) => timed('phys', () => {
     const delta = Math.min(rawDelta, 0.05);
     const k = keys.current;
     const b = bindsRef.current;
     const pos = camera.position;
+
+    const o = orbit.current;
+    if (o) {
+      const sp = Math.sin(o.phi);
+      pos.set(o.target.x + o.dist * sp * Math.sin(o.theta), o.target.y + o.dist * Math.cos(o.phi), o.target.z + o.dist * sp * Math.cos(o.theta));
+      camera.lookAt(o.target);
+      return;
+    }
 
     if (!walk) {
       const speed = (k[b.sprint] ? 30 : 14) * delta;
@@ -882,29 +1415,39 @@ function PlayerCamera({
     if (p.dead > 0) {
       p.dead -= delta;
       if (p.dead <= 0) {
-        // powrót do miejsca startu z pełnym zdrowiem
+        // Jak w grze: odrodzenie przy łóżku. Przy kilku łóżkach (baza ekipy) najbliższe miejscu śmierci,
+        // bo to zwykle łóżko bazy, w której gracz właśnie był. Bez łóżka: punkt startu.
         resetVitals();
-        pos.set(start[0], groundAt(start[0], start[2]) + EYES.stand, start[2]);
+        let bed: [number, number, number] | null = null;
+        for (const b of bedsRef.current) {
+          if (!bed || Math.hypot(b[0] - p.deathAt.x, b[2] - p.deathAt.z) < Math.hypot(bed[0] - p.deathAt.x, bed[2] - p.deathAt.z)) bed = b;
+        }
+        // nad łóżkiem: grawitacja postawi postać na nim
+        if (bed) pos.set(bed[0], Math.max(bed[1], groundAt(bed[0], bed[2])) + 0.6 + EYES.stand, bed[2]);
+        else pos.set(start[0], groundAt(start[0], start[2]) + EYES.stand, start[2]);
       }
       report();
       return;
     }
 
-    // Promienie tylko na struktury, obiekty mapy i drogi; wysokość terenu daje groundAt (bez siatki 74 tys. trójkątów)
-    const meshes: THREE.Object3D[] = [];
-    scene.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh && (o.userData.itemId || o.userData.itemIds || o.userData.road || o.userData.mapObject)) meshes.push(o);
-    });
-    const solids = meshes.filter((m) => !m.userData.road && !m.userData.cutout);
-    const floors = meshes.filter((m) => !m.userData.tree);
+    // Promienie tylko na struktury, obiekty mapy i drogi (lista w pamięci, BVH); wysokość terenu daje groundAt
+    const all = sceneMeshes(scene);
+    let feet = pos.y - p.eyes;
+    // tylko bryły w zasięgu kilku metrów: kilkadziesiąt promieni na klatkę nie przechodzi przez całą bazę
+    const solids = nearSolids(all.solids, pos.x, feet + 1, pos.z, 4 + p.vel.length() * 0.05);
+    // podłoże: blisko terenu wystarczą pobliskie siatki (wszystko nad terenem jest w kuli), wysoko pełna lista
+    const nearTerrain = feet - groundAt(pos.x, pos.z) < 3;
+    const floors = nearTerrain ? nearFloors(all.floors, pos.x, feet, pos.z, 4) : all.floors;
 
-    // Kucanie i czołganie przełączane klawiszem (nie w wodzie)
+    // Kucanie i czołganie przełączane klawiszem (nie w wodzie). Jak w grze: wyżej tylko, gdy nad głową jest miejsce.
     for (const toggle of toggles.current.splice(0)) {
       if (p.stance === 'swim') continue;
-      p.stance = p.stance === toggle ? 'stand' : toggle;
+      const next = p.stance === toggle ? 'stand' : toggle;
+      const grow = HEIGHT[next] - HEIGHT[p.stance];
+      if (grow > 0 && headroom(solids, pos.x, feet + HEIGHT[p.stance], pos.z, RADIUS, grow) < grow) continue;
+      p.stance = next;
     }
 
-    let feet = pos.y - p.eyes;
     const waterY = env.waterY;
     const bodyUnder = waterY !== null && feet + SWIM_BODY_DEPTH < waterY;
     const eyesUnder = waterY !== null && pos.y < waterY;
@@ -929,9 +1472,7 @@ function PlayerCamera({
 
     // Grunt pod stopami: najwyższa powierzchnia do 0.5 m nad stopami (stopnie, drogi) albo teren
     const groundUnder = (x: number, y: number, z: number) => {
-      down.set(new THREE.Vector3(x, y + 0.5, z), new THREE.Vector3(0, -1, 0));
-      down.far = 80;
-      const hit = down.intersectObjects(floors, false)[0];
+      const hit = castFirst(floors, x, y + 0.5, z, 0, -1, 0, 80);
       const terrain = groundAt(x, z);
       return hit && hit.point.y > terrain ? { y: hit.point.y, terrain: false } : { y: terrain, terrain: true };
     };
@@ -947,7 +1488,31 @@ function PlayerCamera({
     p.grounded = p.stance !== 'swim' && feet <= g.y + 0.05 && v.y <= 0;
     if (p.grounded && !wasGrounded) land(v.y);
 
-    if (p.stance === 'swim') {
+    // Drabina (PlayerStance.checkLadder): drabina tuż przed postacią, w stronę patrzenia. W w górę, S w dół,
+    // bez grawitacji; spacja odpycha od drabiny. Na ziemi S odchodzi od niej zwykłym krokiem.
+    p.detach = Math.max(0, p.detach - delta);
+    const touch =
+      p.detach === 0 && p.stance !== 'swim' && p.stance !== 'prone' ? touchedLadder(laddersRef.current, pos.x, feet, pos.z, forward.x, forward.z) : null;
+    const onLadder = !!touch;
+    const climb = onLadder && (!p.grounded || k[b.forward]);
+    if (p.climbing && !onLadder && k[b.forward] && v.y > 0) {
+      // koniec drabiny w otworze: podciągnięcie na krawędź, jak skok z ostatniego szczebla
+      v.set(forward.x * SPEED.stand, JUMP_SPEED, forward.z * SPEED.stand);
+    }
+    p.climbing = climb;
+
+    if (climb && touch) {
+      const dir = (k[b.forward] ? 1 : 0) - (k[b.back] ? 1 : 0);
+      // postać zsuwa się na oś drabiny, żeby zmieściła się w otworze dachu
+      const pull = THREE.MathUtils.clamp(-touch.lx * 6, -2, 2);
+      v.set(Math.cos(touch.ladder.rot) * pull, dir * CLIMB_SPEED, Math.sin(touch.ladder.rot) * pull);
+      if (k[b.up]) {
+        v.set(-forward.x * 3, 3, -forward.z * 3);
+        p.detach = 0.4;
+        p.climbing = false;
+      }
+      p.grounded = false;
+    } else if (p.stance === 'swim') {
       if (eyesUnder) {
         // pod wodą: ruch w stronę patrzenia, spacja w górę
         const look = new THREE.Vector3();
@@ -995,36 +1560,32 @@ function PlayerCamera({
       v.z = h.y;
     }
 
-    // Ruch poziomy z kolizjami: promienie na wysokości kolan i klatki, ślizganie po ścianie
+    // Ruch poziomy: kapsuła postaci, dojście do ściany i ślizg wzdłuż niej, potem wypchnięcie z tego, co w nią weszło
     const height = HEIGHT[p.stance];
-    const blocked = (dx: number, dz: number) => {
-      const d = Math.hypot(dx, dz);
-      if (d < 1e-5) return false;
-      const dir = new THREE.Vector3(dx / d, 0, dz / d);
-      for (const hgt of [0.55, Math.max(0.6, height - 0.3)]) {
-        ahead.set(new THREE.Vector3(pos.x, feet + hgt, pos.z), dir);
-        ahead.far = d + RADIUS;
-        if (ahead.intersectObjects(solids, false).length > 0) return true;
-      }
-      return false;
-    };
-    const dx = v.x * delta, dz = v.z * delta;
-    if (!blocked(dx, dz)) {
-      pos.x += dx;
-      pos.z += dz;
-    } else if (!blocked(dx, 0)) {
-      pos.x += dx;
-      v.z = 0;
-    } else if (!blocked(0, dz)) {
-      pos.z += dz;
-      v.x = 0;
-    } else {
-      v.x = v.z = 0;
+    const move = moveCapsule(solids, pos.x, feet, pos.z, RADIUS, height, v.x * delta, v.z * delta);
+    pos.x += move.dx;
+    pos.z += move.dz;
+    if (move.blocked && delta > 0) {
+      // prędkość zostaje tylko wzdłuż ściany (w powietrzu nie odbijamy się od niej)
+      v.x = move.dx / delta;
+      v.z = move.dz / delta;
     }
+    const out = pushOut(solids, pos.x, feet, pos.z, RADIUS, height);
+    pos.x += out.dx;
+    pos.z += out.dz;
 
     // Ruch pionowy i lądowanie (PlayerLife.onLanded: > 22 m/s = obrażenia i złamane nogi)
     const g2 = groundUnder(pos.x, feet, pos.z);
-    feet += ((vyStart ?? v.y) + v.y) / 2 * delta;
+    let rise = ((vyStart ?? v.y) + v.y) / 2 * delta;
+    if (rise > 0) {
+      // sufit: skok i wypływanie kończą się na głowie, nie przechodzą przez strop
+      const room = headroom(solids, pos.x, feet + height, pos.z, RADIUS, rise);
+      if (room < rise) {
+        rise = room;
+        v.y = 0;
+      }
+    }
+    feet += rise;
     if (feet <= g2.y) {
       if (!p.grounded) land(v.y);
       feet = g2.y;
@@ -1043,10 +1604,63 @@ function PlayerCamera({
       const breath = eyesUnder ? -1 : breathAtHeight(feet + env.baseWorld, env.waterWorld, env.legacyOxygen);
       oxygenTick(p.tick, breath, p.vitals, p.ox);
     }
-    if (p.vitals.health <= 0 && p.dead <= 0) p.dead = 3;
+    if (p.vitals.health <= 0 && p.dead <= 0) {
+      p.dead = 3;
+      p.deathAt.copy(pos);
+    }
     report();
-  });
+  }));
 
+  return null;
+}
+
+// --- Zdjęcie sceny (klawisz F2 albo /screenshot) ---
+
+/**
+ * PNG samej sceny: HUD to HTML nad płótnem, więc i tak go nie ma; podgląd stawianego elementu chowamy na jedną klatkę.
+ * Render i odczyt w tym samym zadaniu, więc bufor rysowania jest jeszcze pełny (bez preserveDrawingBuffer).
+ */
+function Screenshot({ name }: { name: string }) {
+  const { gl, scene, camera } = useThree();
+  const shotKey = useKeybinds((st) => st.binds.screenshot);
+  useEffect(() => {
+    const shoot = () => {
+      const hidden: THREE.Object3D[] = [];
+      scene.traverse((o) => {
+        if (o.userData.hideInShot && o.visible) {
+          o.visible = false;
+          hidden.push(o);
+        }
+      });
+      gl.render(scene, camera);
+      hidden.forEach((o) => (o.visible = true));
+      // czas lokalny gracza: RRRR-MM-DD_GG-MM
+      const d = new Date();
+      const two = (n: number) => String(n).padStart(2, '0');
+      const stamp = `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}_${two(d.getHours())}-${two(d.getMinutes())}`;
+      const file = `${(name || 'untmatica').replace(/[\/:*?"<>|]+/g, '_').trim()} ${stamp}.png`;
+      gl.domElement.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }, 'image/png');
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== shotKey || e.repeat || (e.target as HTMLElement)?.tagName === 'INPUT') return;
+      e.preventDefault();
+      shoot();
+    };
+    const off = onSceneCommand((c) => c.kind === 'screenshot' && shoot());
+    window.addEventListener('keydown', onKey);
+    return () => {
+      off();
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [gl, scene, camera, name, shotKey]);
   return null;
 }
 
@@ -1064,6 +1678,8 @@ interface Aim {
   paste: PasteResult | null;
   /** Element w celowniku (podpowiedź o chwytaniu bazy). */
   lookId: string | null;
+  /** Drzwi albo klapa w zasięgu ręki pod celownikiem (klawisz interakcji). */
+  interactId: string | null;
   reason?: AimReason;
   warn?: AimWarn;
 }
@@ -1084,16 +1700,9 @@ export interface SceneLimits {
   undergroundBlocked: boolean;
 }
 
-const EMPTY_AIM: Aim = { preview: null, valid: false, targetId: null, surface: null, above: null, paste: null, lookId: null };
-
-/** Siatki postawionych struktur (do celowania i kolizji). */
-function structureMeshes(scene: THREE.Scene) {
-  const out: THREE.Object3D[] = [];
-  scene.traverse((o) => {
-    if ((o as THREE.Mesh).isMesh && (o.userData.itemId || o.userData.itemIds)) out.push(o);
-  });
-  return out;
-}
+const EMPTY_AIM: Aim = { preview: null, valid: false, targetId: null, surface: null, above: null, paste: null, lookId: null, interactId: null };
+/** Zasięg interakcji (m): w grze ok. 4 m od kamery. */
+const INTERACT_RANGE = 4;
 
 /** Promień do sprawdzania gruntu pod podłogą (wspólny, poza Reactem). */
 const groundProbe = new THREE.Raycaster();
@@ -1150,6 +1759,7 @@ function AimController({
   onPlace,
   onDelete,
   onPaste,
+  onToggle,
 }: {
   containerRef: React.RefObject<HTMLDivElement | null>;
   activeDef?: BuildItem;
@@ -1164,9 +1774,17 @@ function AimController({
   onPlace: (item: Omit<PlacedItem, 'id'>) => void;
   onDelete: (id: string) => void;
   onPaste: (items: PlacedItem[]) => void;
+  /** Otwiera albo zamyka drzwi / klapę (klawisz interakcji). */
+  onToggle: (id: string) => void;
 }) {
   const { camera, scene } = useThree();
   const aimRef = useRef<Aim>(EMPTY_AIM);
+  const itemsById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
+  const itemsRef = useRef(itemsById);
+  useEffect(() => {
+    itemsRef.current = itemsById;
+  }, [itemsById]);
+  const interactKey = useKeybinds((s) => s.binds.interact);
   const lastKey = useRef('');
   const pasteCache = useRef<{ key: string; res: PasteResult | null }>({ key: '', res: null });
 
@@ -1183,12 +1801,10 @@ function AimController({
       let ground = limits.groundY(px, pz);
       groundProbe.set(new THREE.Vector3(px, base + 1, pz), new THREE.Vector3(0, -1, 0));
       groundProbe.far = 11;
-      const objs: THREE.Object3D[] = [];
-      scene.traverse((o) => (o as THREE.Mesh).isMesh && o.userData.mapObject && !o.userData.tree && objs.push(o));
-      const hit = groundProbe.intersectObjects(objs, false)[0];
+      const hit = groundProbe.intersectObjects(sceneMeshes(scene).mapSolids, false)[0];
       if (hit) ground = Math.max(ground, hit.point.y);
       if (ground < base - 10) return 'missingGround';
-    } else if (limits.undergroundBlocked && def.shape !== 'bed' && def.shape !== 'hatch') {
+    } else if (limits.undergroundBlocked && def.shape !== 'bed' && def.shape !== 'hatch' && def.shape !== 'prop') {
       // UndergroundAllowlist: element w całości pod terenem
       const r = (preview.rotation * Math.PI) / 180;
       const pts = def.shape === 'wall'
@@ -1217,13 +1833,20 @@ function AimController({
   const center = useMemo(() => new THREE.Vector2(0, 0), []);
   const euler = useMemo(() => new THREE.Euler(0, 0, 0, 'YXZ'), []);
 
-  useFrame(() => {
+  useFrame(() => timed('aim', () => {
     raycaster.setFromCamera(center, camera);
     const ray = raycaster.ray;
+    // słuchacz dźwięków przestrzennych w miejscu kamery
+    setListener(ray.origin.x, ray.origin.y, ray.origin.z, ray.direction.x, ray.direction.y, ray.direction.z);
     let next: Aim = EMPTY_AIM;
-    const structureHit = raycaster.intersectObjects(structureMeshes(scene), false).find((h) => h.distance < 90);
+    const meshes = sceneMeshes(scene);
+    const structureHit = raycaster.intersectObjects(meshes.structures, false).find((h) => h.distance < 90);
     const lookId = structureHit ? hitItemId(structureHit) : null;
     if (useView3D.getState().lookId !== lookId) useView3D.setState({ lookId });
+    // Drzwi albo klapa w zasięgu ręki: działa niezależnie od tego, co jest w ręku
+    const lookItem = lookId ? itemsById.get(lookId) : undefined;
+    const interactId =
+      structureHit && lookItem && structureHit.distance <= INTERACT_RANGE && isOpenable(findDef(lookItem.itemId)) ? lookItem.id : null;
 
     if (!activeDef && !paste) {
       next = { ...EMPTY_AIM, lookId };
@@ -1233,9 +1856,7 @@ function AimController({
       // Najbliższe trafienie: struktura, obiekt mapy albo teren
       const hits: AimHit[] = [];
       if (structureHit) hits.push({ point: structureHit.point, distance: structureHit.distance, ground: false });
-      const objs: THREE.Object3D[] = [];
-      scene.traverse((o) => (o as THREE.Mesh).isMesh && o.userData.mapObject && !o.userData.tree && objs.push(o));
-      const objHit = raycaster.intersectObjects(objs, false).find((h) => h.distance < AIM_RANGE);
+      const objHit = raycaster.intersectObjects(meshes.mapSolids, false).find((h) => h.distance < AIM_RANGE);
       if (objHit) hits.push({ point: objHit.point, distance: objHit.distance, ground: true });
       const terrainHit = marchTerrain(ray, groundAt, AIM_RANGE);
       if (terrainHit) hits.push(terrainHit);
@@ -1269,6 +1890,8 @@ function AimController({
         const ray3 = { origin: { x: ray.origin.x, y: ray.origin.y, z: ray.origin.z }, dir: { x: ray.direction.x, y: ray.direction.y, z: ray.direction.z } };
         // Ściany i filary jak w grze: wolny slot najbliżej celownika (do 8 m), nawet gdy promień trafia w pustkę.
         const slot = findSlotByRay(def, items, ray3, turn);
+        // Drabina w otworze dachu (kwadratowym albo trójkątnym); bez otworu w pobliżu stawia się jak zwykły rekwizyt
+        const ladder = isLadder(def) ? findLadderSlot(def, items, ray3, turn) : null;
         if (slot) {
           next = judge(def, slot, slot.floor || 0, isPlacementValid(def, slot, items));
         } else if (isSlab(def)) {
@@ -1311,6 +1934,30 @@ function AimController({
             rotation: Math.round(normalizeAngle(-yawDeg + turn * 90) * 10) / 10,
           };
           next = judge(def, preview, floor, isPlacementValid(def, preview, items));
+        } else if (ladder) {
+          const aim = judge(def, ladder.preview, ladder.preview.floor || 0, ladder.valid);
+          next = ladder.valid ? aim : { ...aim, reason: aim.reason ?? 'frameTaken' };
+        } else if (isDoorLike(def)) {
+          // Drzwi, bramy, okiennice: tylko w otworze pasującej ściany (jak w grze), R przekłada na drugą stronę
+          const slot = findDoorSlot(def, items, ray3, turn);
+          if (slot) {
+            const aim = judge(def, slot.preview, slot.preview.floor || 0, slot.valid);
+            next = slot.valid ? aim : { ...aim, reason: aim.reason ?? 'frameTaken' };
+          } else {
+            next = { ...EMPTY_AIM, reason: 'needsFrame' };
+          }
+        } else if (def.shape === 'prop' && nearest) {
+          // Rekwizyt (barykada): na powierzchni w punkcie trafienia, obrócony jak gracz, R obraca o 90°
+          const floor = roundLevel(nearest.point.y / H);
+          const preview: PlacedItem = {
+            id: 'preview',
+            itemId: def.id,
+            x: Math.round((nearest.point.x / SCALE) * 100) / 100,
+            y: Math.round((nearest.point.z / SCALE) * 100) / 100,
+            floor,
+            rotation: Math.round(normalizeAngle(-yawDeg + turn * 90) * 10) / 10,
+          };
+          next = judge(def, preview, floor, isPlacementValid(def, preview, items));
         } else if (def.shape === 'hatch' && nearest) {
           // Klapa: w otworze dachu najbliżej trafienia
           const floor = (nearest.point.y - TOP) / H - 1;
@@ -1320,14 +1967,15 @@ function AimController({
       }
     }
 
+    next = { ...next, interactId };
     aimRef.current = next;
     const p = next.preview;
-    const key = `${next.targetId}|${next.lookId}|${next.valid}|${next.surface}|${next.reason}|${next.warn}|${p ? `${p.itemId},${p.x},${p.y},${p.rotation},${p.floor}` : ''}|${pasteCache.current.key}`;
+    const key = `${next.targetId}|${next.lookId}|${next.interactId}|${next.valid}|${next.surface}|${next.reason}|${next.warn}|${p ? `${p.itemId},${p.x},${p.y},${p.rotation},${p.floor}` : ''}|${pasteCache.current.key}`;
     if (key !== lastKey.current) {
       lastKey.current = key;
       onAim(next);
     }
-  });
+  }));
 
   // /skybase: gracz na wysokości, na której pod limitem mapy mieści się jedno piętro, i jeden dach startowy pod nim
   useEffect(
@@ -1351,7 +1999,7 @@ function AimController({
 
   useEffect(() => {
     const handle = (e: MouseEvent) => {
-      if (e.button !== 0 || useView3D.getState().overlay !== 'none') return;
+      if (e.button !== 0 || useView3D.getState().overlay !== 'none' || useView3D.getState().orbit) return;
       // Pierwszy klik tylko przejmuje kamerę; przy przechwyconej myszce target to kontener, nie canvas.
       const locked = document.pointerLockElement === containerRef.current;
       const fallback = lockState.failed && e.target instanceof HTMLCanvasElement;
@@ -1372,6 +2020,26 @@ function AimController({
     return () => window.removeEventListener('mousedown', handle);
   }, [activeDef, paste, onPlace, onDelete, onPaste, containerRef]);
 
+  // Interakcja (domyślnie F, jak w grze): drzwi, bramy, okiennice i klapy w zasięgu ręki
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== interactKey || e.repeat || useView3D.getState().overlay !== 'none') return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const locked = document.pointerLockElement === containerRef.current;
+      if (!locked && !lockState.failed) return;
+      const id = aimRef.current.interactId;
+      if (!id) return;
+      e.preventDefault();
+      // dźwięk z AudioSource tego przedmiotu w grze, ten sam przy otwieraniu i zamykaniu, z miejsca drzwi
+      const item = itemsRef.current.get(id);
+      const def = item ? findDef(item.itemId) : undefined;
+      if (item && def) playItemSound(def.gameId, id, item.x * SCALE, (item.floor || 0) * H + 1.2, item.y * SCALE);
+      onToggle(id);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [interactKey, onToggle, containerRef]);
+
   return null;
 }
 
@@ -1390,9 +2058,14 @@ interface Builder3DProps {
   onPlaceItem: (item: Omit<PlacedItem, 'id'>) => void;
   onDeleteItem: (id: string) => void;
   onPaste?: (items: PlacedItem[]) => void;
+  /** Klawisz interakcji: otwiera albo zamyka drzwi / klapę. */
+  onToggleItem?: (id: string) => void;
+  /** Nazwa projektu: nazwa pliku zdjęcia sceny. */
+  projectName?: string;
 }
 
 const noPaste = () => {};
+const noToggle = () => {};
 
 export default function Builder3D({
   placedItems,
@@ -1406,6 +2079,8 @@ export default function Builder3D({
   onPlaceItem,
   onDeleteItem,
   onPaste = noPaste,
+  onToggleItem = noToggle,
+  projectName = '',
 }: Builder3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const models = useGameModels();
@@ -1418,11 +2093,40 @@ export default function Builder3D({
   const [aim, setAim] = useState<Aim>(EMPTY_AIM);
   const [locked, setLocked] = useState(false);
   const [walk, setWalk] = useState(false);
+  useEffect(() => useView3D.setState({ walk }), [walk]);
   const [lockFailed, setLockFailed] = useState(lockState.failed);
   const [map, setMap] = useState<MapData | null>(null);
   const overlay = useView3D((s) => s.overlay);
+  // Lista rekwizytów z eksportu gry: po wczytaniu findDef zna prop_<id>, więc przerysowujemy
+  const propsReady = usePropsStore((s) => s.ready);
+  useEffect(() => {
+    loadProps();
+  }, []);
   const activeDef = activeItem ? findDef(activeItem) : undefined;
   const isDemolish = activeDef?.shape === 'remover';
+
+  // Modele rekwizytów tylko dla tego, co stoi na mapie albo jest w ręku
+  useEffect(() => {
+    const ids = new Set<number>();
+    for (const item of placedItems) {
+      const d = findDef(item.itemId);
+      if (d?.shape === 'prop' && d.gameId !== undefined) ids.add(d.gameId);
+    }
+    if (activeDef?.shape === 'prop' && activeDef.gameId !== undefined) ids.add(activeDef.gameId);
+    requestPropModels(ids);
+  }, [placedItems, activeDef, propsReady]);
+  // Dźwięki drzwi i klap z gry: tabela raz, klipy dla tego, co stoi w projekcie
+  useEffect(() => {
+    void loadSoundTable().then(() =>
+      preloadItemSounds(placedItems.map((i) => findDef(i.itemId)).filter((d) => isOpenable(d)).map((d) => d!.gameId!).filter((g) => g !== undefined)),
+    );
+  }, [placedItems]);
+  // Przeglądarka wpuszcza dźwięk dopiero po geście: pierwsze kliknięcie w scenę go odblokowuje
+  useEffect(() => {
+    const el = containerRef.current;
+    el?.addEventListener('pointerdown', resumeAudio);
+    return () => el?.removeEventListener('pointerdown', resumeAudio);
+  }, []);
   const siteMap = site?.map;
   const night = scene.time === 'night';
 
@@ -1445,9 +2149,8 @@ export default function Builder3D({
     const onChange = () => {
       const now = document.pointerLockElement === containerRef.current;
       setLocked(now);
-      // Esc oddaje kursor bez zdarzenia klawisza: jak w grze otwieramy menu pauzy
-      const view = useView3D.getState();
-      if (wasLocked && !now && view.overlay === 'none') view.setOverlay('menu');
+      // Esc oddaje kursor bez zdarzenia klawisza: wtedy widać panele edytora wokół sceny (bez menu pauzy)
+      if (wasLocked && !now) useView3D.setState({ changedAt: performance.now() });
       wasLocked = now;
     };
     const onKey = (e: KeyboardEvent) => {
@@ -1476,6 +2179,22 @@ export default function Builder3D({
     const y = Math.min(...placedItems.map((i) => (i.floor || 0) * H));
     return [(Math.min(...xs) + Math.max(...xs)) / 2, y, (Math.min(...zs) + Math.max(...zs)) / 2];
   });
+
+  // Cel orbity: środek i promień całego projektu (bez elementów: punkt startu)
+  const focus = useMemo(() => {
+    if (placedItems.length === 0) return { center: [start[0], start[1] + 2, start[2]] as [number, number, number], radius: 10 };
+    const xs = placedItems.map((i) => i.x * SCALE), zs = placedItems.map((i) => i.y * SCALE);
+    const ys = placedItems.map((i) => (i.floor || 0) * H);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs);
+    const y0 = Math.min(...ys), y1 = Math.max(...ys) + H;
+    return {
+      center: [(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2] as [number, number, number],
+      radius: Math.max(8, Math.hypot(x1 - x0, z1 - z0, y1 - y0) / 2),
+    };
+  }, [placedItems, start]);
+  // Tylko dotyk (telefon, tablet): bez klawiatury i przechwycenia myszy budowanie w 3D nie działa, więc orbita
+  const [touchOnly] = useState(() => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(any-pointer: fine)').matches);
+  const orbiting = useView3D((s) => s.orbit);
 
   const activeMap = site && map && map.meta.id === site.map ? map : null;
 
@@ -1563,6 +2282,32 @@ export default function Builder3D({
     return placedItems.filter((i) => !moving.has(i.id));
   }, [placedItems, paste]);
 
+  // łóżka (nie flaga claimu) jako punkty odrodzenia, wysokość jak pierścień claimu
+  const beds = useMemo(
+    () =>
+      placedItems
+        .filter((i) => {
+          const d = findDef(i.itemId);
+          return d?.shape === 'bed' || d?.build === 'Bed';
+        })
+        .map((i): [number, number, number] => [i.x * SCALE, (i.floor || 0) * H + (findDef(i.itemId)?.shape === 'bed' ? TOP : 0), i.y * SCALE]),
+    [placedItems],
+  );
+  // drabiny do wspinania (rekwizyty dochodzą z eksportu później, stąd propsReady)
+  const ladders = useMemo(
+    () =>
+      placedItems.flatMap((i): LadderBox[] => {
+        const d = findDef(i.itemId);
+        if (!isLadder(d)) return [];
+        const [w, h, depth] = d!.size ?? [1.26, 4.25, 0.19];
+        const bottom = (i.floor || 0) * H;
+        return [{ x: i.x * SCALE, z: i.y * SCALE, rot: (i.rotation * Math.PI) / 180, half: w / 2, depth: depth / 2, bottom, top: bottom + h }];
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [placedItems, propsReady],
+  );
+  const [dpr, setDpr] = useState(1.5);
+  const [contextLost, setContextLost] = useState(false);
   const ghostDef = aim.preview ? findDef(aim.preview.itemId) : undefined;
   const ghostModel = ghostDef?.gameId !== undefined ? models.get(ghostDef.gameId) : undefined;
   const targeting = isDemolish;
@@ -1571,15 +2316,24 @@ export default function Builder3D({
     <div ref={containerRef} className={styles.container}>
       <Canvas
         shadows="percentage"
-        camera={{ fov: 72, near: 0.1, far: 5000 }}
+        // gęstość pikseli najwyżej 1.5 (ekrany retina i 4K), obniżana do 1 przy spadku płynności
+        dpr={dpr}
+        // near 0.3: postać ma promień 0.4 m, więc kamera nigdy nie jest bliżej ściany; mniej migotania dalekiego terenu
+        camera={{ fov: 72, near: 0.3, far: 5000 }}
         onCreated={({ gl }) => {
           gl.localClippingEnabled = true;
+          gl.domElement.addEventListener('webglcontextlost', (e) => {
+            e.preventDefault();
+            setContextLost(true);
+          });
         }}
       >
+        <Screenshot name={projectName} />
+        <PerformanceMonitor onDecline={() => setDpr(1)} onIncline={() => setDpr(1.5)} flipflops={3} onFallback={() => setDpr(1)} />
         <SkyAndLight time={scene.time} focus={start} lighting={lighting} />
         {night && <pointLight position={[start[0], start[1] + 7, start[2]]} intensity={70} distance={60} color="#ffb070" />}
 
-        <PlayerCamera containerRef={containerRef} start={start} walk={walk} groundAt={groundAt} env={walkEnv} origin={origin} onStatus={setWalkStatus} />
+        <PlayerCamera containerRef={containerRef} start={start} beds={beds} ladders={ladders} focus={focus} touchOnly={touchOnly} walk={walk} groundAt={groundAt} env={walkEnv} origin={origin} onStatus={setWalkStatus} />
         <AimController
           containerRef={containerRef}
           activeDef={activeDef}
@@ -1592,26 +2346,13 @@ export default function Builder3D({
           onPlace={onPlaceItem}
           onDelete={onDeleteItem}
           onPaste={onPaste}
+          onToggle={onToggleItem}
         />
 
         {site && activeMap ? (
           <MapSurroundings site={site} map={activeMap} />
         ) : (
           <Meadow lift={0} night={night} />
-        )}
-
-        {/* Limity wysokości mapy: czerwony twardy limit, pomarańczowa granica tlenu */}
-        {limits.limitY < 1500 && (
-          <mesh position={[start[0], limits.limitY, start[2]]} rotation={[-Math.PI / 2, 0, 0]}>
-            <planeGeometry args={[700, 700]} />
-            <meshBasicMaterial color="#e5484d" transparent opacity={0.14} side={THREE.DoubleSide} depthWrite={false} fog={false} />
-          </mesh>
-        )}
-        {limits.oxygenY !== null && limits.oxygenY < 1500 && (
-          <mesh position={[start[0], limits.oxygenY, start[2]]} rotation={[-Math.PI / 2, 0, 0]}>
-            <planeGeometry args={[700, 700]} />
-            <meshBasicMaterial color="#e8a02f" transparent opacity={0.1} side={THREE.DoubleSide} depthWrite={false} fog={false} />
-          </mesh>
         )}
 
         <Structures
@@ -1623,10 +2364,15 @@ export default function Builder3D({
           noSkirt={false}
         />
 
-        {aim.paste && <PasteGhost paste={aim.paste} models={models} />}
+        {aim.paste && (
+          <group userData={{ hideInShot: true }}>
+            <PasteGhost paste={aim.paste} models={models} />
+          </group>
+        )}
 
         {aim.preview && ghostDef && !paste && (
           <group
+            userData={{ hideInShot: true }}
             position={[aim.preview.x * SCALE, (aim.preview.floor || 0) * H + pieceY(ghostDef, ghostModel), aim.preview.y * SCALE]}
             rotation={[0, (-aim.preview.rotation * Math.PI) / 180, 0]}
           >
@@ -1637,7 +2383,7 @@ export default function Builder3D({
 
       <div className={styles.crosshair} data-mode={isDemolish ? 'demolish' : 'build'} aria-hidden />
 
-      {!locked && overlay === 'none' && (
+      {!locked && overlay === 'none' && !orbiting && (
         <div className={styles.lockHint}>
           {lockFailed
             ? t.view3d.lockFailed
@@ -1645,40 +2391,94 @@ export default function Builder3D({
         </div>
       )}
 
-      <div className={styles.modeBadge} data-ui>
-        {walk ? t.view3d.walking : t.view3d.flying} <kbd>{keyLabel(binds.toggleFly, { space: t.keys.space, shift: t.keys.shift })}</kbd>
-        {site && <span className={styles.modeMap}>{site.map}</span>}
-      </div>
-
-      {/* Zdrowie i tlen: tylko przy chodzeniu (fizyka z gry) */}
+      {/* Stan postaci jak w Unturned: lewy dolny róg, ikona i pasek na wiersz; tylko przy chodzeniu (fizyka z gry) */}
       {walk && walkStatus && (
         <div className={styles.vitals} data-ui>
-          <div className={styles.vital}>
-            <span>{t.view3d.health}</span>
-            <span className={styles.bar} data-kind="health"><span style={{ width: `${walkStatus.health}%` }} /></span>
-            <strong>{walkStatus.health}</strong>
-          </div>
-          <div className={styles.vital}>
-            <span>{t.view3d.oxygen}</span>
-            <span className={styles.bar} data-kind="oxygen"><span style={{ width: `${walkStatus.oxygen}%` }} /></span>
-            <strong>{walkStatus.oxygen}</strong>
-          </div>
-          {(walkStatus.legsBroken || t.view3d.stances[walkStatus.stance]) && (
+          {(walkStatus.stance !== 'stand' || walkStatus.legsBroken) && (
             <div className={styles.vitalTags}>
-              {t.view3d.stances[walkStatus.stance] && <span>{t.view3d.stances[walkStatus.stance]}</span>}
-              {walkStatus.legsBroken && <span data-bad>{t.view3d.legsBroken}</span>}
+              {t.view3d.stances[walkStatus.stance] && (
+                <span>
+                  {walkStatus.stance === 'swim' ? <PersonSimpleSwim size={15} weight="fill" /> : walkStatus.stance === 'sprint' ? <PersonSimpleRun size={15} weight="fill" /> : <PersonSimple size={15} weight="fill" />}
+                  {t.view3d.stances[walkStatus.stance]}
+                </span>
+              )}
+              {walkStatus.legsBroken && (
+                <span data-bad>
+                  <Bone size={15} weight="fill" />
+                  {t.view3d.legsBroken}
+                </span>
+              )}
             </div>
+          )}
+          <div className={styles.vital} data-kind="health" title={t.view3d.health}>
+            <span className={styles.vitalIcon}>
+              <Heart size={16} weight="fill" />
+            </span>
+            <span className={styles.bar} aria-label={`${t.view3d.health}: ${walkStatus.health}`}>
+              <span style={{ width: `${walkStatus.health}%` }} />
+              <em>{walkStatus.health}</em>
+            </span>
+          </div>
+          <div className={styles.vital} data-kind="oxygen" title={t.view3d.oxygen}>
+            <span className={styles.vitalIcon}>
+              <Wind size={16} weight="bold" />
+            </span>
+            <span className={styles.bar} aria-label={`${t.view3d.oxygen}: ${walkStatus.oxygen}`}>
+              <span style={{ width: `${walkStatus.oxygen}%` }} />
+              <em>{walkStatus.oxygen}</em>
+            </span>
+          </div>
+        </div>
+      )}
+      {walk && walkStatus?.dead && <div className={styles.deathNote}>{beds.length ? t.view3d.deadBed : t.view3d.dead}</div>}
+      {orbiting && (
+        <div className={styles.orbitBar} data-ui>
+          <span>{touchOnly ? t.commands.orbitTouch : t.commands.orbit}</span>
+          {!touchOnly && (
+            <button type="button" onClick={() => sendSceneCommand({ kind: 'orbit', on: false })}>
+              {t.view3d.orbitExit}
+            </button>
           )}
         </div>
       )}
-      {walk && walkStatus?.dead && <div className={styles.deathNote}>{t.view3d.dead}</div>}
-
-      {!activeDef && !paste && aim.lookId && (
-        <div className={styles.aimStatus} data-ui>
-          <kbd>{keyLabel(binds.grab, { space: t.keys.space, shift: t.keys.shift })}</kbd>
-          <span>{t.hud.grabHint}</span>
+      {contextLost && (
+        <div className={styles.contextLost} data-ui role="alert">
+          <p>{t.view3d.contextLost}</p>
+          <button type="button" onClick={() => window.location.reload()}>
+            {t.view3d.reload}
+          </button>
         </div>
       )}
+
+      {!paste && aim.interactId ? (() => {
+        // jak w grze: podpowiedź interakcji tuż pod celownikiem, klawisz w ramce i nazwa przedmiotu
+        const item = placedItems.find((i) => i.id === aim.interactId);
+        const def = item ? findDef(item.itemId) : undefined;
+        return (
+          <div className={styles.interact} data-ui>
+            <kbd>{keyLabel(binds.interact, { space: t.keys.space, shift: t.keys.shift })}</kbd>
+            <span>
+              {item?.open ? t.hud.closeHint : t.hud.openHint}
+              {def && <strong>{itemLabel(def, t)}</strong>}
+            </span>
+          </div>
+        );
+      })() : (
+        !activeDef && !paste && aim.lookId && (
+          <div className={styles.aimStatus} data-ui>
+            <kbd>{keyLabel(binds.grab, { space: t.keys.space, shift: t.keys.shift })}</kbd>
+            <span>{t.hud.grabHint}</span>
+          </div>
+        )
+      )}
+
+      {/* Kalkulator raidu: element pod celownikiem (bez niczego w ręku albo przy wyburzaniu) */}
+      {!paste && (!activeDef || isDemolish) && (() => {
+        const id = isDemolish ? aim.targetId : aim.lookId;
+        const item = id ? placedItems.find((i) => i.id === id) : undefined;
+        const def = item ? findDef(item.itemId) : undefined;
+        return def ? <RaidInfo def={def} className={styles.raidInfo} /> : null;
+      })()}
 
       {paste && (
         <div className={styles.aimStatus} data-ui data-bad={!aim.valid || undefined}>

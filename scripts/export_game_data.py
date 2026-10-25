@@ -22,6 +22,14 @@ Tworzy (pliki z gry, tylko do użytku lokalnego, są w .gitignore):
 Same tekstury terenu (bez modeli): python scripts/export_game_data.py --terrain
 Same modele obiektów i drzew map:  python scripts/export_game_data.py --scenery
 Samo oświetlenie i spawny map:     python scripts/export_game_data.py --lighting
+Same rekwizyty (barykady):         python scripts/export_game_data.py --props
+  (public/game/props.json + public/game/props/<id>.json, ikony w public/unturned/items)
+Same przepisy i surowce:           python scripts/export_game_data.py --recipes
+  (recipe w public/game/props.json, public/game/resources.json)
+Same ikony (sprawdzenie, kopia):   python scripts/export_game_data.py --icons [--icons-dir=<folder z PNG z gry>]
+  (kończy się błędem, gdy jakiś przedmiot nie ma ikony z gry; docs/icons.md)
+Same dźwięki (drzwi, klapy):       python scripts/export_game_data.py --sounds
+  (public/game/sounds/<klip>.wav i public/game/sounds.json: klip, głośność, zasięg, czas animacji na ID)
 
 Formaty plików mapy według kodu gry (U3-SDK: LevelObjects.cs, LevelGround.cs, River.cs, Level.cs).
 """
@@ -76,7 +84,7 @@ def read_text(path):
 
 def scan_assets(bundles):
     """GUID -> nazwa oraz lista struktur i klap (barykady Build Hatch)."""
-    guid_name = {}
+    guid_item = {}
     found = []
     for root, _, files in os.walk(os.path.join(bundles, "Items")):
         for fn in files:
@@ -89,8 +97,9 @@ def scan_assets(bundles):
                 m = re.search(r"^Name\s+(.+)$", read_text(eng), re.M)
                 name = m.group(1).strip() if m else None
             g = re.search(r"^GUID\s+(\w+)", text, re.M)
-            if g:
-                guid_name[g.group(1).lower()] = name
+            item_id = re.search(r"^ID\s+(\d+)", text, re.M)
+            if g and item_id:
+                guid_item[g.group(1).lower()] = {"id": int(item_id.group(1)), "name": name}
             is_structure = re.search(r"^Type\s+Structure", text, re.M)
             is_hatch = re.search(r"^Build\s+Hatch", text, re.M)
             if is_structure or is_hatch:
@@ -108,22 +117,83 @@ def scan_assets(bundles):
             "kind": "structure" if construct else "barricade",
             "construct": construct.group(1) if construct else "Hatch",
             "health": int(health.group(1)) if health else None,
-            "recipe": parse_recipe(text, guid_name),
+            "recipe": parse_recipe(text, guid_item),
+            # Armor_Tier z pliku (High/Low); brak = gra wybiera po nazwie (kalkulator raidu, src/lib/raid.ts)
+            "armor": armor.group(1).lower() if armor else None,
         })
-    return sorted(out, key=lambda s: s["id"])
+    return sorted(out, key=lambda s: s["id"]), guid_item
 
 
-def parse_recipe(text, guid_name):
-    """Pierwszy blueprint: lista (nazwa, ilość) i liczba sztuk na wyjściu."""
+def parse_inputs(body):
+    """
+    Blok InputItems blueprintu: pojedynczy napis "guid x N", lista napisów albo obiekty { ID, Amount, Delete }.
+    Narzędzia (Delete false, np. palnik) nie zużywają się, więc nie są kosztem.
+    """
+    at = body.find("InputItems")
+    if at < 0:
+        return []
+    rest = body[at + len("InputItems"):].lstrip(" \t")
+    if rest.startswith('"') or rest[:1].isdigit():
+        # jeden składnik w tej samej linii: "guid x N" albo stara składnia z numerem: 68 x 2
+        block = rest.split("\n", 1)[0]
+    else:
+        start = rest.find("[")
+        if start < 0:
+            return []
+        depth, end = 0, len(rest)
+        for i in range(start, len(rest)):
+            if rest[i] == "[":
+                depth += 1
+            elif rest[i] == "]":
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+        block = rest[start + 1:end]
+    out = []
+    # obiekty { ID "guid" Amount N Delete false }
+    for obj in re.findall(r"\{(.*?)\}", block, re.S):
+        g = re.search(r'ID\s+"([0-9a-f]{32})"', obj)
+        if not g or re.search(r"Delete\s+false", obj):
+            continue
+        n = re.search(r"Amount\s+(\d+)", obj)
+        out.append((g.group(1), int(n.group(1)) if n else 1))
+    # napisy "guid" albo "guid x N" poza obiektami
+    plain = re.sub(r"\{.*?\}", "", block, flags=re.S)
+    for g, n in re.findall(r'"([0-9a-f]{32})(?:\s*x\s*(\d+))?"', plain):
+        out.append((g, int(n or 1)))
+    # stara składnia z numerem przedmiotu zamiast GUID-a (np. szyby: InputItems 68 x 2)
+    for i, n in re.findall(r"(?:^|\s)(\d+)(?:\s*x\s*(\d+))?(?=\s|$)", re.sub(r'"[^"]*"', " ", plain)):
+        out.append((i, int(n or 1)))
+    return out
+
+
+def parse_recipe(text, guid_item):
+    """
+    Pierwszy blueprint, który robi ten przedmiot (OutputItems this): składniki [{id, name, amount}] i liczba sztuk.
+    Nowy format (InputItems z GUID-ami) albo stary (Blueprint_0_Supply_N_ID / _Amount).
+    """
     m = re.search(r"Blueprints\s*\[\s*\{(.*?)\n\t\}", text, re.S)
-    if not m:
+    if m:
+        body = m.group(1)
+        inputs = []
+        by_id = {v["id"]: v for v in guid_item.values()}
+        for g, n in parse_inputs(body):
+            item = by_id.get(int(g), {"id": int(g), "name": None}) if g.isdigit() else guid_item.get(g.lower(), {"id": None, "name": g})
+            inputs.append({"id": item["id"], "name": item["name"], "amount": n})
+        out = re.search(r'OutputItems\s+"this x (\d+)"', body)
+        return {"inputs": inputs, "yields": int(out.group(1)) if out else 1}
+    supplies = re.findall(r"^Blueprint_0_Supply_(\d+)_ID\s+(\d+)", text, re.M)
+    if not supplies:
         return None
-    body = m.group(1)
+    by_id = {v["id"]: v for v in guid_item.values()}
     inputs = []
-    for g, n in re.findall(r'"([0-9a-f]{32})(?:\s*x\s*(\d+))?"', body.split("OutputItems")[0]):
-        inputs.append({"item": guid_name.get(g.lower(), g), "amount": int(n or 1)})
-    out = re.search(r'OutputItems\s+"this x (\d+)"', body)
-    return {"inputs": inputs, "yields": int(out.group(1)) if out else 1}
+    for n, item_id in supplies:
+        amount = re.search(rf"^Blueprint_0_Supply_{n}_Amount\s+(\d+)", text, re.M)
+        item = by_id.get(int(item_id), {"id": int(item_id), "name": None})
+        inputs.append({"id": item["id"], "name": item["name"], "amount": int(amount.group(1)) if amount else 1})
+    product = re.search(r"^Blueprint_0_Products\s+(\d+)", text, re.M)
+    return {"inputs": inputs, "yields": int(product.group(1)) if product else 1}
 
 
 # ---------------------------------------------------------------- modele 3D
@@ -416,20 +486,23 @@ def export_structures(unturned, metas):
 
 # ---------------------------------------------------------------- ikony
 
+# Te same ikony z repozytorium na GitHubie: CDN potrafi chwilowo zwrócić błąd, wtedy drugie źródło
+ICON_RAW = "https://raw.githubusercontent.com/SilKsPlugins/UnturnedImages/images/vanilla/items/{}.png"
+
+
 def fetch_icon(item_id):
-    try:
-        with urllib.request.urlopen(ICON_CDN.format(item_id), timeout=20) as r:
-            return Image.open(io.BytesIO(r.read())).convert("RGBA")
-    except Exception:
-        return None
-
-
-def recolor(img, rgb):
-    """Ikony gry to płaskie sylwetki: zachowujemy jasność, podmieniamy barwę."""
-    a = np.array(img).astype(float)
-    lum = a[..., :3].mean(-1, keepdims=True) / max(1.0, a[..., :3][a[..., 3] > 0].mean())
-    a[..., :3] = np.clip(lum * np.array(rgb, float), 0, 255)
-    return Image.fromarray(a.astype(np.uint8), "RGBA")
+    """Ikona z gry (UnturnedImages: render ItemTool z gry). 404 = brak w zbiorze, inne błędy: ponowna próba."""
+    for url in (ICON_CDN, ICON_RAW):
+        for _ in range(3):
+            try:
+                with urllib.request.urlopen(url.format(item_id), timeout=20) as r:
+                    return Image.open(io.BytesIO(r.read())).convert("RGBA")
+            except urllib.error.HTTPError as e:
+                if e.code in (403, 404):
+                    break
+            except Exception:
+                pass
+    return None
 
 
 # Ikony materiałów w przyborniku: kłody, blacha, cegły (ID przedmiotów z Bundles/Items/Supplies)
@@ -458,25 +531,8 @@ def export_icons(structures):
             continue
         img = fetch_icon(s["id"])
         if img is None:
-            # Brak w UnturnedImages: bierzemy ten sam kształt z klonu i barwimy na kolor materiału.
-            material = s["folder"].split("_")[1] if "_" in s["folder"] else "maple"
-            folder = s["folder"].replace(material, "maple")
-            triangle_hole = folder == "hole_maple_triangle"
-            base_folder = "roof_maple_triangle" if triangle_hole else folder
-            base = by_folder.get(base_folder)
-            img = fetch_icon(base["id"]) if base else None
-            if img is None:
-                print(f"  ikona {s['id']}: brak źródła")
-                continue
-            if triangle_hole:
-                d = ImageDraw.Draw(img)
-                w, h = img.size
-                side = w * 0.16
-                cx, cy = w / 2, h * 0.64
-                d.rectangle([cx - side, cy - side, cx + side, cy + side], fill=(0, 0, 0, 0))
-            color = s.get("color") or "#888888"
-            img = recolor(img, [int(color[i:i + 2], 16) for i in (1, 3, 5)])
-            print(f"  ikona {s['id']}: wygenerowana z {base_folder}")
+            # bez ikon robionych przez nas: brak zgłasza check_icons na końcu eksportu
+            continue
         img.thumbnail((256, 256), Image.LANCZOS)
         img.save(path, optimize=True)
 
@@ -1259,6 +1315,383 @@ def export_maps(unturned):
         json.dump(index, f, indent=1)
 
 
+# ---------------------------------------------------------------- rekwizyty (barykady)
+
+# Kategorie menu 3D: najpierw po nazwie (Barricade i Freeform mieszają ściany, meble i dekoracje), potem po typie Build.
+PROP_NAME_RULES = [
+    ("walls", r"Barricade$|Doorframe|Garageframe|Sandbag|Tanktrap|Plate|Frame|Siding|Pipe|Glass|Netting"),
+    ("furniture", r"Couch|Table|Chair|Umbrella|Christmas|Ice Castle|Stacked|Dye Vat|Spinning Wheel|Loom"),
+    ("farming", r"Planter|^Plot$"),
+]
+PROP_BUILD_CATEGORY = {
+    "Door": "doors", "Gate": "doors", "Shutter": "doors", "Ladder": "doors",
+    "Storage": "storage", "Storage_Wall": "storage", "Library": "storage",
+    "Fortification": "walls", "Glass": "walls",
+    "Sign": "furniture", "Sign_Wall": "furniture", "Note": "furniture", "Clock": "furniture", "Stereo": "furniture",
+    "Mannequin": "furniture", "Cage": "furniture",
+    "Torch": "light", "Spot": "light", "Campfire": "light", "Oven": "light", "Generator": "light",
+    "Farm": "farming", "Barrel_Rain": "farming", "Oil": "farming", "Tank": "farming", "Oxygenator": "farming",
+    "Spike": "defense", "Wire": "defense", "Sentry": "defense", "Charge": "defense", "Beacon": "defense",
+    "Claim": "defense", "Safezone": "defense",
+    "Bed": "beds",
+    "Vehicle": "vehicles",
+}
+
+
+STANDING_BUILDS = {"Door", "Gate", "Shutter", "Claim", "Mannequin"}
+
+
+def keep_props():
+    """ID rekwizytów z katalogu planera (src/lib/propCatalog.ts): tylko te trafiają do eksportu."""
+    path = os.path.join(os.path.dirname(__file__), "..", "src", "lib", "propCatalog.ts")
+    return {int(i) for i in re.findall(r"\[(\d+), '", read_text(path))}
+
+
+def prop_category(name, build):
+    for cat, pattern in PROP_NAME_RULES:
+        if name and re.search(pattern, name):
+            return cat
+    return PROP_BUILD_CATEGORY.get(build, "furniture")
+
+
+def scan_props(bundles):
+    """
+    Wszystkie przedmioty stawiane jak barykady (Useable Barricade) poza klapami, które są już strukturami.
+    Każdy da się zdobyć w grze: ma przepis albo trafia się w łupach / u handlarzy NPC (sprawdzone na plikach gry).
+    """
+    guid_item = {}
+    found = []
+    for root, _, files in os.walk(os.path.join(bundles, "Items")):
+        for fn in files:
+            if not fn.endswith(".dat") or fn == "English.dat":
+                continue
+            text = read_text(os.path.join(root, fn))
+            g = re.search(r"^GUID\s+(\w+)", text, re.M)
+            name = None
+            eng = os.path.join(root, "English.dat")
+            if os.path.exists(eng):
+                m = re.search(r"^Name\s+(.+)$", read_text(eng), re.M)
+                name = m.group(1).strip() if m else None
+            item_id = re.search(r"^ID\s+(\d+)", text, re.M)
+            if g and item_id:
+                guid_item[g.group(1).lower()] = {"id": int(item_id.group(1)), "name": name}
+            if re.search(r"^Useable\s+Barricade", text, re.M) and not re.search(r"^Build\s+Hatch", text, re.M):
+                found.append((root, text, name))
+    out = []
+    for root, text, name in found:
+        build = re.search(r"^Build\s+(\w+)", text, re.M)
+        health = re.search(r"^Health\s+(\d+)", text, re.M)
+        armor = re.search(r"^Armor_Tier\s+(\w+)", text, re.M)
+        build = build.group(1) if build else "Barricade"
+        out.append({
+            "id": int(re.search(r"^ID\s+(\d+)", text, re.M).group(1)),
+            "name": name,
+            "folder": os.path.basename(root).lower(),
+            "build": build,
+            "category": prop_category(name, build),
+            "health": int(health.group(1)) if health else None,
+            "recipe": parse_recipe(text, guid_item),
+            # Armor_Tier z pliku (High/Low); brak = gra wybiera po nazwie (kalkulator raidu, src/lib/raid.ts)
+            "armor": armor.group(1).lower() if armor else None,
+        })
+    return sorted(out, key=lambda s: s["id"]), guid_item
+
+
+def export_props(unturned):
+    """
+    public/game/props.json: lista rekwizytów (bez siatek), public/game/props/<id>.json: siatka jednego rekwizytu.
+    Siatki osobno, bo jest ich ok. 300: przeglądarka wczytuje tylko te, które są na mapie albo w ręku.
+    Konwencja: środek podstawy w (0, 0, 0), spód na y = 0 (stawiane na powierzchni pod celownikiem).
+    """
+    import UnityPy
+
+    metas, _ = scan_props(os.path.join(unturned, "Bundles"))
+    keep = keep_props()
+    metas = [m for m in metas if m["id"] in keep]
+    print(f"Rekwizyty: {len(metas)}. Wczytywanie core.masterbundle...")
+    env = UnityPy.load(os.path.join(unturned, "Bundles", "core.masterbundle"))
+    container = env.container
+    out_dir = os.path.join(PUBLIC, "game", "props")
+    os.makedirs(out_dir, exist_ok=True)
+    index = []
+    for meta in metas:
+        key = f"assets/coremasterbundle/items/barricades/{meta['folder']}/barricade.prefab"
+        entry = {k: meta[k] for k in ("id", "name", "build", "category", "health", "recipe", "armor")}
+        parts = collect_meshes(container[key].read()) if key in container else []
+        if parts:
+            verts, faces, cols, offset = [], [], [], 0
+            for v, f, c in parts:
+                verts.append(v)
+                faces.append(f + offset)
+                cols.append(c)
+                offset += len(v)
+            v = to_three(np.vstack(verts))
+            f = np.vstack(faces)[:, ::-1]
+            c = np.vstack(cols)
+            # Drzwi, bramy, okiennice, flaga claimu i manekiny są w prefabie w pozie szkieletu (leżą, "góra" to -Z):
+            # stawiamy je obrotem o 90° wokół X. Kierunek sprawdzony na geometrii: płat flagi i ramiona manekina są po -Z.
+            if meta["build"] in STANDING_BUILDS and np.ptp(v[:, 1]) < np.ptp(v[:, 2]):
+                v = np.stack([v[:, 0], -v[:, 2], v[:, 1]], axis=1)
+            # Drzwi, bramy, okiennice: gra stawia pivot prefabu w slocie otworu (Door, Gate, Slot), więc zapisujemy,
+            # jak wysoko nad spodem modelu był pivot (np. drzwi 1,4 m, drzwi podwójne 1,85 m)
+            if meta["build"] in ("Door", "Gate", "Shutter", "Glass"):
+                entry["pivot"] = round(float(-v[:, 1].min()), 3)
+            v[:, 0] -= (v[:, 0].max() + v[:, 0].min()) / 2
+            v[:, 2] -= (v[:, 2].max() + v[:, 2].min()) / 2
+            v[:, 1] -= v[:, 1].min()
+            keys, counts = np.unique(np.round(c).astype(int), axis=0, return_counts=True)
+            entry["color"] = "#%02x%02x%02x" % tuple(keys[counts.argmax()])
+            entry["bounds"] = [[round(float(a), 3) for a in v.min(0)], [round(float(a), 3) for a in v.max(0)]]
+            with open(os.path.join(out_dir, f"{meta['id']}.json"), "w", encoding="utf-8") as fh:
+                json.dump({
+                    "p": [round(float(x), 3) for x in v.ravel()],
+                    "i": [int(x) for x in f.ravel()],
+                    "c": [int(round(x)) for x in c.ravel()],
+                }, fh, separators=(",", ":"))
+        index.append(entry)
+        status = "model" if "bounds" in entry else "BRAK MODELU"
+        print(f"  {meta['id']:5d} {str(meta['name']):<34} {meta['build']:<13} {meta['category']:<10} {status}")
+    with open(os.path.join(PUBLIC, "game", "props.json"), "w", encoding="utf-8") as fh:
+        json.dump(index, fh, ensure_ascii=False, separators=(",", ":"))
+    icons = os.path.join(PUBLIC, "unturned", "items")
+    os.makedirs(icons, exist_ok=True)
+    missing = 0
+    for entry in index:
+        path = os.path.join(icons, f"{entry['id']}.png")
+        if os.path.exists(path):
+            continue
+        img = fetch_icon(entry["id"])
+        if img is None:
+            missing += 1
+            continue
+        img.save(path)
+    print(f"Rekwizyty z modelem: {sum('bounds' in e for e in index)}/{len(index)}, bez ikony: {missing}")
+
+
+# Ładunki do kalkulatora raidu (src/lib/raid.ts): Structure_Damage i Barricade_Damage z plików .dat.
+# 519 to wyrzutnia rakiet: obrażenia jednej rakiety są zapisane na broni.
+EXPLOSIVES = [1393, 1241, 519, 1100, 254]
+
+
+def export_explosives(bundles):
+    found = {}
+    for root, _, files in os.walk(os.path.join(bundles, "Items")):
+        for fn in files:
+            if not fn.endswith(".dat") or fn == "English.dat":
+                continue
+            text = read_text(os.path.join(root, fn))
+            item_id = re.search(r"^ID\s+(\d+)", text, re.M)
+            if not item_id or int(item_id.group(1)) not in EXPLOSIVES:
+                continue
+            sd = re.search(r"^Structure_Damage\s+([\d.]+)", text, re.M)
+            bd = re.search(r"^Barricade_Damage\s+([\d.]+)", text, re.M)
+            found[int(item_id.group(1))] = {
+                "structure": float(sd.group(1)) if sd else 0,
+                "barricade": float(bd.group(1)) if bd else 0,
+            }
+    out = [{"id": i, **found[i]} for i in EXPLOSIVES if i in found]
+    with open(os.path.join(PUBLIC, "game", "explosives.json"), "w", encoding="utf-8") as fh:
+        json.dump(out, fh, separators=(",", ":"))
+    print(f"Ładunki: {len(out)}/{len(EXPLOSIVES)}")
+
+
+# Surowce do budowy (okno Materiały): ID przedmiotów z przepisów struktur w src/lib/builder.ts.
+STRUCTURE_RESOURCES = [39, 37, 41, 61, 62, 63, 67, 68, 74]
+
+
+def export_recipes(unturned):
+    """
+    Same przepisy, bez modeli (szybko): uzupełnia recipe w public/game/props.json i zapisuje
+    public/game/resources.json {id: nazwa} dla wszystkich składników, z ikonami w public/unturned/items.
+    """
+    metas, guid_item = scan_props(os.path.join(unturned, "Bundles"))
+    path = os.path.join(PUBLIC, "game", "props.json")
+    index = json.load(open(path, encoding="utf-8"))
+    recipes = {m["id"]: m["recipe"] for m in metas}
+    armor = {m["id"]: m["armor"] for m in metas}
+    for entry in index:
+        entry["recipe"] = recipes.get(entry["id"])
+        entry["armor"] = armor.get(entry["id"])
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(index, fh, ensure_ascii=False, separators=(",", ":"))
+    names = {v["id"]: v["name"] for v in guid_item.values()}
+    used = set(STRUCTURE_RESOURCES)
+    for r in recipes.values():
+        for i in (r or {}).get("inputs", []):
+            if i["id"] is not None:
+                used.add(i["id"])
+    resources = {str(i): names.get(i) for i in sorted(used)}
+    with open(os.path.join(PUBLIC, "game", "resources.json"), "w", encoding="utf-8") as fh:
+        json.dump(resources, fh, ensure_ascii=False, separators=(",", ":"))
+    icons = os.path.join(PUBLIC, "unturned", "items")
+    os.makedirs(icons, exist_ok=True)
+    missing = []
+    for i in sorted(used):
+        p = os.path.join(icons, f"{i}.png")
+        if os.path.exists(p):
+            continue
+        img = fetch_icon(i)
+        if img is None:
+            missing.append(i)
+            continue
+        img.save(p)
+    print(f"Przepisy: {sum(1 for r in recipes.values() if r)}/{len(recipes)}, surowce: {len(used)}, bez ikony: {missing}")
+    export_explosives(os.path.join(unturned, "Bundles"))
+    for i in EXPLOSIVES:
+        p = os.path.join(icons, f"{i}.png")
+        if not os.path.exists(p):
+            img = fetch_icon(i)
+            if img is not None:
+                img.save(p)
+
+
+# Ikony: każdy przedmiot musi mieć ikonę z gry (render ItemTool.getIcon), bez wyjątków i bez własnych.
+# Źródła: zbiór UnturnedImages (fetch_icon), a dla nowszych przedmiotów folder z PNG wygenerowanymi w grze
+# (<id>.png), podany zmienną UNTURNED_ICONS albo opcją --icons-dir=<folder>. Instrukcja: docs/icons.md.
+STRUCTURE_EXTRA_ICONS = [288, 276]  # łóżko (Black Bedroll) i narzędzie wyburzania w przyborniku
+
+
+def all_item_ids():
+    ids = {}
+    for path, label in (("structures.json", "struktura"), ("props.json", "rekwizyt")):
+        full = os.path.join(PUBLIC, "game", path)
+        if os.path.exists(full):
+            for e in json.load(open(full, encoding="utf-8")):
+                if label == "struktura" or (e.get("bounds") and e.get("name")):
+                    ids[e["id"]] = f"{label}: {e.get('name')}"
+    res = os.path.join(PUBLIC, "game", "resources.json")
+    if os.path.exists(res):
+        for k, v in json.load(open(res, encoding="utf-8")).items():
+            ids.setdefault(int(k), f"surowiec: {v}")
+    for i in EXPLOSIVES + STRUCTURE_EXTRA_ICONS + list(MATERIAL_ICONS.values()):
+        ids.setdefault(i, "przybornik")
+    return ids
+
+
+def check_icons():
+    """Kopiuje ikony z folderu wygenerowanego w grze, dociąga brakujące z UnturnedImages i kończy błędem, gdy czegoś brak."""
+    import shutil
+
+    out_dir = os.path.join(PUBLIC, "unturned", "items")
+    os.makedirs(out_dir, exist_ok=True)
+    src = os.environ.get("UNTURNED_ICONS") or next((f.split("=", 1)[1] for f in FLAGS if f.startswith("--icons-dir=")), None)
+    ids = all_item_ids()
+    copied = 0
+    if src and os.path.isdir(src):
+        for i in ids:
+            path = os.path.join(src, f"{i}.png")
+            if os.path.exists(path):
+                shutil.copyfile(path, os.path.join(out_dir, f"{i}.png"))
+                copied += 1
+    missing = []
+    for i, label in sorted(ids.items()):
+        path = os.path.join(out_dir, f"{i}.png")
+        if os.path.exists(path):
+            continue
+        img = fetch_icon(i)
+        if img is None:
+            missing.append((i, label))
+            continue
+        img.thumbnail((256, 256), Image.LANCZOS)
+        img.save(path, optimize=True)
+    print(f"Ikony: {len(ids)} przedmiotów, z folderu gry: {copied}, brak: {len(missing)}")
+    if missing:
+        for i, label in missing:
+            print(f"  BRAK IKONY {i:5d} {label}")
+        sys.exit("Nie wszystkie przedmioty mają ikonę z gry (docs/icons.md).")
+
+
+# Dźwięki drzwi, bram, okiennic i klap jak w grze (InteractableDoor: GetComponent<AudioSource>().Play()
+# na modelu tej barykady, ten sam klip przy otwieraniu i zamykaniu). Dla każdego ID: klip z AudioSource
+# w barricade.prefab, jego ustawienia (głośność, ton, zasięg) i długość animacji Open/Close.
+# Pliki: public/game/sounds/<klip>.wav (wspólny klip zapisany raz) i public/game/sounds.json.
+OPENABLE_BUILDS = {"Door", "Gate", "Shutter", "Hatch"}
+
+
+def scan_openables(bundles):
+    out = []
+    for root, _, files in os.walk(os.path.join(bundles, "Items", "Barricades")):
+        for fn in files:
+            if not fn.endswith(".dat") or fn == "English.dat":
+                continue
+            text = read_text(os.path.join(root, fn))
+            build = re.search(r"^Build\s+(\w+)", text, re.M)
+            item_id = re.search(r"^ID\s+(\d+)", text, re.M)
+            if build and item_id and build.group(1) in OPENABLE_BUILDS:
+                name = None
+                eng = os.path.join(root, "English.dat")
+                if os.path.exists(eng):
+                    m = re.search(r"^Name\s+(.+)$", read_text(eng), re.M)
+                    name = m.group(1).strip() if m else None
+                out.append({"id": int(item_id.group(1)), "name": name, "folder": os.path.basename(root).lower()})
+    return sorted(out, key=lambda x: x["id"])
+
+
+def clip_length(clip):
+    """Długość klipu animacji (Legacy Animation): ostatnia klatka kluczowa z krzywych."""
+    tt = clip.object_reader.read_typetree()
+    times = [kf["time"] for curves in ("m_RotationCurves", "m_PositionCurves", "m_EulerCurves", "m_FloatCurves")
+             for cv in tt.get(curves, []) for kf in cv["curve"]["m_Curve"]]
+    return round(max(times), 3) if times else None
+
+
+def export_sounds(unturned):
+    import UnityPy
+
+    items = scan_openables(os.path.join(unturned, "Bundles"))
+    env = UnityPy.load(os.path.join(unturned, "Bundles", "core.masterbundle"))
+    out_dir = os.path.join(PUBLIC, "game", "sounds")
+    os.makedirs(out_dir, exist_ok=True)
+    data, written, silent = {}, set(), []
+    for it in items:
+        key = f"assets/coremasterbundle/items/barricades/{it['folder']}/barricade.prefab"
+        if key not in env.container:
+            silent.append((it["id"], it["name"], "brak prefabu"))
+            continue
+        entry = {}
+
+        def walk(go):
+            for c in go.m_Components:
+                comp = c.read() if hasattr(c, "read") else c.component.read()
+                kind = comp.object_reader.type.name
+                if kind == "AudioSource" and comp.m_audioClip.path_id and "clip" not in entry:
+                    tt = comp.object_reader.read_typetree()
+                    clip = comp.m_audioClip.read()
+                    file = re.sub(r"[^a-z0-9_]+", "_", clip.m_Name.lower())
+                    if file not in written:
+                        wav = next(iter(clip.samples.values()))
+                        with open(os.path.join(out_dir, f"{file}.wav"), "wb") as fh:
+                            fh.write(wav)
+                        written.add(file)
+                    entry.update({
+                        "clip": file,
+                        "volume": round(float(tt.get("m_Volume", 1)), 3),
+                        "pitch": round(float(tt.get("m_Pitch", 1)), 3),
+                        "min": round(float(tt.get("MinDistance", 1)), 2),
+                        "max": round(float(tt.get("MaxDistance", 500)), 2),
+                        # Unity AudioRolloffMode: 0 logarytmiczny, 1 liniowy, 2 własna krzywa
+                        "rolloff": int(tt.get("rolloffMode", 0)),
+                    })
+                if kind == "Animation":
+                    for a in comp.m_Animations:
+                        if a.path_id:
+                            clip = a.read()
+                            if clip.m_Name in ("Open", "Close"):
+                                entry[clip.m_Name.lower()] = clip_length(clip)
+            for ch in go.m_Transform.read().m_Children:
+                walk(ch.read().m_GameObject.read())
+
+        walk(env.container[key].read())
+        if "clip" not in entry:
+            # w grze bez AudioSource przedmiot jest cichy: tu też, bez podstawiania dźwięku innych drzwi
+            silent.append((it["id"], it["name"], "bez AudioSource"))
+        data[it["id"]] = entry
+        print(f"  {it['id']:5d} {str(it['name']):<26} {entry.get('clip', '-'):<16} otw. {entry.get('open')} s")
+    with open(os.path.join(PUBLIC, "game", "sounds.json"), "w", encoding="utf-8") as fh:
+        json.dump(data, fh, separators=(",", ":"))
+    print(f"Dźwięki: {len(written)} plików dla {len(data)} przedmiotów, ciche: {silent}")
+
+
 # ----------------------------------------------------------------
 
 def main():
@@ -1279,13 +1712,38 @@ def main():
         export_maps_terrain(unturned)
         print("Gotowe.")
         return
+    if "--props" in FLAGS:
+        print("Tylko rekwizyty (barykady)...")
+        export_props(unturned)
+        print("Gotowe.")
+        return
+    if "--recipes" in FLAGS:
+        print("Tylko przepisy i surowce...")
+        export_recipes(unturned)
+        print("Gotowe.")
+        return
+    if "--icons" in FLAGS:
+        print("Tylko ikony...")
+        check_icons()
+        print("Gotowe.")
+        return
+    if "--sounds" in FLAGS:
+        print("Tylko dźwięki...")
+        export_sounds(unturned)
+        print("Gotowe.")
+        return
     metas = scan_assets(os.path.join(unturned, "Bundles"))
     print(f"Struktury i klapy: {len(metas)}")
     structures = export_structures(unturned, metas)
     print("Ikony...")
     export_icons(structures)
+    print("Rekwizyty...")
+    export_props(unturned)
+    export_recipes(unturned)
+    export_sounds(unturned)
     print("Mapy...")
     export_maps(unturned)
+    check_icons()
     print("Gotowe.")
 
 

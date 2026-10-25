@@ -10,7 +10,7 @@ import styles from './changelog.module.css';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getDict();
-  return { title: `${t.changelog.title} - Untmatica` };
+  return { title: `${t.changelog.title} - Untmatica`, alternates: { canonical: '/changelog' } };
 }
 
 /** Adres wersji: parametr ?v= (da się go wysłać ekipie). */
@@ -42,7 +42,7 @@ export default async function ChangelogPage({ searchParams }: { searchParams: Pr
     <>
       <SiteNav overlay />
       <div className={styles.shell}>
-        <HeroVideo media={media} />
+        <HeroVideo media={media} still />
         <main className={`wrap ${styles.page}`}>
           <header className={styles.header}>
             <h1 className={styles.title}>{t.changelog.title}</h1>

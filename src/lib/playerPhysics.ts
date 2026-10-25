@@ -7,6 +7,10 @@ export type Stance = 'stand' | 'sprint' | 'crouch' | 'prone' | 'swim';
 
 /** PlayerMovement: SPEED_* (m/s). */
 export const SPEED: Record<Stance, number> = { stand: 4.5, sprint: 7, crouch: 2.5, prone: 1.5, swim: 3 };
+/** PlayerMovement.SPEED_CLIMB: wspinanie po drabinie (m/s). */
+export const CLIMB_SPEED = 4.5;
+/** Drabina łapie, gdy jest do 0,75 m przed postacią (PlayerStance: promień do przodu). */
+export const LADDER_REACH = 0.75;
 /** Pływanie: prędkość pływania * 1.5. */
 export const SWIM_MULTIPLIER = 1.5;
 

@@ -3,7 +3,7 @@
 /*
   Przybornik 2D jako okno nad planem (E). Pasek po lewej filtruje po rodzaju (podłogi, ściany...) i po materiale,
   filtry się łączą. Każdy klocek to osobny kafelek w swoim materiale, jak przedmioty w ekwipunku gry.
-  Na dole planu zostaje pasek slotów 1-9 (BuildBar).
+  Sloty 1-9 są w dolnym panelu edytora (editor/Dock).
 */
 import { useState, type ReactNode } from 'react';
 import {
@@ -13,12 +13,12 @@ import {
   Cube,
   DoorOpen,
   GridFour,
-  Hammer,
   HouseLine,
   Keyboard,
   Leaf,
   MagnifyingGlass,
   Nut,
+  Package,
   PaintBucket,
   Rows,
   SquaresFour,
@@ -29,35 +29,28 @@ import {
   X,
   type Icon,
 } from '@phosphor-icons/react';
-import { BED, MATERIALS, REMOVER, findDef, type BuildItem, type Hotbar, type MaterialId, type PartId } from '@/lib/builder';
+import { BED, MATERIALS, findDef, type BuildItem, type Hotbar, type MaterialId } from '@/lib/builder';
+import { BLOCK_CATEGORIES, blockSections, type CategoryId } from '@/lib/catalog';
+import ItemIcon from './ItemIcon';
 import { itemFullLabel, itemLabel, type SidebarTabId } from '@/lib/i18n';
 import { SLOT_ACTIONS, keyLabel, useKeybinds } from '@/lib/keybinds';
 import { useT } from './I18nProvider';
 import styles from './BuildWindow.module.css';
 
-type CategoryId = 'floors' | 'walls' | 'roofs' | 'pillars' | 'stairs' | 'hatches' | 'bed';
 export type WindowTab = Exclude<SidebarTabId, 'map'>;
 
-const CATEGORIES: { id: CategoryId; Icon: Icon; parts: PartId[] }[] = [
-  { id: 'floors', Icon: GridFour, parts: ['floor', 'tri_floor'] },
-  { id: 'walls', Icon: Wall, parts: ['wall', 'doorway', 'window', 'garage', 'rampart', 'ramp_wall'] },
-  { id: 'roofs', Icon: HouseLine, parts: ['roof', 'tri_roof', 'hole', 'tri_hole'] },
-  { id: 'pillars', Icon: Columns, parts: ['pillar', 'post'] },
-  { id: 'stairs', Icon: Stairs, parts: ['stairs', 'ramp'] },
-  { id: 'hatches', Icon: DoorOpen, parts: ['hatch'] },
-  { id: 'bed', Icon: Bed, parts: [] },
-];
+// kategorie i ich kolejność są wspólne z ekwipunkiem 3D (lib/catalog), tu tylko ikony
+const CATEGORY_ICON: Record<CategoryId, Icon> = { floors: GridFour, walls: Wall, roofs: HouseLine, pillars: Columns, stairs: Stairs, hatches: DoorOpen, bed: Bed };
 
 const TABS: { id: WindowTab; Icon: Icon }[] = [
   { id: 'blocks', Icon: Cube },
   { id: 'bases', Icon: Buildings },
+  { id: 'materials', Icon: Package },
   { id: 'color', Icon: PaintBucket },
   { id: 'hotkeys', Icon: Keyboard },
 ];
 
 const MATERIAL_ICON: Record<MaterialId, Icon> = { maple: Leaf, birch: Tree, pine: TreeEvergreen, metal: Nut, brick: Rows };
-
-const variant = (part: PartId, m: MaterialId) => findDef(`${m}_${part}`);
 
 function useKeyName() {
   const t = useT();
@@ -76,7 +69,7 @@ export function BuildWindow({
   tab: WindowTab;
   activeItem: string | null;
   hotbar: Hotbar;
-  /** Zawartość pozostałych zakładek (budowle, kolor, skróty). */
+  /** Zawartość pozostałych zakładek (budowle, materiały, kolor, skróty). */
   panels: Record<Exclude<WindowTab, 'blocks'>, ReactNode>;
   onTab: (tab: WindowTab) => void;
   /** Wybór klocka z siatki: page wkłada go do slotu i zamyka okno. */
@@ -96,25 +89,9 @@ export function BuildWindow({
     return i >= 0 ? keyName(binds[SLOT_ACTIONS[i]]) : null;
   };
 
-  // Szukanie po nazwie części i po materiale ("metal" pokazuje wszystkie metalowe)
-  const q = query.trim().toLowerCase();
-  const matches = (part: PartId, m: MaterialId) =>
-    !q || t.parts[part].toLowerCase().includes(q) || t.materials[m].toLowerCase().includes(q);
-  const bedMatches = !q || itemLabel(BED, t).toLowerCase().includes(q);
-
-  /** Sekcje do pokazania: rodzaj, w nim rzędy części, w rzędzie warianty materiałów (filtrowane). */
-  const mats = material ? MATERIALS.filter((m) => m.id === material) : MATERIALS;
-  const sections = CATEGORIES.filter((c) => !category || c.id === category)
-    .map((c) => {
-      if (c.id === 'bed') return { cat: c, rows: [], bed: !material && bedMatches };
-      const rows = c.parts
-        .map((part) => ({ part, cells: mats.map((m) => (matches(part, m.id) ? variant(part, m.id) ?? null : undefined)) }))
-        .filter((r) => r.cells.some((x) => x));
-      return { cat: c, rows, bed: false };
-    })
-    .filter((s) => s.rows.length > 0 || s.bed);
-  const count = sections.reduce((n, s) => n + (s.bed ? 1 : 0) + s.rows.reduce((k, r) => k + r.cells.filter(Boolean).length, 0), 0);
-  const columns = material ? 1 : MATERIALS.length;
+  // Ten sam układ i wyszukiwanie co w ekwipunku 3D: nazwy części i materiałów po polsku i po angielsku
+  const q = query.trim();
+  const { sections, count, columns } = blockSections(category, material, query);
 
   const tile = (def: BuildItem) => {
     const key = slotKey(def.id);
@@ -130,8 +107,7 @@ export function BuildWindow({
         title={def.health ? `${itemFullLabel(def, t)}, ${def.health} HP` : itemFullLabel(def, t)}
       >
         {key && <span className={styles.tileKey}>{key}</span>}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={def.icon} alt="" />
+        <ItemIcon src={def.icon} name={name} size={56} />
         <span className={styles.tileName}>{name}</span>
         {mat && MatGlyph && (
           <span className={styles.tileMeta}>
@@ -223,8 +199,8 @@ export function BuildWindow({
                   setQuery('');
                 })}
                 <span className={styles.railRule} aria-hidden />
-                {CATEGORIES.map((c) =>
-                  railButton(c.id, c.Icon, t.toolbox.category[c.id], category === c.id, () => {
+                {BLOCK_CATEGORIES.map((c) =>
+                  railButton(c.id, CATEGORY_ICON[c.id], t.toolbox.category[c.id], category === c.id, () => {
                     setCategory(category === c.id ? null : c.id);
                     if (c.id === 'bed') setMaterial(null);
                   }),
@@ -244,12 +220,14 @@ export function BuildWindow({
                   <span>{count}</span>
                   {category === 'walls' && <em>{t.toolbox.wallsNote}</em>}
                 </h3>
-                {sections.map(({ cat, rows, bed }) => (
-                  <section key={cat.id} className={styles.section}>
+                {sections.map(({ id: catId, rows, bed }) => {
+                  const CatIcon = CATEGORY_ICON[catId];
+                  return (
+                  <section key={catId} className={styles.section}>
                     {!category && (
                       <h4>
-                        <cat.Icon size={14} weight="duotone" />
-                        {t.toolbox.category[cat.id]}
+                        <CatIcon size={14} weight="duotone" />
+                        {t.toolbox.category[catId]}
                       </h4>
                     )}
                     {bed ? (
@@ -265,17 +243,17 @@ export function BuildWindow({
                         )}
                       </div>
                     )}
-                    {cat.id === 'hatches' && !material && <p className={styles.muted}>{t.editor.brickNoHatch}</p>}
+                    {catId === 'hatches' && !material && <p className={styles.muted}>{t.editor.brickNoHatch}</p>}
                   </section>
-                ))}
+                  );
+                })}
                 {count === 0 && <p className={styles.muted}>{t.editor.noMatch(query)}</p>}
               </div>
             </div>
 
             {activeDef && activeDef.shape !== 'remover' && (
               <footer className={styles.dock}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={activeDef.icon} alt="" />
+                <ItemIcon src={activeDef.icon} name={itemFullLabel(activeDef, t)} size={40} eager />
                 <span className={styles.held}>
                   <strong>{itemFullLabel(activeDef, t)}</strong>
                   <em>
@@ -295,96 +273,5 @@ export function BuildWindow({
         )}
       </section>
     </>
-  );
-}
-
-/** Pasek na dole planu 2D: okno klocków, sloty 1-9, wyburzanie, aktywne malowanie. */
-export function BuildBar({
-  open,
-  hotbar,
-  selected,
-  activeItem,
-  paint,
-  onOpen,
-  onSlot,
-  onClearSlot,
-  onDemolish,
-  onPaintOff,
-}: {
-  open: boolean;
-  hotbar: Hotbar;
-  selected: number | null;
-  activeItem: string | null;
-  /** Kolor malowania ('' = wyłączone). */
-  paint: string;
-  onOpen: () => void;
-  onSlot: (i: number) => void;
-  onClearSlot: (i: number) => void;
-  onDemolish: () => void;
-  onPaintOff: () => void;
-}) {
-  const t = useT();
-  const binds = useKeybinds((s) => s.binds);
-  const keyName = useKeyName();
-  const paintLabel = paint === 'clear' ? t.editor.colorDefault : paint;
-
-  return (
-    <div className={styles.bar}>
-      <button
-        className={styles.barAll}
-        data-on={open || undefined}
-        aria-expanded={open}
-        aria-label={t.toolbox.open(keyName(binds.inventory))}
-        title={t.toolbox.open(keyName(binds.inventory))}
-        onClick={onOpen}
-      >
-        <SquaresFour size={20} weight="duotone" />
-        <kbd>{keyName(binds.inventory)}</kbd>
-      </button>
-      <span className={styles.barRule} aria-hidden />
-      <div className={styles.slots}>
-        {hotbar.map((id, i) => {
-          const def = id ? findDef(id) : undefined;
-          const key = keyName(binds[SLOT_ACTIONS[i]]);
-          const name = def ? itemFullLabel(def, t) : null;
-          return (
-            <button
-              key={i}
-              className={styles.slot}
-              data-on={selected === i || undefined}
-              data-empty={!def || undefined}
-              aria-label={t.hud.slotAria(i + 1, name)}
-              title={name ? `${name}${def?.health ? `, ${def.health} HP` : ''}` : undefined}
-              onClick={() => onSlot(i)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                if (def) onClearSlot(i);
-              }}
-            >
-              <span className={styles.slotKey}>{key}</span>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              {def && <img src={def.icon} alt="" />}
-            </button>
-          );
-        })}
-      </div>
-      <span className={styles.barRule} aria-hidden />
-      {paint && (
-        <button className={styles.barPaint} onClick={onPaintOff} aria-label={t.toolbox.paintOff} title={t.toolbox.paintOff}>
-          <span className={styles.paintSwatch} style={paint === 'clear' ? undefined : { background: paint }} data-clear={paint === 'clear' || undefined} />
-          <span>{t.toolbox.paint(paintLabel)}</span>
-          <X size={12} weight="bold" />
-        </button>
-      )}
-      <button
-        className={styles.barDemolish}
-        data-on={activeItem === REMOVER.id || undefined}
-        onClick={onDemolish}
-        aria-label={`${itemLabel(REMOVER, t)} (${keyName(binds.demolish)})`}
-        title={`${itemLabel(REMOVER, t)} (${keyName(binds.demolish)})`}
-      >
-        <Hammer size={21} weight="duotone" />
-      </button>
-    </div>
   );
 }

@@ -36,7 +36,9 @@
   margin-top: var(--space-5);
   font-size: var(--text-lead);
   line-height: 1.55;
-  color: var(--muted);
+  /* jaśniejszy niż --muted: tekst stoi na filmie */
+  color: rgb(233 239 228 / 0.86);
+  text-shadow: 0 1px 12px rgb(11 16 12 / 0.9);
   text-wrap: pretty;
 }
 

@@ -24,6 +24,7 @@ Nagranie pokazuje prawdziwą sesję w aplikacji: nowy projekt, 6 podłóg, ścia
 - **Piętra.** Pasek po prawej jak przyciski w windzie, `+` dodaje kolejne; niższe widać pod spodem jako tło.
 - **Sandbox: 3D jak w grze.** Oryginalne modele struktur z plików Unturned. Pełny ekran z paskiem 9 slotów i ekwipunkiem (`E`), latanie albo chodzenie, stawianie i wyburzanie z celownika.
 - **Komendy na czacie.** `T` albo `/` otwiera czat: `/time night`, `/sky 150`, `/tp <x> <z>`, `/give metal_wall 3` i inne (`/help`). `Esc` otwiera menu ze sceną, mapą i klawiszami.
+- **Rekwizyty z gry.** W Sandboxie ekwipunek pod `E` ma zakładkę Rekwizyty z tym, co liczy się przy bazie: drzwi, bramy i drzwi podwójne, okiennice, szyby, drabiny, skrzynie, szafki, szafy, łóżka i łóżka polowe, flaga claimu i wieżyczki, z oryginalnymi modelami. Drzwi, bramy, okiennice i szyby idą w pasujący otwór ściany, drabiny przyczepiają się do otworu w dachu (kwadratowego i trójkątnego) i można się po nich wspinać, reszta stoi na dowolnej powierzchni pod celownikiem. Łóżka i flaga claimu pokazują zasięg claimu.
 - **Prawdziwe mapy jako sandbox.** Russia, Washington, PEI, Germany, Yukon i inne: teren, satelita, budynki i drzewa w skali 1:1, oświetlenie z plików mapy. Start na spawnie z gry, budowanie gdziekolwiek: na ziemi i w powietrzu naraz. `M` pokazuje mapę z twoją pozycją, `Ctrl C` / `Ctrl V` w 3D kopiuje bazę w inne miejsce.
 - **Limity z gry.** Maksymalna wysokość budowania, granica tlenu i strefy zakazu budowy dla każdej mapy ([docs/sky-limits.md](docs/sky-limits.md)).
 - **Zasięg claimu łóżka.** Okrąg pokazuje, gdzie nikt spoza grupy nic nie postawi.
@@ -51,7 +52,8 @@ Klawisze można zmienić w zakładce **Skróty** w oknie pod `E` (zapis w przegl
 | `Ctrl C` / `Ctrl V` | kopiuj / wklej (podgląd pod kursorem) | |
 | `Ctrl Z` / `Ctrl Y` | cofnij / ponów | |
 | `W A S D`, `Spacja`, `Q` | | ruch, w górę, w dół |
-| `F` | | latanie albo chodzenie |
+| `F` | | otwórz albo zamknij drzwi, bramę, okiennicę lub klapę (w zasięgu ręki) |
+| `V` | | latanie albo chodzenie |
 | `Esc` | odłóż element | menu: scena, mapa, klawisze, widok 2D |
 
 ## Technologie
@@ -80,6 +82,7 @@ Co powstaje (pliki gry, tylko do użytku lokalnego, są w `.gitignore`):
 | Ścieżka | Źródło w grze |
 | --- | --- |
 | `public/game/structures.json` | modele 3D, kolory i wytrzymałość struktur (`Bundles/core.masterbundle`, `Bundles/Items/Structures/*.dat`) |
+| `public/game/props.json`, `public/game/props/<id>.json` | rekwizyty: barykady z listy w `src/lib/propCatalog.ts` (drzwi, bramy, okiennice, szyby, drabiny, schowki, łóżka, wieżyczki), lista z kategorią i wytrzymałością oraz osobny model 3D na plik (`Bundles/Items/Barricades/*.dat`). Sam ten eksport: `npm run export:game -- --props` |
 | `public/unturned/items/<id>.png` | ikony z [SilKsPlugins/UnturnedImages](https://github.com/SilksPlugins/UnturnedImages) (folder vanilla); brakujące są generowane z ikon tego samego kształtu |
 | `public/maps/<Mapa>/height.bin` | wysokości terenu (`Maps/<Mapa>/Landscape/Heightmaps`, co 4 m) |
 | `public/maps/<Mapa>/tiles/*.jpg` | satelita z gry (`Maps/<Mapa>/Map.png`) |

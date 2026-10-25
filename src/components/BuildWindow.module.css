@@ -1,22 +1,20 @@
-/* Okno klocków nad planem 2D i pasek slotów na dole planu */
+/* Okno klocków nad planem 2D (E i narzędzie Wstaw); pasek slotów jest w dolnym panelu edytora */
 
 .backdrop {
   position: absolute;
   inset: 0;
-  z-index: var(--z-overlay);
+  z-index: calc(var(--z-overlay) + 3);
   background: rgb(6 10 7 / 0.45);
   animation: fade 0.2s var(--ease);
 }
 
 .window {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 92px;
-  margin: 0 auto;
-  z-index: calc(var(--z-overlay) + 1);
+  inset: 0;
+  margin: auto;
+  z-index: calc(var(--z-overlay) + 3);
   width: min(920px, calc(100% - 24px));
-  height: min(680px, calc(100% - 112px));
+  height: min(680px, calc(100% - 24px));
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -409,198 +407,7 @@
   font-size: 11px;
 }
 
-/* Pasek na dole planu */
-.bar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 16px;
-  z-index: calc(var(--z-overlay) + 1);
-  width: max-content;
-  max-width: calc(100% - 24px);
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px;
-  background: rgb(11 16 12 / 0.94);
-  border: 1px solid var(--line-strong);
-  border-radius: 12px;
-  box-shadow: 0 12px 32px rgb(4 8 5 / 0.45);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.bar button {
-  flex-shrink: 0;
-  height: 50px;
-  border: 0;
-  border-radius: var(--r-md);
-  font: inherit;
-  cursor: pointer;
-  transition: background 0.2s var(--ease), color 0.2s var(--ease), transform 0.15s var(--ease);
-}
-
-.bar button:active {
-  transform: scale(0.97);
-}
-
-.barRule {
-  flex-shrink: 0;
-  width: 1px;
-  height: 30px;
-  margin: 0 3px;
-  background: var(--line);
-}
-
-.barAll {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  background: var(--surface-2);
-  color: var(--text);
-}
-
-.barAll kbd {
-  padding: 0 5px;
-  background: var(--surface-3);
-  border-radius: 4px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-
-.barAll:hover {
-  background: var(--surface-3);
-}
-
-.barAll[data-on] {
-  background: var(--text);
-  color: var(--accent-ink);
-}
-
-.barAll[data-on] kbd {
-  background: rgb(13 26 8 / 0.12);
-}
-
-.slots {
-  display: flex;
-  gap: 5px;
-}
-
-.slot {
-  position: relative;
-  width: 50px;
-  display: grid;
-  place-items: center;
-  background: var(--surface-2);
-  outline: 1px solid transparent;
-  outline-offset: -1px;
-}
-
-.slot:hover {
-  background: var(--surface-3);
-}
-
-.slot[data-on] {
-  background: var(--accent-soft);
-  outline-color: var(--accent);
-}
-
-.slot[data-empty] {
-  background: transparent;
-  outline: 1px dashed var(--line-strong);
-}
-
-.slot img {
-  width: 34px;
-  height: 34px;
-  object-fit: contain;
-}
-
-.slotKey {
-  position: absolute;
-  top: 3px;
-  left: 5px;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  color: var(--muted);
-}
-
-.slot[data-on] .slotKey {
-  color: var(--accent);
-}
-
-.barPaint {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  background: var(--surface-2);
-  color: var(--text);
-  font-size: 12px !important;
-}
-
-.barPaint:hover {
-  background: var(--surface-3);
-}
-
-.paintSwatch {
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
-  border: 1px solid var(--line-strong);
-}
-
-.paintSwatch[data-clear] {
-  background: repeating-linear-gradient(45deg, var(--surface-3) 0 3px, transparent 3px 6px);
-}
-
-.barDemolish {
-  width: 50px;
-  display: grid;
-  place-items: center;
-  background: var(--surface-2);
-  color: var(--danger);
-}
-
-.barDemolish:hover {
-  background: var(--surface-3);
-}
-
-.barDemolish[data-on] {
-  background: rgb(229 72 77 / 0.16);
-  outline: 1px solid var(--danger);
-  outline-offset: -1px;
-}
-
 @media (max-width: 720px) {
-  .window {
-    bottom: 78px;
-    height: min(620px, calc(100% - 92px));
-  }
-
-  .bar {
-    bottom: 10px;
-    gap: 4px;
-    padding: 5px;
-  }
-
-  .bar button {
-    height: 42px;
-  }
-
-  .slot,
-  .barDemolish {
-    width: 42px;
-  }
-
-  .slot img {
-    width: 28px;
-    height: 28px;
-  }
-
-  .barAll kbd,
   .rotate {
     display: none;
   }

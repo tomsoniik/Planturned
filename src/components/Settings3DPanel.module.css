@@ -1,0 +1,41 @@
+.slider {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: min(260px, 100%);
+}
+
+.slider input {
+  flex: 1;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.slider input:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.slider output {
+  min-width: 44px;
+  text-align: right;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.reset {
+  margin-top: 12px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.reset:hover {
+  color: var(--text);
+}

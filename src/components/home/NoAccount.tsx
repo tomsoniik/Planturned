@@ -15,8 +15,9 @@ export default async function NoAccount() {
   const date = new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'long', year: 'numeric' });
 
   return (
-    <section className={styles.section} aria-label={home.trust.facts.join(', ')}>
+    <section className={styles.section} aria-labelledby="trust-title">
       <div className={`wrap ${styles.inner}`}>
+        <h2 id="trust-title" className="sr-only">{home.trust.title}</h2>
         <ul className={styles.facts}>
           {home.trust.facts.map((fact, i) => {
             const IconFor = ICONS[i];
@@ -33,9 +34,8 @@ export default async function NoAccount() {
           <Link href={`/changelog?v=${encodeURIComponent(latest.version)}`} className={styles.release}>
             <span className={styles.label}>{home.trust.latest}</span>
             <span className={styles.version}>{latest.version}</span>
-            <span className={styles.meta}>
-              {latest.title[lang]}, {date.format(new Date(`${latest.date}T12:00:00`))}
-            </span>
+            <span className={styles.meta}>{date.format(new Date(`${latest.date}T12:00:00`))}</span>
+            <span className={styles.relTitle}>{latest.title[lang]}</span>
             <span className={styles.more}>
               {home.trust.changelog}
               <ArrowRight size={14} weight="bold" aria-hidden />

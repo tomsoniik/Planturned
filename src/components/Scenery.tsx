@@ -80,38 +80,102 @@ export const TIME_LOOK: Record<TimeOfDay, TimeLook> = {
 
 const SHADOW_STEP = 8; // co ile metrów obszar cieni przesuwa się za kamerą (bez migotania krawędzi)
 
-/** Gradient nieba jak skybox Unturned: kolor nieba u góry, równika przy horyzoncie, ziemi na dole. */
-function SkyDome({ sky, equator, ground }: { sky: THREE.Color; equator: THREE.Color; ground: THREE.Color }) {
+/**
+ * Niebo jak skybox Unturned: gradient (niebo u góry, równik przy horyzoncie, ziemia na dole), tarcza słońca
+ * z poświatą w kierunku światła z Lighting.dat, powoli płynące chmury i księżyc naprzeciw słońca w nocy.
+ */
+function SkyDome({
+  sky,
+  equator,
+  ground,
+  sunDir,
+  sunColor,
+  night,
+}: {
+  sky: THREE.Color;
+  equator: THREE.Color;
+  ground: THREE.Color;
+  /** Kierunek do słońca (jednostkowy, układ sceny). */
+  sunDir: THREE.Vector3;
+  sunColor: THREE.Color;
+  night: boolean;
+}) {
   const material = useMemo(
     () =>
       new THREE.ShaderMaterial({
         side: THREE.BackSide,
         depthWrite: false,
         fog: false,
-        uniforms: { uSky: { value: new THREE.Color() }, uEquator: { value: new THREE.Color() }, uGround: { value: new THREE.Color() } },
+        uniforms: {
+          uSky: { value: new THREE.Color() },
+          uEquator: { value: new THREE.Color() },
+          uGround: { value: new THREE.Color() },
+          uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+          uSunColor: { value: new THREE.Color() },
+          uNight: { value: 0 },
+          uTime: { value: 0 },
+        },
         vertexShader: 'varying vec3 vDir; void main() { vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-        fragmentShader: `uniform vec3 uSky; uniform vec3 uEquator; uniform vec3 uGround; varying vec3 vDir;
+        fragmentShader: `uniform vec3 uSky; uniform vec3 uEquator; uniform vec3 uGround; uniform vec3 uSunDir; uniform vec3 uSunColor;
+          uniform float uNight; uniform float uTime; varying vec3 vDir;
+          float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+          float noise(vec2 p) {
+            vec2 i = floor(p), f = fract(p), u = f * f * (3.0 - 2.0 * f);
+            return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+          }
+          float fbm(vec2 p) { float v = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { v += a * noise(p); p *= 2.03; a *= 0.5; } return v; }
           void main() {
-            float y = vDir.y;
+            vec3 d = normalize(vDir);
+            float y = d.y;
             vec3 c = y > 0.0 ? mix(uEquator, uSky, pow(smoothstep(0.0, 1.0, y), 0.6)) : mix(uEquator, uGround, smoothstep(0.0, 0.3, -y));
+            float above = smoothstep(-0.02, 0.03, y);
+            // słońce: tarcza ok. 1,6° i poświata; nocą księżyc po przeciwnej stronie
+            vec3 body = uNight > 0.5 ? -uSunDir : uSunDir;
+            float cosA = dot(d, body);
+            float disc = smoothstep(0.99955, 0.99968, cosA) * above;
+            float glow = (pow(max(cosA, 0.0), 220.0) * 0.6 + pow(max(cosA, 0.0), 12.0) * 0.12) * above * (1.0 - uNight * 0.85);
+            vec3 bodyColor = uNight > 0.5 ? vec3(0.78, 0.82, 0.9) : uSunColor * 1.6 + 0.35;
+            c += uSunColor * glow;
+            // chmury: szum na płaszczyźnie nieba, gęstsze nad horyzontem znikają we mgle
+            float cover = 0.0;
+            if (y > 0.0) {
+              vec2 uv = d.xz / (y + 0.15) * 1.3 + vec2(uTime * 0.006, uTime * 0.0025);
+              float n = fbm(uv);
+              cover = smoothstep(0.52, 0.78, n) * smoothstep(0.0, 0.18, y);
+              float lit = 0.75 + 0.25 * max(dot(normalize(vec3(d.x, 0.0, d.z) + 0.0001), normalize(vec3(uSunDir.x, 0.0, uSunDir.z) + 0.0001)), 0.0);
+              vec3 cloud = uNight > 0.5 ? mix(uEquator, uSky, 0.5) * 1.35 * lit : mix(uEquator, vec3(1.0), 0.55) * lit + uSunColor * 0.08;
+              c = mix(c, cloud, cover * 0.85);
+            }
+            c = mix(c, bodyColor, disc * (1.0 - cover * 0.75));
             gl_FragColor = vec4(c, 1.0);
             #include <colorspace_fragment>
           }`,
       }),
     [],
   );
-  useLayoutEffect(() => {
-    material.uniforms.uSky.value.copy(sky);
-    material.uniforms.uEquator.value.copy(equator);
-    material.uniforms.uGround.value.copy(ground);
-  }, [material, sky, equator, ground]);
-  useEffect(() => () => material.dispose(), [material]);
   const ref = useRef<THREE.Mesh>(null);
-  // kopuła idzie za kamerą, więc horyzont jest zawsze w nieskończoności
-  useFrame(({ camera }) => ref.current?.position.copy(camera.position));
+  // uniformy przez siatkę: materiał z useMemo jest dla Reacta niezmienny
+  const uniforms = () => (ref.current?.material as THREE.ShaderMaterial | undefined)?.uniforms;
+  useLayoutEffect(() => {
+    const u = (ref.current?.material as THREE.ShaderMaterial | undefined)?.uniforms;
+    if (!u) return;
+    u.uSky.value.copy(sky);
+    u.uEquator.value.copy(equator);
+    u.uGround.value.copy(ground);
+    u.uSunDir.value.copy(sunDir).normalize();
+    u.uSunColor.value.copy(sunColor);
+    u.uNight.value = night ? 1 : 0;
+  }, [material, sky, equator, ground, sunDir, sunColor, night]);
+  useEffect(() => () => material.dispose(), [material]);
+  // kopuła idzie za kamerą, więc horyzont jest zawsze w nieskończoności; chmury płyną z czasem
+  useFrame(({ camera, clock }) => {
+    ref.current?.position.copy(camera.position);
+    const u = uniforms();
+    if (u) u.uTime.value = clock.elapsedTime;
+  });
   return (
     <mesh ref={ref} material={material} renderOrder={-1} frustumCulled={false}>
-      <sphereGeometry args={[4000, 32, 16]} />
+      <sphereGeometry args={[4000, 48, 24]} />
     </mesh>
   );
 }
@@ -181,11 +245,19 @@ export function SkyAndLight({
     );
     // poniżej ~0.0012 obiekty mapy (wczytywane do 480 m) wyskakiwałyby z pustki na horyzoncie
     const density = Math.max(lighting.fogDensity, extend > 0 ? 0.0005 : 0.0012);
+    const sunToward = lighting.sunDir.clone().negate();
     return (
       <>
         <color attach="background" args={[lighting.skyEquator]} />
         <fogExp2 attach="fog" args={[lighting.fogColor, density]} />
-        <SkyDome sky={lighting.skySky} equator={lighting.skyEquator} ground={lighting.skyGround} />
+        <SkyDome
+          sky={lighting.skySky}
+          equator={lighting.skyEquator}
+          ground={lighting.skyGround}
+          sunDir={sunToward}
+          sunColor={lighting.sunColor}
+          night={time === 'night'}
+        />
         {time === 'night' && <Stars radius={400} depth={80} count={5000} factor={5} saturation={0} fade speed={0.3} />}
         <hemisphereLight args={[lighting.ambientSky, lighting.ambientGround, Math.PI]} />
         <ambientLight color={equator} intensity={Math.PI} />

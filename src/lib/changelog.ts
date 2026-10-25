@@ -16,6 +16,229 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.23.0',
+    date: '2026-10-24',
+    title: { pl: 'Drabiny, niebo i nowe menu', en: 'Ladders, sky and a new menu' },
+    changes: [
+      {
+        pl: 'Drabina przyczepia się do otworu w dachu, kwadratowego i trójkątnego: staje przy krawędzi otworu i sięga od podłogi pod klapę. R wybiera krawędź. Bez otworu w pobliżu stawia się jak dotąd.',
+        en: 'A ladder attaches to a roof hole, square or triangular: it stands at the edge of the opening and reaches from the floor up to the hatch. R picks the edge. Away from a hole it places like before.',
+      },
+      {
+        pl: 'Po drabinie można się wspinać jak w grze: podejdź przodem i trzymaj W (4,5 m/s), S schodzi, spacja zeskakuje. Na górze otworu postać sama podciąga się na dach.',
+        en: 'You can climb ladders like in the game: walk up facing one and hold W (4.5 m/s), S climbs down, Space lets go. At the top of a hole you pull yourself up onto the roof.',
+      },
+      {
+        pl: 'Bramy otwierają się jak brama garażowa (unoszą się do góry), a okiennice i drzwi podwójne rozchylają dwa skrzydła na boki. Zwykłe drzwi dalej obracają się na zawiasie.',
+        en: 'Gates open like a garage door (they lift up), while shutters and double doors swing two leaves apart. Regular doors still turn on their hinge.',
+      },
+      {
+        pl: 'Klapę można postawić także w trójkątnym dachu z otworem.',
+        en: 'Hatches now also fit the triangular roof hole.',
+      },
+      {
+        pl: 'Na mapach z gry jest prawdziwe niebo: słońce z poświatą tam, skąd pada światło, płynące chmury, a nocą księżyc.',
+        en: 'Game maps now have a real sky: a sun with a glow where the light comes from, drifting clouds and a moon at night.',
+      },
+      {
+        pl: 'Rekwizyty ograniczone do tego, co liczy się przy bazie: drzwi, bramy, okiennice, szyby, drabiny, skrzynie, szafki, szafy, łóżka, flaga claimu i wieżyczki. Reszta zniknęła z planera i z zapisanych projektów.',
+        en: 'Props are trimmed to what matters for a base: doors, gates, shutters, glass, ladders, crates, lockers, wardrobes, beds, the claim flag and sentries. Everything else is gone from the planner and from saved projects.',
+      },
+      {
+        pl: 'Interfejs w Sandboxie wygląda jak w Unturned: zdrowie i tlen jako paski z ikonami w lewym dolnym rogu, biały celownik z kropką, podpowiedź otwierania drzwi tuż pod celownikiem z nazwą przedmiotu, czat w lewym górnym rogu. Zniknęły przezroczyste płaszczyzny limitu wysokości i tlenu na niebie (limity dalej działają przy stawianiu).',
+        en: 'The Sandbox HUD now looks like Unturned: health and oxygen as bars with icons in the bottom-left corner, a white crosshair with a dot, the open-door prompt right under the crosshair with the item name, chat in the top-left corner. The see-through height and oxygen limit planes in the sky are gone (the limits still apply when placing).',
+      },
+      {
+        pl: 'Drzewa nie tracą liści z daleka: na kartach graficznych z dystansu zostawały same pnie, bo przezroczystość liści znikała w mniejszych teksturach.',
+        en: 'Trees keep their leaves at a distance: on graphics cards only trunks were left far away, because leaf transparency faded out in the smaller textures.',
+      },
+      {
+        pl: 'Nowe menu pod Esc: zaczyna się od zakładki Jak grać ze wszystkimi ważnymi klawiszami i wskazówkami, każda zakładka mówi jednym zdaniem, do czego służy. Zakładka Budowle zniknęła z menu (lista baz dalej jest w Plannerze).',
+        en: 'New Esc menu: it opens on a How to play tab with every key that matters and a few tips, and each tab says in one line what it is for. The Builds tab is gone from the menu (the base list is still in the Planner).',
+      },
+    ],
+  },
+  {
+    version: '0.22.0',
+    date: '2026-10-23',
+    title: { pl: 'Drzwi bez szpary i prawdziwe szyby', en: 'Doors without gaps and proper glass' },
+    changes: [
+      {
+        pl: 'Szyby stawia się tylko w ścianie z oknem, tak jak w grze (jedna na okno). Są przezroczyste i widać je z obu stron, a lustro weneckie z jednej strony jest ciemnym lustrem, z drugiej przepuszcza widok (R zmienia stronę). Szyby blokują przejście z obu stron.',
+        en: 'Glass only goes into a window wall, like in the game (one per window). It is see-through and visible from both sides, and one-way glass is a dark mirror on one side and clear on the other (R flips it). Glass blocks you from both sides.',
+      },
+      {
+        pl: 'Szyby mają poprawne przepisy w oknie Materiały.',
+        en: 'Glass panes now have the correct recipes in the Materials window.',
+      },
+      {
+        pl: 'Drzwi, bramy, drzwi podwójne i okiennice stoją w otworze dokładnie jak w grze: w tym samym punkcie ściany, w którym gra je osadza, więc nad drzwiami nie ma już prześwitu. Drzwi postawione wcześniej poprawiają się same po otwarciu projektu.',
+        en: 'Doors, gates, double doors and shutters sit in the opening exactly like in the game, at the same point of the wall where the game mounts them, so there is no more gap above the door. Doors placed earlier fix themselves when you open the project.',
+      },
+    ],
+  },
+  {
+    version: '0.21.0',
+    date: '2026-10-23',
+    title: { pl: 'Dźwięki jak w grze i jeden układ ekwipunku', en: 'Game-accurate sounds and one inventory layout' },
+    changes: [
+      {
+        pl: 'Każde drzwi, brama, okiennica i klapa gra dźwięk z własnego modelu w grze: drzwi więzienne i do skarbca brzmią ciężko i metalicznie, reszta ma klamkę, tak jak w Unturned. Otwierają się tyle, co w grze (skarbiec wolniej).',
+        en: 'Every door, gate, shutter and hatch plays the sound from its own game model: jail and vault doors sound heavy and metallic, the rest use the door handle, just like in Unturned. They open as fast as in the game (the vault door slower).',
+      },
+      {
+        pl: 'Dźwięk dochodzi z miejsca drzwi i cichnie z odległością (do 8 m, jak w grze), szybkie wciskanie F nie nakłada go na siebie, a w tle karty jest wyciszony. Głośność i wyciszenie są w menu Esc > Ustawienia.',
+        en: 'Sound comes from the door and fades with distance (up to 8 m, as in the game), mashing F does not stack it, and it goes quiet while the tab is in the background. Volume and mute are in Esc > Settings.',
+      },
+      {
+        pl: 'Ekwipunek w Sandboxie ma ten sam układ co okno klocków w Plannerze: Podłogi, Ściany, Dachy, Filary, Schody, Klapy, Łóżko, w każdej wiersz to część, a kolumny to materiały od klonu do cegły. Filtr kategorii łączy się z materiałem, a wyszukiwarka zna nazwy polskie i angielskie oraz materiały.',
+        en: 'The Sandbox inventory now matches the Planner pieces window: Floors, Walls, Roofs, Pillars, Stairs, Hatches, Bed, each with one row per part and one column per material from maple to brick. The category filter combines with the material, and search knows Polish and English names and materials.',
+      },
+      {
+        pl: 'Rekwizyty zaczynają się od drzwi, bram, futryn, okiennic, skrzyń i łóżek, a w grupie idą materiałem, potem alfabetycznie. Ikony mają stały rozmiar i ładują się w miarę przewijania.',
+        en: 'Props start with doors, gates, frames, shutters, crates and beds, sorted by material and then alphabetically. Icons keep a fixed size and load as you scroll.',
+      },
+    ],
+  },
+  {
+    version: '0.20.0',
+    date: '2026-10-23',
+    title: { pl: 'Materiały, raid i zdjęcia bazy', en: 'Materials, raiding and base screenshots' },
+    changes: [
+      {
+        pl: 'Nowa zakładka Materiały (okno klocków w Plannerze i menu Esc w Sandboxie): ile desek, kłód, blach, cegieł i reszty trzeba zebrać na cały projekt albo jedną bazę, według przepisów z gry. Przycisk kopiuje listę jako tekst dla ekipy.',
+        en: 'New Materials tab (pieces window in the Planner and the Esc menu in Sandbox): how many planks, logs, sheets, bricks and the rest you need for the whole project or one base, from the game recipes. A button copies the list as text for your team.',
+      },
+      {
+        pl: 'Kalkulator raidu: element pod celownikiem w Sandboxie (i zaznaczony w Plannerze) pokazuje HP i ile ładunków precyzyjnych, burzących, rakiet i granatów go niszczy, według obrażeń z plików gry.',
+        en: 'Raid calculator: the piece under your crosshair in Sandbox (or selected in the Planner) shows its HP and how many precision charges, demolition charges, rockets and grenades destroy it, using the damage values from the game files.',
+      },
+      {
+        pl: 'Menu Esc ma sekcję Ustawienia: czułość myszy, pole widzenia, odwrócenie osi Y, głośność i wyciszenie.',
+        en: 'The Esc menu has a Settings section: mouse sensitivity, field of view, invert Y, volume and mute.',
+      },
+      {
+        pl: 'F2 albo /screenshot zapisuje zdjęcie sceny bez HUD-u (PNG z nazwą projektu i datą).',
+        en: 'F2 or /screenshot saves a picture of the scene without the HUD (PNG named after the project and date).',
+      },
+      {
+        pl: 'Widok z orbity: /orbit albo przycisk przy bazie na liście Budowle. Kamera krąży wokół bazy (przeciąganie myszą, kółko przybliża), klawisz latania wraca do gracza. Na telefonie i tablecie Sandbox od razu pokazuje bazę z orbity, sterowaną palcami.',
+        en: 'Orbit view: /orbit or the button next to a base in the Builds list. The camera circles the base (drag with the mouse, the wheel zooms), the fly key takes you back. On phones and tablets Sandbox opens in orbit view with touch controls.',
+      },
+      {
+        pl: 'Usunięcie ściany z otworem usuwa też drzwi, bramę albo okiennicę, które w niej stały.',
+        en: 'Removing a wall with an opening also removes the door, gate or shutter that was in it.',
+      },
+    ],
+  },
+  {
+    version: '0.19.0',
+    date: '2026-10-23',
+    title: { pl: 'Pewniejsze chodzenie w Sandboxie', en: 'Sturdier walking in Sandbox' },
+    changes: [
+      {
+        pl: 'Postać ma pełną szerokość: nie przechodzi już przez rogi ścian, cienkie filary i słupki, a przy ścianie ślizga się wzdłuż niej. Zamykane drzwi wypychają postać z przejścia.',
+        en: 'Your character now has its full width: no more slipping through wall corners, thin pillars or posts, and you slide along walls. A closing door pushes you out of the doorway.',
+      },
+      {
+        pl: 'Skok kończy się na suficie zamiast przelatywać przez dach, a z kucania czy czołgania wstaniesz tylko tam, gdzie jest miejsce nad głową.',
+        en: 'Jumping stops at the ceiling instead of passing through the roof, and you can only stand up from crouching or prone where there is room above your head.',
+      },
+      {
+        pl: 'Po śmierci odradzasz się przy łóżku (najbliższym miejsca śmierci), a bez łóżka jak dotąd na starcie.',
+        en: 'After dying you respawn at your bed (the one closest to where you died), or at the start point if there is no bed.',
+      },
+      {
+        pl: 'Duże bazy chodzą płynniej: kolizje liczą tylko to, co jest blisko postaci. Na ekranach retina i 4K scena rysuje się w niższej gęstości, gdy brakuje płynności, a daleki teren mniej migocze.',
+        en: 'Large bases run smoother: collisions only check what is near you. On retina and 4K screens the scene drops its pixel density when frames slow down, and distant terrain flickers less.',
+      },
+      {
+        pl: 'Gdy karta graficzna przerwie rysowanie (np. po uśpieniu komputera), zamiast czarnego ekranu pojawia się przycisk Wczytaj ponownie.',
+        en: 'If the graphics card stops drawing (for example after sleep), you get a Reload button instead of a black screen.',
+      },
+    ],
+  },
+  {
+    version: '0.18.0',
+    date: '2026-10-23',
+    title: { pl: 'Drzwi z animacją i dźwiękiem', en: 'Doors with animation and sound' },
+    changes: [
+      {
+        pl: 'Drzwi, bramy, okiennice i klapy obracają się płynnie na zawiasie zamiast przeskakiwać, a kolizja podąża za skrzydłem.',
+        en: 'Doors, gates, shutters and hatches swing smoothly on their hinge instead of snapping, and collision follows the moving panel.',
+      },
+      {
+        pl: 'Otwieranie i zamykanie gra oryginalny dźwięk klamki z Unturned.',
+        en: 'Opening and closing plays the original door handle sound from Unturned.',
+      },
+      {
+        pl: 'Rekwizyty w ekwipunku są w 21 grupach (drzwi, bramy, futryny, płyty, skrzynie, meble, uprawy, pułapki...), w każdej materiały po kolei: klon, brzoza, sosna, metal. W wersji polskiej mają polskie nazwy, a wyszukiwarka zna też angielskie.',
+        en: 'Props in the inventory are split into 21 groups (doors, gates, frames, plates, crates, furniture, farming, traps...), each listing materials in order: maple, birch, pine, metal. Duplicate game names such as triangle plates now have their own names.',
+      },
+    ],
+  },
+  {
+    version: '0.17.0',
+    date: '2026-10-22',
+    title: { pl: 'Drzwi i klapy, które się otwierają', en: 'Doors and hatches that open' },
+    changes: [
+      {
+        pl: 'Drzwi, bramy, okiennice i klapy otwierasz i zamykasz klawiszem F, patrząc na nie z bliska (do 4 m). Zamknięte blokują przejście, otwarte nie. Stan zapisuje się w projekcie.',
+        en: 'Press F while looking at a door, gate, shutter or hatch up close (up to 4 m) to open or close it. Closed ones block the way, open ones let you through. The state is saved in the project.',
+      },
+      {
+        pl: 'Drzwi stawia się tylko w otworze: drzwi w ścianie z drzwiami, brama w ścianie garażowej, okiennica w oknie. Celownik przyciąga je do najbliższego wolnego otworu, R zmienia stronę otwierania.',
+        en: 'Doors go only into an opening: a door into a doorway, a gate into a garage wall, a shutter into a window. The crosshair snaps them to the nearest free opening, R flips the side they open to.',
+      },
+      {
+        pl: 'Latanie w Sandboxie jest teraz pod V, bo F służy do otwierania.',
+        en: 'Flying in Sandbox is now on V, since F opens things.',
+      },
+      {
+        pl: 'Ekwipunek mieści się w oknie na każdym ekranie, a lista przewija się w środku, więc widać wszystkie rekwizyty.',
+        en: 'The inventory fits the window on any screen and the list scrolls inside it, so every prop is reachable.',
+      },
+    ],
+  },
+  {
+    version: '0.16.0',
+    date: '2026-10-22',
+    title: { pl: 'Rekwizyty z gry', en: 'Props from the game' },
+    changes: [
+      {
+        pl: 'W Sandboxie ekwipunek (E) ma zakładkę Rekwizyty: 290 przedmiotów, które w Unturned stawia się jak barykady, każdy do zdobycia w grze (przepis, łupy albo handlarz). Skrzynie, drzwi i bramy, meble, światła, uprawy, pułapki, łóżka i pojazdy, z oryginalnymi modelami i HP.',
+        en: 'In Sandbox the inventory (E) has a Props tab: 290 items placed like barricades in Unturned, each obtainable in the game (recipe, loot or trader). Crates, doors and gates, furniture, lights, farms, traps, beds and vehicles, with original models and HP.',
+      },
+      {
+        pl: 'Rekwizyt stawiasz na dowolnej powierzchni pod celownikiem, obrót jak gracz, R obraca o 90°. W planie 2D widać jego obrys w prawdziwym rozmiarze.',
+        en: 'A prop goes on any surface under the crosshair, facing like the player, R rotates by 90°. The 2D plan shows its outline at real size.',
+      },
+      {
+        pl: 'Wszystkie łóżka i flaga claimu pokazują zasięg claimu. Wybór elementu z ekwipunku od razu trafia do ręki.',
+        en: 'Every bed and the claim flag show the claim radius. Picking a piece in the inventory puts it in your hand right away.',
+      },
+    ],
+  },
+  {
+    version: '0.15.0',
+    date: '2026-10-22',
+    title: { pl: 'Funkcje w jednym oknie', en: 'Features in one window' },
+    changes: [
+      {
+        pl: 'Na stronie głównej funkcje są w jednym oknie zamiast dwóch długich sekcji: wybierasz z listy albo przesuwasz palcem, obraz i opis zmieniają się w miejscu. Okno samo przełącza się co 7 sekund, dopóki go nie ruszysz.',
+        en: 'The home page shows features in one window instead of two long sections: pick from the list or swipe, the image and text change in place. The window moves on by itself every 7 seconds until you touch it.',
+      },
+      {
+        pl: 'Zrzuty z aplikacji w wersji angielskiej mają angielski interfejs.',
+        en: 'App screenshots on the English page show the English interface.',
+      },
+      {
+        pl: 'Podtytuł na stronie głównej jest czytelny także na jasnych klatkach filmu. Lista projektów i changelog mają nieruchomy kadr zamiast filmu, więc ładują się szybciej.',
+        en: 'The home page subtitle stays readable on bright frames of the video. The project list and changelog use a still frame instead of the video, so they load faster.',
+      },
+    ],
+  },
+  {
     version: '0.14.0',
     date: '2026-10-22',
     title: { pl: 'Nowa strona główna i panel', en: 'New home page and admin panel' },

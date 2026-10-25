@@ -5,61 +5,29 @@
   Stan (pasek, wiadomości, ustawienia sceny) trzyma edytor; tu jest tylko wygląd i obsługa myszy/klawiszy w nakładkach.
 */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Hammer, MagnifyingGlass, Play, X } from '@phosphor-icons/react';
-import { BED, HOTBAR_SIZE, MATERIALS, REMOVER, findDef, itemsForMaterial, type BuildItem, type Hotbar, type MaterialId, type PartId } from '@/lib/builder';
-import { itemLabel, type PartGroupId } from '@/lib/i18n';
+import { Hammer, Lightbulb, MagnifyingGlass, X } from '@phosphor-icons/react';
+import { BED, HOTBAR_SIZE, MATERIALS, REMOVER, findDef, type BuildItem, type Hotbar, type MaterialId } from '@/lib/builder';
+import { loadProps, usePropsStore } from '@/lib/props';
+import { BLOCK_CATEGORIES, PROP_GROUP_ORDER, blockSections, matchesProp, type CategoryId } from '@/lib/catalog';
+import { itemFullLabel, itemLabel } from '@/lib/i18n';
 import { SLOT_ACTIONS, keyLabel, useKeybinds } from '@/lib/keybinds';
 import { suggest } from '@/lib/commands';
 import type { MapMeta, Site } from '@/lib/terrain';
 import { useT } from './I18nProvider';
 import MapView from './MapView';
+import ItemIcon from './ItemIcon';
 import styles from './Hud3D.module.css';
-
-const PART_GROUPS: { id: PartGroupId; parts: PartId[] }[] = [
-  { id: 'slabs', parts: ['floor', 'tri_floor', 'roof', 'tri_roof', 'hole', 'tri_hole', 'hatch'] },
-  { id: 'walls', parts: ['wall', 'doorway', 'window', 'garage', 'rampart', 'ramp_wall'] },
-  { id: 'pillars', parts: ['pillar', 'post'] },
-  { id: 'stairs', parts: ['stairs', 'ramp'] },
-];
 
 function useKeyName() {
   const t = useT();
   return (code: string) => keyLabel(code, { space: t.keys.space, shift: t.keys.shift });
 }
 
-function ItemIcon({ def }: { def: BuildItem }) {
-  if (def.shape === 'remover') return <Hammer size={26} weight="bold" className={styles.toolIcon} data-remover />;
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={def.icon} alt="" draggable={false} />;
-}
-
-// --- Pasek ---
-
-/** Pasek u dołu ekranu. Puste sloty są niewidoczne (zostaje tylko miejsce), wybrany pusty ma sam obrys. */
-export function Hotbar({ hotbar, selected }: { hotbar: Hotbar; selected: number | null }) {
+/** Ikona z gry (wspólny komponent); wyburzanie to narzędzie planera, więc ma symbol młotka. */
+function DefIcon({ def, size }: { def: BuildItem; size: number }) {
   const t = useT();
-  const binds = useKeybinds((s) => s.binds);
-  const keyName = useKeyName();
-  if (hotbar.every((id) => !id)) {
-    return <div className={styles.hotbarEmpty}>{t.hud.emptyHotbar(keyName(binds.inventory))}</div>;
-  }
-  return (
-    <div className={styles.hotbar} aria-hidden>
-      {hotbar.map((id, i) => {
-        const def = id ? findDef(id) : undefined;
-        return (
-          <div key={i} className={styles.slot} data-empty={!def || undefined} data-on={selected === i || undefined}>
-            {def && (
-              <>
-                <span className={styles.slotKey}>{keyName(binds[SLOT_ACTIONS[i]])}</span>
-                <ItemIcon def={def} />
-              </>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
+  if (def.shape === 'remover') return <Hammer size={26} weight="bold" className={styles.toolIcon} data-remover />;
+  return <ItemIcon src={def.icon} name={itemLabel(def, t)} size={size} eager />;
 }
 
 // --- Ekwipunek ---
@@ -84,7 +52,8 @@ export function Inventory({
   /** Wkłada element do slotu (null czyści slot). */
   onAssign: (slot: number, itemId: string | null) => void;
   onSwap: (a: number, b: number) => void;
-  onSelectSlot: (slot: number) => void;
+  /** itemId: przedmiot właśnie włożony do slotu (rodzic ma jeszcze stary pasek). */
+  onSelectSlot: (slot: number, itemId?: string | null) => void;
   onClose: () => void;
 }) {
   const t = useT();
@@ -93,15 +62,30 @@ export function Inventory({
   const [query, setQuery] = useState('');
   const [hovered, setHovered] = useState<string | null>(null);
   const [dropSlot, setDropSlot] = useState<number | null>(null);
+  // Budowle (struktury z materiałami) albo rekwizyty (barykady z gry); start na rekwizytach, gdy taki jest w wybranym slocie
+  const [tab, setTab] = useState<'structures' | 'props'>(() =>
+    selected !== null && hotbar[selected] && findDef(hotbar[selected]!)?.shape === 'prop' ? 'props' : 'structures',
+  );
+  const props = usePropsStore((s) => s.items);
+  const propsReady = usePropsStore((s) => s.ready);
+  useEffect(() => {
+    loadProps();
+  }, []);
+  // Filtry jak w oknie klocków 2D: kategoria i materiał się łączą (null = wszystkie)
+  const [category, setCategory] = useState<CategoryId | null>(null);
+  const [matFilter, setMatFilter] = useState<MaterialId | null>(null);
+  void material;
 
-  const groups = useMemo(() => {
-    const items = itemsForMaterial(material);
-    const q = query.trim().toLowerCase();
-    if (q) return [{ label: t.editor.results, items: items.filter((i) => itemLabel(i, t).toLowerCase().includes(q)) }];
-    return PART_GROUPS.map((g) => ({ label: t.editor.groups[g.id], items: items.filter((i) => i.part && g.parts.includes(i.part)) })).filter(
+  // Klocki: ten sam układ co w 2D (wiersz = część, kolumna = materiał), wspólny z lib/catalog
+  const blocks = useMemo(() => blockSections(category, matFilter, query), [category, matFilter, query]);
+
+  // Rekwizyty: stała kolejność grup, w grupie kolejność katalogu (propCatalog); wyniki szukania w tej samej kolejności
+  const propGroups = useMemo(() => {
+    const groups = PROP_GROUP_ORDER.map((c) => ({ id: c, items: props.filter((p) => p.category === c && matchesProp(p, query)) })).filter(
       (g) => g.items.length > 0,
     );
-  }, [material, query, t]);
+    return query.trim() ? [{ id: 'results' as const, items: groups.flatMap((g) => g.items) }] : groups;
+  }, [props, query]);
 
   // Najechany element + klawisz slotu: element trafia do tego slotu (jak w Minecrafcie)
   useEffect(() => {
@@ -141,12 +125,13 @@ export function Inventory({
       onMouseLeave={() => setHovered((h) => (h === def.id ? null : h))}
       onClick={() => {
         onAssign(target, def.id);
-        onSelectSlot(target);
+        onSelectSlot(target, def.id);
       }}
-      title={def.health ? `${itemLabel(def, t)}, ${def.health} HP` : itemLabel(def, t)}
+      title={def.health ? `${itemFullLabel(def, t)}, ${def.health} HP` : itemFullLabel(def, t)}
     >
-      <ItemIcon def={def} />
-      <span>{itemLabel(def, t)}</span>
+      <DefIcon def={def} size={40} />
+      <span>{def.part ? t.parts[def.part] : itemLabel(def, t)}</span>
+      {def.material && <span className={styles.tileMeta}>{t.materials[def.material]}</span>}
     </button>
   );
 
@@ -168,20 +153,35 @@ export function Inventory({
       <section className={styles.inventory} role="dialog" aria-label={t.hud.inventory}>
         <header className={styles.invHead}>
           <h2>{t.hud.inventory}</h2>
-          <div className={styles.swatches} role="radiogroup" aria-label={t.editor.material}>
-            {MATERIALS.map((m) => (
-              <button
-                key={m.id}
-                role="radio"
-                aria-checked={material === m.id}
-                aria-label={t.materials[m.id]}
-                title={t.materials[m.id]}
-                data-on={material === m.id || undefined}
-                style={{ '--swatch': m.color } as React.CSSProperties}
-                onClick={() => onMaterial(m.id)}
-              />
+          <div className={styles.invTabs} role="tablist" aria-label={t.hud.inventory}>
+            {(['structures', 'props'] as const).map((id) => (
+              <button key={id} role="tab" aria-selected={tab === id} data-on={tab === id || undefined} onClick={() => setTab(id)}>
+                {id === 'structures' ? t.hud.tabStructures : t.hud.tabProps}
+                {id === 'props' && props.length > 0 && <span className={styles.invCount}>{props.length}</span>}
+              </button>
             ))}
           </div>
+          {tab === 'structures' && (
+            <div className={styles.swatches} role="group" aria-label={t.editor.material}>
+              {MATERIALS.map((m) => (
+                <button
+                  key={m.id}
+                  aria-pressed={matFilter === m.id}
+                  aria-label={t.materials[m.id]}
+                  title={t.materials[m.id]}
+                  data-on={matFilter === m.id || undefined}
+                  style={{ '--swatch': m.color } as React.CSSProperties}
+                  onClick={() => {
+                    // drugi klik zdejmuje filtr (wszystkie materiały), jak w 2D
+                    const next = matFilter === m.id ? null : m.id;
+                    setMatFilter(next);
+                    if (next) onMaterial(next);
+                    if (next && category === 'bed') setCategory(null);
+                  }}
+                />
+              ))}
+            </div>
+          )}
           <label className={styles.search}>
             <MagnifyingGlass size={14} weight="bold" />
             <input
@@ -209,24 +209,67 @@ export function Inventory({
         </header>
 
         <div className={styles.invBody}>
-          <div className={styles.group}>
-            <h3>{t.hud.tools}</h3>
-            <div className={styles.tiles}>{[REMOVER, BED].map(tile)}</div>
-          </div>
-          {groups.map((g) => (
-            <div key={g.label} className={styles.group}>
-              <h3>{g.label}</h3>
-              <div className={styles.tiles}>{g.items.map(tile)}</div>
-            </div>
-          ))}
-          {groups.length === 0 && <p className={styles.muted}>{t.editor.noMatch(query)}</p>}
+          {tab === 'structures' && (
+            <>
+              <div className={styles.catChips} role="group" aria-label={t.toolbox.categories}>
+                <button data-on={!category || undefined} aria-pressed={!category} onClick={() => setCategory(null)}>
+                  {t.toolbox.category.all}
+                </button>
+                {BLOCK_CATEGORIES.map((c) => (
+                  <button
+                    key={c.id}
+                    data-on={category === c.id || undefined}
+                    aria-pressed={category === c.id}
+                    onClick={() => {
+                      setCategory(category === c.id ? null : c.id);
+                      if (c.id === 'bed') setMatFilter(null);
+                    }}
+                  >
+                    {t.toolbox.category[c.id]}
+                  </button>
+                ))}
+              </div>
+              {!query && !category && !matFilter && (
+                <div className={styles.group}>
+                  <h3>{t.hud.tools}</h3>
+                  <div className={styles.tiles}>{tile(REMOVER)}</div>
+                </div>
+              )}
+              {blocks.sections.map((sec) => (
+                <div key={sec.id} className={styles.group}>
+                  <h3>{t.toolbox.category[sec.id]}</h3>
+                  {sec.bed ? (
+                    <div className={styles.tiles}>{tile(BED)}</div>
+                  ) : matFilter ? (
+                    <div className={styles.tiles}>{sec.rows.flatMap((r) => r.cells.filter((d): d is BuildItem => !!d).map(tile))}</div>
+                  ) : (
+                    <div className={styles.matrix} style={{ gridTemplateColumns: `repeat(${blocks.columns}, minmax(0, 1fr))` }}>
+                      {sec.rows.flatMap((r) => r.cells.map((d, i) => (d ? tile(d) : <span key={`${r.part}-${i}`} className={styles.gap} aria-hidden />)))}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {blocks.count === 0 && query && <p className={styles.muted}>{t.editor.noMatch(query)}</p>}
+            </>
+          )}
+          {tab === 'props' && props.length === 0 && (
+            <p className={styles.muted}>{propsReady ? t.hud.propsMissing : t.hud.propsLoading}</p>
+          )}
+          {tab === 'props' &&
+            propGroups.map((g) => (
+              <div key={g.id} className={styles.group}>
+                <h3>{g.id === 'results' ? t.editor.results : t.hud.propCategories[g.id]}</h3>
+                <div className={styles.tiles}>{g.items.map(tile)}</div>
+              </div>
+            ))}
+          {tab === 'props' && props.length > 0 && propGroups.length === 0 && query && <p className={styles.muted}>{t.editor.noMatch(query)}</p>}
         </div>
 
         <footer className={styles.invFoot}>
           <div className={styles.invInfo}>
             {hoveredDef ? (
               <>
-                <strong>{itemLabel(hoveredDef, t)}</strong>
+                <strong>{itemFullLabel(hoveredDef, t)}</strong>
                 {hoveredDef.health && <span>{hoveredDef.health} HP</span>}
               </>
             ) : (
@@ -268,7 +311,7 @@ export function Inventory({
                   onMouseLeave={() => setHovered(null)}
                 >
                   <span className={styles.slotKey}>{keyName(binds[SLOT_ACTIONS[i]])}</span>
-                  {def && <ItemIcon def={def} />}
+                  {def && <DefIcon def={def} size={38} />}
                 </button>
               );
             })}
@@ -450,71 +493,84 @@ export function MapScreen({
   );
 }
 
-// --- Menu pauzy ---
+// --- Jak grać (pierwsza zakładka menu) ---
 
-export interface MenuSection {
-  id: string;
-  label: string;
-  icon?: React.ReactNode;
-  content: React.ReactNode;
-}
-
-export interface MenuAction {
-  label: string;
-  icon: React.ReactNode;
-  onClick: () => void;
-}
-
-export function PauseMenu({
-  title,
-  sections,
-  actions,
-  footer,
-  onResume,
-}: {
-  title: string;
-  sections: MenuSection[];
-  actions: MenuAction[];
-  footer: string;
-  onResume: () => void;
-}) {
-  const t = useT();
-  const [section, setSection] = useState(sections[0]?.id);
-  const current = sections.find((s) => s.id === section) ?? sections[0];
+/** Klawisze z bieżących ustawień; LPM i Ctrl+Z są stałe. */
+function Keys({ codes }: { codes: string[] }) {
   return (
-    <div className={styles.backdrop} data-ui data-menu onContextMenu={(e) => e.preventDefault()}>
-      <section className={styles.menu} role="dialog" aria-label={t.hud.menuTitle}>
-        <nav className={styles.menuNav}>
-          <p className={styles.menuTitle}>{title}</p>
-          <button className={styles.resume} onClick={onResume} autoFocus>
-            <Play size={15} weight="fill" />
-            {t.hud.resume}
-          </button>
-          <div className={styles.menuTabs} role="tablist">
-            {sections.map((s) => (
-              <button key={s.id} role="tab" aria-selected={s.id === current?.id} data-on={s.id === current?.id || undefined} onClick={() => setSection(s.id)}>
-                {s.icon}
-                {s.label}
-              </button>
-            ))}
-          </div>
-          <div className={styles.menuActions}>
-            {actions.map((a) => (
-              <button key={a.label} onClick={a.onClick}>
-                {a.icon}
-                {a.label}
-              </button>
-            ))}
-          </div>
-        </nav>
-        <div className={styles.menuBody}>
-          <h2>
-            {current?.icon}
-            {current?.label}
-          </h2>
-          {current?.content}
-        </div>
-        <p className={styles.menuFoot}>{footer}</p>
+    <span className={styles.quickKeys}>
+      {codes.map((c) => (
+        <kbd key={c}>{c}</kbd>
+      ))}
+    </span>
+  );
+}
+
+export function QuickStart() {
+  const t = useT();
+  const q = t.hud.quick;
+  const binds = useKeybinds((s) => s.binds);
+  const keyName = useKeyName();
+  const k = (a: keyof typeof binds) => keyName(binds[a]);
+  const groups: { title: string; rows: [string[], string][] }[] = [
+    {
+      title: q.move,
+      rows: [
+        [[k('forward'), k('left'), k('back'), k('right')], q.walk],
+        [[k('up')], q.jump],
+        [[k('sprint')], q.sprint],
+        [[k('forward')], q.climb],
+        [[k('toggleFly')], q.fly],
+      ],
+    },
+    {
+      title: q.build,
+      rows: [
+        [[k('inventory')], q.inventory],
+        [[`${k('slot1')}-${k('slot9')}`], q.slots],
+        [[q.lmb], q.place],
+        [[k('rotate')], q.rotate],
+        [[k('demolish')], q.demolish],
+        [['Ctrl', 'Z'], q.undo],
+      ],
+    },
+    {
+      title: q.base,
+      rows: [
+        [[k('interact')], q.interact],
+        [[k('map')], q.map],
+        [[k('chat')], q.chat],
+        [[k('grab')], q.grab],
+      ],
+    },
+  ];
+  return (
+    <div className={styles.quick}>
+      <div className={styles.quickGrid}>
+        {groups.map((g) => (
+          <section key={g.title} className={styles.quickGroup}>
+            <h3>{g.title}</h3>
+            <ul>
+              {g.rows.map(([codes, label]) => (
+                <li key={label}>
+                  <span>{label}</span>
+                  <Keys codes={codes} />
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+      <section className={styles.tips}>
+        <h3>
+          <Lightbulb size={15} weight="duotone" />
+          {q.tipsTitle}
+        </h3>
+        <ul>
+          {q.tips.map((tip) => (
+            <li key={tip}>{tip}</li>
+          ))}
+        </ul>
       </section>
     </div>
   );

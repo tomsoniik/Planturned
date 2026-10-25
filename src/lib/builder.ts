@@ -13,7 +13,7 @@
     - filary i słupki stoją w narożnikach płyt
 */
 
-export type Shape = 'square' | 'triangle' | 'wall' | 'pillar' | 'hatch' | 'bed' | 'remover';
+export type Shape = 'square' | 'triangle' | 'wall' | 'pillar' | 'hatch' | 'bed' | 'prop' | 'remover';
 
 export type MaterialId = 'maple' | 'birch' | 'pine' | 'metal' | 'brick';
 
@@ -33,9 +33,28 @@ export interface BuildItem {
   icon: string;
   color: string;
   /** Koszt jednego craftu (z pliku .dat). */
+  /** Składniki jednego craftu: ID przedmiotu z gry -> ilość. */
   costs: Record<string, number>;
+  /** Ile sztuk daje jeden craft (domyślnie 1). */
+  craftYield?: number;
+  /** Rekwizyt bez przepisu (tylko z łupów albo od handlarza): w Materiałach liczony osobno. */
+  noRecipe?: boolean;
+  /** Drzwi, bramy, okiennice: wysokość pivotu prefabu nad spodem modelu (stawiany w slocie otworu). */
+  pivot?: number;
+  /** Armor_Tier z pliku gry (kalkulator raidu); brak = według nazwy, jak w grze. */
+  armor?: 'low' | 'high';
   /** Wytrzymałość w grze (Health z pliku .dat). */
   health?: number;
+  /** Rekwizyt (barykada z gry): kategoria w ekwipunku 3D. */
+  category?: string;
+  /** Nazwa po polsku (rekwizyty, propCatalog); bez niej obie wersje pokazują `name`. */
+  namePl?: string;
+  /** Rekwizyt: wymiary modelu w metrach [szerokość X, wysokość, głębokość Z]. */
+  size?: [number, number, number];
+  /** Wyznacza obszar claimu jak łóżko (łóżka i flaga claimu z gry). */
+  claim?: boolean;
+  /** Rekwizyt: typ Build z pliku .dat gry (Door, Gate, Shutter, Storage...). */
+  build?: string;
 }
 
 export interface PlacedItem {
@@ -46,6 +65,8 @@ export interface PlacedItem {
   rotation: number; // stopnie
   customColor?: string;
   floor?: number;
+  /** Drzwi, brama, okiennica albo klapa otwarta (klawisz interakcji w 3D). */
+  open?: boolean;
 }
 
 export const SIDE = 60;
@@ -135,14 +156,19 @@ const BRICKS: Record<PartId, number> = {
   pillar: 2, post: 1, hatch: 0,
 };
 
+// ID surowców z gry (klucze BuildItem.costs, okno Materiały)
+const LOG: Record<'maple' | 'birch' | 'pine', string> = { maple: '39', birch: '37', pine: '41' };
+const PLANK: Record<'maple' | 'birch' | 'pine', string> = { maple: '61', birch: '62', pine: '63' };
+const METAL_SCRAP = '67', METAL_SHEET = '68', BRICKS_ID = '74';
+
 function recipe(material: MaterialId, part: PartId): Record<string, number> {
   if (material === 'metal') {
-    if (part === 'hatch') return { metal_sheet: 1, metal_scrap: 2 };
-    return { metal_sheet: METAL_SHEETS[part] };
+    if (part === 'hatch') return { [METAL_SHEET]: 1, [METAL_SCRAP]: 2 };
+    return { [METAL_SHEET]: METAL_SHEETS[part] };
   }
-  if (material === 'brick') return { bricks: BRICKS[part] };
-  if (part === 'hatch') return { [`${material}_plank`]: 4, metal_scrap: 1 };
-  return { [`${material}_log`]: WOOD_LOGS[part] };
+  if (material === 'brick') return { [BRICKS_ID]: BRICKS[part] };
+  if (part === 'hatch') return { [PLANK[material]]: 4, [METAL_SCRAP]: 1 };
+  return { [LOG[material]]: WOOD_LOGS[part] };
 }
 
 // Wytrzymałość z plików .dat: [płyty, ściany/filary/słupki].
@@ -173,6 +199,8 @@ export const BED: BuildItem = {
   icon: iconUrl(288),
   color: '#c8473f',
   costs: {},
+  // czarny śpiwór nie ma przepisu w grze (łupy)
+  noRecipe: true,
 };
 
 const STRUCTURES: BuildItem[] = MATERIALS.flatMap((m) =>
@@ -210,7 +238,8 @@ export const normalizeHotbar = (saved: unknown): Hotbar => {
   if (!Array.isArray(saved)) return defaultHotbar();
   return Array.from({ length: HOTBAR_SIZE }, (_, i) => {
     const v = saved[i];
-    return typeof v === 'string' && findDef(v) ? normalizeItemId(v) : null;
+    // rekwizyty wczytują się z eksportu gry później niż pasek: ich id zostają
+    return typeof v === 'string' && (findDef(v) || isPropId(v)) ? normalizeItemId(v) : null;
   });
 };
 
@@ -228,6 +257,175 @@ export const normalizeItemId = (itemId: string) => LEGACY_IDS[itemId] ?? itemId;
 
 const DEF_MAP = new Map(BUILD_ITEMS.map((d) => [d.id, d]));
 export const findDef = (itemId: string) => DEF_MAP.get(normalizeItemId(itemId));
+
+/** Rekwizyty (barykady z gry) mają id prop_<ID w grze>; ich definicje dochodzą po wczytaniu public/game/props.json. */
+export const isPropId = (itemId: string) => itemId.startsWith('prop_');
+export const propItemId = (gameId: number) => `prop_${gameId}`;
+
+/** Dopisuje definicje wczytane w trakcie działania (rekwizyty), żeby findDef je znało. */
+export function registerBuildItems(defs: BuildItem[]) {
+  defs.forEach((d) => DEF_MAP.set(d.id, d));
+}
+
+/** Łóżka i flaga claimu: pokazują obszar, w którym nikt spoza grupy nie zbuduje. */
+export const isClaim = (def?: BuildItem) => def?.shape === 'bed' || !!def?.claim;
+
+/** Jak w grze: drzwi tylko w ścianie z drzwiami, bramy w garażowej, okiennice i szyby w ścianie z oknem. */
+const DOOR_FRAMES: Record<string, PartId> = { Door: 'doorway', Gate: 'garage', Shutter: 'window', Glass: 'window' };
+/** Element osadzany w otworze ściany (drzwi, brama, okiennica, szyba). */
+export const isDoorLike = (def?: BuildItem) => def?.shape === 'prop' && !!def.build && def.build in DOOR_FRAMES;
+/** Da się otworzyć i zamknąć klawiszem interakcji (szyba stoi na stałe). */
+export const isOpenable = (def?: BuildItem) => def?.shape === 'hatch' || (isDoorLike(def) && def!.build !== 'Glass');
+export const isGlass = (def?: BuildItem) => def?.shape === 'prop' && def.build === 'Glass';
+export const isLadder = (def?: BuildItem) => def?.shape === 'prop' && def.build === 'Ladder';
+
+/**
+ * Animacja otwierania jak w grze (klamka na modelu wskazuje zawias):
+ * - door: drzwi obracają się o 90° na lewej krawędzi (klamka po prawej),
+ * - gate: brama do ściany garażowej unosi się na górnej krawędzi jak brama garażowa (klamka na dole, pośrodku),
+ * - double: okiennica i drzwi podwójne to dwa skrzydła na zewnętrznych krawędziach (klamki przy środku),
+ * - hatch: klapa w dachu podnosi się na krawędzi.
+ */
+export type OpenStyle = 'door' | 'gate' | 'double' | 'hatch';
+export function openStyle(def?: BuildItem): OpenStyle | null {
+  if (!isOpenable(def)) return null;
+  if (def!.shape === 'hatch') return 'hatch';
+  if (def!.build === 'Shutter' || /doubledoor/i.test(def!.name)) return 'double';
+  if (def!.build === 'Gate') return 'gate';
+  return 'door';
+}
+
+// --- Otwory w dachu: klapy i drabiny ---
+
+export const isHole = (def?: BuildItem) => def?.part === 'hole' || def?.part === 'tri_hole';
+/** Otwór w modelach z gry: kwadrat 1,6 m; w trójkątnym dachu przesunięty o 0,267 m od środka ku podstawie (lokalne +Z). */
+const HOLE_HALF = 0.8;
+const TRI_HOLE_SHIFT = 0.267;
+/** Drabina z gry: 4,25 m wysokości, 0,19 m grubości. */
+const LADDER_HEIGHT = 4.25;
+const LADDER_HALF_DEPTH = 0.094;
+
+/** Punkt lokalnego układu elementu (m, oś Z jak w modelu 3D) w układzie planu. */
+function localToPlan(item: PlacedItem, lx: number, lz: number): Point {
+  const r = (item.rotation * Math.PI) / 180;
+  return {
+    x: item.x + (lx * Math.cos(r) - lz * Math.sin(r)) * UNITS_PER_METER,
+    y: item.y + (lx * Math.sin(r) + lz * Math.cos(r)) * UNITS_PER_METER,
+  };
+}
+
+/** Środek otworu dachu w planie. */
+export function holeOpening(hole: PlacedItem, def: BuildItem): Point {
+  return localToPlan(hole, 0, def.part === 'tri_hole' ? TRI_HOLE_SHIFT : 0);
+}
+
+/**
+ * Drabina w otworze dachu (kwadratowym albo trójkątnym): stoi przy krawędzi otworu, plecami do niej, od podłogi
+ * poziomu niżej do spodu klapy, więc wchodzi się nią prosto przez otwór. Otwór najbliżej celownika (do 8 m,
+ * ok. 25° od osi, jak sloty ścian). Domyślnie przy krawędzi naprzeciw gracza, R przekłada na kolejną.
+ */
+export function findLadderSlot(def: BuildItem, items: PlacedItem[], ray: AimRay, turn: number) {
+  let best: { hole: PlacedItem; at: Point } | null = null;
+  let bestScore = SLOT_RANGE * SLOT_RANGE;
+  const m = 1 / UNITS_PER_METER;
+  for (const item of items) {
+    const d = findDef(item.itemId);
+    if (!isHole(d)) continue;
+    const at = holeOpening(item, d!);
+    const dx = at.x * m - ray.origin.x;
+    const dy = ((item.floor || 0) + 1) * LEVEL_HEIGHT - ray.origin.y;
+    const dz = at.y * m - ray.origin.z;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 > SLOT_RANGE * SLOT_RANGE) continue;
+    const cos = (dx * ray.dir.x + dy * ray.dir.y + dz * ray.dir.z) / Math.sqrt(d2);
+    if (cos < SLOT_COSINE) continue;
+    const score = (1 - cos) * d2;
+    if (score < bestScore) {
+      best = { hole: item, at };
+      bestScore = score;
+    }
+  }
+  if (!best) return null;
+  const { hole, at } = best;
+  // krawędź naprzeciw gracza: kierunek drabiny (lokalne +Z) najbliżej kierunku patrzenia
+  let edge = 0, dot = -Infinity;
+  for (let k = 0; k < 4; k++) {
+    const r = ((hole.rotation + k * 90) * Math.PI) / 180;
+    const v = -Math.sin(r) * ray.dir.x + Math.cos(r) * ray.dir.z;
+    if (v > dot) {
+      dot = v;
+      edge = k;
+    }
+  }
+  const rotation = normalizeAngle(hole.rotation + ((edge + turn) % 4) * 90);
+  const r = (rotation * Math.PI) / 180;
+  const inset = HOLE_HALF - LADDER_HALF_DEPTH - 0.02;
+  const preview: PlacedItem = {
+    id: 'preview',
+    itemId: def.id,
+    x: Math.round((at.x - Math.sin(r) * inset * UNITS_PER_METER) * 100) / 100,
+    y: Math.round((at.y + Math.cos(r) * inset * UNITS_PER_METER) * 100) / 100,
+    rotation,
+    // góra drabiny 0,1 m pod otworem (zamknięta klapa leży nad nią)
+    floor: roundLevel((hole.floor || 0) + (LEVEL_HEIGHT - 0.1 - LADDER_HEIGHT) / LEVEL_HEIGHT),
+  };
+  const taken = items.some(
+    (o) => isLadder(findDef(o.itemId)) && Math.hypot(o.x - preview.x, o.y - preview.y) < 3 && Math.abs((o.floor || 0) - preview.floor!) < 0.1,
+  );
+  return { preview, valid: !taken };
+}
+
+// Ściany z gry (structures.json): spód 0,125 m nad poziomem, wysokość 4,25 m, środek 2,13 m nad spodem.
+const WALL_BOTTOM = 0.125;
+const WALL_HALF = 2.13;
+// Slot w prefabie ściany (obiekt Door, Gate albo Slot), w którym gra stawia pivot drzwi, bramy albo okiennicy:
+// wysokość nad spodem ściany, taka sama dla wszystkich materiałów. Pivot drzwi jest w połowie ich wysokości,
+// więc drzwi 2,8 m stoją 6 cm nad progiem i chowają górę we framudze (otwór ma 2,84 m), jak w grze.
+const SLOT_HEIGHT: Partial<Record<PartId, number>> = { doorway: 1.463, garage: 1.965, window: 2.14 };
+
+/**
+ * Miejsce dla drzwi, bramy albo okiennicy: otwór pasującej ściany najbliżej celownika (do 8 m, ok. 25° od osi,
+ * jak sloty ścian), więc działa także gdy promień leci przez pusty otwór. Pivot elementu trafia w slot otworu,
+ * jak w grze. turn (R) odwraca element o 180°, czyli na drugą stronę ściany. Zajęty otwór = nie pasuje.
+ */
+export function findDoorSlot(def: BuildItem, items: PlacedItem[], ray: AimRay, turn: number) {
+  const part = def.build ? DOOR_FRAMES[def.build] : undefined;
+  if (!part) return null;
+  const m = 1 / UNITS_PER_METER;
+  let best: PlacedItem | null = null;
+  let bestScore = SLOT_RANGE * SLOT_RANGE;
+  for (const item of items) {
+    if (findDef(item.itemId)?.part !== part) continue;
+    const dx = item.x * m - ray.origin.x;
+    const dy = (item.floor || 0) * LEVEL_HEIGHT + WALL_BOTTOM + WALL_HALF - ray.origin.y;
+    const dz = item.y * m - ray.origin.z;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 > SLOT_RANGE * SLOT_RANGE) continue;
+    const cos = (dx * ray.dir.x + dy * ray.dir.y + dz * ray.dir.z) / Math.sqrt(d2);
+    if (cos < SLOT_COSINE) continue;
+    const score = (1 - cos) * d2;
+    if (score < bestScore) {
+      best = item;
+      bestScore = score;
+    }
+  }
+  if (!best) return null;
+  const height = def.size?.[1] ?? 2.8;
+  const bottom = WALL_BOTTOM + (SLOT_HEIGHT[part] ?? WALL_HALF) - (def.pivot ?? height / 2);
+  const floor = roundLevel((best.floor || 0) + bottom / LEVEL_HEIGHT);
+  const preview: PlacedItem = {
+    id: 'preview',
+    itemId: def.id,
+    x: best.x,
+    y: best.y,
+    rotation: normalizeAngle(best.rotation + (turn % 2) * 180),
+    floor,
+  };
+  const taken = items.some(
+    (o) => isDoorLike(findDef(o.itemId)) && Math.hypot(o.x - best!.x, o.y - best!.y) < 3 && Math.abs((o.floor || 0) - floor) < 0.1,
+  );
+  return { preview, valid: !taken };
+}
 
 /** W grze dachy, otwory, schody i rampy to Construct Roof: stoją na wysokości dachu danego poziomu. */
 export const isRoofLayer = (def?: BuildItem) =>
@@ -387,23 +585,24 @@ export function computePlacement({ def, items, cursor, floor, turn, free = false
   if (def.shape === 'bed') {
     preview = { ...base, x: Math.round(cursor.x), y: Math.round(cursor.y), rotation: (turn * 90) % 360 };
   } else if (def.shape === 'hatch') {
-    // Klapa tylko w otworze dachu z tego samego poziomu.
-    let best: PlacedItem | null = null;
+    // Klapa tylko w otworze dachu (kwadratowego albo trójkątnego) z tego samego poziomu.
+    let best: { x: number; y: number; hole: PlacedItem } | null = null;
     let bestDist = SNAP_DIST;
     anchors.forEach(({ item, def: d }) => {
-      if (d.part !== 'hole' || !same(item.floor || 0, floor)) return;
-      const dist = Math.hypot(item.x - cursor.x, item.y - cursor.y);
+      if (!isHole(d) || !same(item.floor || 0, floor)) return;
+      const o = holeOpening(item, d);
+      const dist = Math.hypot(o.x - cursor.x, o.y - cursor.y);
       if (dist < bestDist) {
         bestDist = dist;
-        best = item;
+        best = { ...o, hole: item };
       }
     });
-    const hole = best as PlacedItem | null;
-    if (!hole) {
+    const spot = best as { x: number; y: number; hole: PlacedItem } | null;
+    if (!spot) {
       return { preview: { ...base, x: cursor.x, y: cursor.y, rotation: 0 }, valid: false, snapPoint: null };
     }
-    at(hole.floor || 0);
-    preview = { ...base, x: hole.x, y: hole.y, rotation: hole.rotation };
+    at(spot.hole.floor || 0);
+    preview = { ...base, x: spot.x, y: spot.y, rotation: spot.hole.rotation };
   } else if (def.shape === 'wall' || def.shape === 'pillar') {
     // Krawędzie / narożniki płyt, na których element stoi (fizyczny poziom == floor).
     let best: { x: number; y: number; angle: number; level: number } | null = null;
@@ -902,6 +1101,10 @@ export function computePaste({ clip, items, cursor, floor, turn, free = false }:
 
 // --- Koszty ---
 
+/**
+ * Surowce na zbudowanie elementów: suma przepisów (craft daje `craftYield` sztuk, więc liczymy pełne crafty).
+ * `loot`: ile elementów nie ma przepisu (trzeba je znaleźć albo kupić).
+ */
 export function computeMaterials(items: PlacedItem[]) {
   const counts: Record<string, number> = {};
   items.forEach((item) => {
@@ -909,13 +1112,60 @@ export function computeMaterials(items: PlacedItem[]) {
     if (def) counts[def.id] = (counts[def.id] || 0) + 1;
   });
   const totals: Record<string, number> = {};
+  let loot = 0;
   Object.entries(counts).forEach(([id, count]) => {
     const def = findDef(id)!;
+    if (def.noRecipe) loot += count;
+    const crafts = Math.ceil(count / (def.craftYield || 1));
     Object.entries(def.costs).forEach(([mat, qty]) => {
-      if (qty > 0) totals[mat] = (totals[mat] || 0) + qty * count;
+      if (qty > 0) totals[mat] = (totals[mat] || 0) + qty * crafts;
     });
   });
-  return totals;
+  return { totals, loot };
+}
+
+/**
+ * Drzwi postawione przed wersją 0.22 stały spodem na dole ściany; teraz pivot jest w slocie otworu jak w grze.
+ * Przesuwa takie drzwi na właściwą wysokość (zwraca tę samą tablicę, gdy nic się nie zmienia).
+ */
+export function resnapDoors(items: PlacedItem[]): PlacedItem[] {
+  let changed = false;
+  const out = items.map((item) => {
+    const def = findDef(item.itemId);
+    if (!isDoorLike(def)) return item;
+    const part = DOOR_FRAMES[def!.build!];
+    const f = item.floor || 0;
+    const wall = items.find(
+      (w) => findDef(w.itemId)?.part === part && Math.hypot(w.x - item.x, w.y - item.y) < 3 && f >= (w.floor || 0) - 0.05 && f <= (w.floor || 0) + 1.05,
+    );
+    if (!wall) return item;
+    const bottom = WALL_BOTTOM + (SLOT_HEIGHT[part] ?? WALL_HALF) - (def!.pivot ?? (def!.size?.[1] ?? 2.8) / 2);
+    const floor = roundLevel((wall.floor || 0) + bottom / LEVEL_HEIGHT);
+    if (Math.abs(floor - f) < 0.0005) return item;
+    changed = true;
+    return { ...item, floor };
+  });
+  return changed ? out : items;
+}
+
+/**
+ * Usuwa elementy razem z drzwiami, bramami i okiennicami osadzonymi w usuwanych ścianach.
+ * Drzwi stawia się tylko w otworze (findDoorSlot), więc bez ściany zostałyby w powietrzu: w planie to błąd.
+ */
+export function removeItems(items: PlacedItem[], ids: Set<string>): PlacedItem[] {
+  const frames = items.filter((i) => ids.has(i.id) && Object.values(DOOR_FRAMES).includes(findDef(i.itemId)?.part as PartId));
+  if (frames.length === 0) return items.filter((i) => !ids.has(i.id));
+  const gone = new Set(ids);
+  for (const item of items) {
+    const def = findDef(item.itemId);
+    if (!isDoorLike(def)) continue;
+    const part = DOOR_FRAMES[def!.build!];
+    const f = item.floor || 0;
+    if (frames.some((w) => findDef(w.itemId)?.part === part && Math.hypot(w.x - item.x, w.y - item.y) < 3 && f >= (w.floor || 0) - 0.05 && f <= (w.floor || 0) + 1.05)) {
+      gone.add(item.id);
+    }
+  }
+  return items.filter((i) => !gone.has(i.id));
 }
 
 export const newItemId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;

@@ -4,7 +4,7 @@
 */
 import { SKY_HEIGHTS } from './scene';
 
-export const COMMAND_IDS = ['help', 'time', 'skybase', 'sky', 'ground', 'spawn', 'fly', 'walk', 'tp', 'pos', 'beds', 'give', '2d', 'undo', 'redo', 'clear'] as const;
+export const COMMAND_IDS = ['help', 'time', 'skybase', 'sky', 'ground', 'spawn', 'fly', 'walk', 'orbit', 'tp', 'pos', 'beds', 'give', 'screenshot', '2d', 'undo', 'redo', 'clear'] as const;
 export type CommandId = (typeof COMMAND_IDS)[number];
 
 export const COMMAND_USAGE: Record<CommandId, string> = {
@@ -16,10 +16,12 @@ export const COMMAND_USAGE: Record<CommandId, string> = {
   spawn: '/spawn [n]',
   fly: '/fly',
   walk: '/walk',
+  orbit: '/orbit',
   tp: '/tp <x> <z>',
   pos: '/pos',
   beds: '/beds [on|off]',
   give: '/give <element> [slot]',
+  screenshot: '/screenshot',
   '2d': '/2d',
   undo: '/undo',
   redo: '/redo',

@@ -34,7 +34,7 @@ const GROUPS: { id: GroupId; Icon: Icon; actions: KeybindAction[] }[] = [
   { id: 'build', Icon: Hammer, actions: ['demolish', 'bed', 'rotate', 'deleteSelected'] },
   { id: 'plan', Icon: GridFour, actions: ['floorUp', 'floorDown'] },
   { id: 'move', Icon: PersonSimpleWalk, actions: ['up', 'down', 'sprint', 'crouch', 'prone', 'toggleFly'] },
-  { id: 'view3d', Icon: Monitor, actions: ['inventory', 'map', 'chat', 'grab'] },
+  { id: 'view3d', Icon: Monitor, actions: ['inventory', 'map', 'chat', 'grab', 'interact', 'screenshot'] },
 ];
 
 /** Układ WASD: [akcja, kolumna, rząd]. */

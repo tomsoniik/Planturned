@@ -24,6 +24,7 @@ The recording is a real session in the app (with the Polish UI): a new project, 
 - **Floors.** A rail on the right like elevator buttons, `+` adds the next one; the floors below show through as a backdrop.
 - **Sandbox: 3D like in the game.** Original structure models from the Unturned files. Full screen with a 9-slot hotbar and an inventory (`E`), fly or walk, place and demolish from the crosshair.
 - **Chat commands.** `T` or `/` opens the chat: `/time night`, `/sky 150`, `/tp <x> <z>`, `/give metal_wall 3` and more (`/help`). `Esc` opens the menu with the scene, map and keys.
+- **Props from the game.** In Sandbox, the `E` inventory has a Props tab with the items that matter for a base: doors, gates and double doors, shutters, glass, ladders, crates, lockers, wardrobes, beds and cots, the claim flag and sentries, with original models. Doors, gates, shutters and glass go into the matching wall opening, ladders attach to roof holes (square and triangular) and can be climbed, the rest stands on any surface at the crosshair. Beds and the claim flag show their claim radius.
 - **Real maps as a sandbox.** Russia, Washington, PEI, Germany, Yukon and more: terrain, satellite, buildings and trees at 1:1 scale, lighting from the map files. You start at a game spawn and build anywhere: on the ground and in the sky at once. `M` shows the map with your position, `Ctrl C` / `Ctrl V` in 3D copies the base to another spot.
 - **Limits from the game.** Max build height, the oxygen line and no-build zones for each map ([docs/sky-limits.md](docs/sky-limits.md), in Polish).
 - **Bed claim radius.** A circle shows where nobody outside your group can build.
@@ -51,7 +52,8 @@ Keys can be changed in the **Keys** tab of the `E` window (saved in your browser
 | `Ctrl C` / `Ctrl V` | copy / paste (preview under the cursor) | |
 | `Ctrl Z` / `Ctrl Y` | undo / redo | |
 | `W A S D`, `Space`, `Q` | | move, up, down |
-| `F` | | fly or walk |
+| `F` | | open or close a door, gate, shutter or hatch (within reach) |
+| `V` | | fly or walk |
 | `Esc` | drop the piece | menu: scene, map, keys, 2D view |
 
 ## Tech
@@ -80,6 +82,7 @@ What it writes (game files, for local use only, listed in `.gitignore`):
 | Path | Source in the game |
 | --- | --- |
 | `public/game/structures.json` | 3D models, colors and health of structures (`Bundles/core.masterbundle`, `Bundles/Items/Structures/*.dat`) |
+| `public/game/props.json`, `public/game/props/<id>.json` | props: the barricades listed in `src/lib/propCatalog.ts` (doors, gates, shutters, glass, ladders, storage, beds, sentries), list with category and health plus one 3D model per file (`Bundles/Items/Barricades/*.dat`). Export only these: `npm run export:game -- --props` |
 | `public/unturned/items/<id>.png` | icons from [SilKsPlugins/UnturnedImages](https://github.com/SilksPlugins/UnturnedImages) (vanilla folder); missing ones are generated from icons of the same shape |
 | `public/maps/<Map>/height.bin` | terrain heights (`Maps/<Map>/Landscape/Heightmaps`, every 4 m) |
 | `public/maps/<Map>/tiles/*.jpg` | in-game satellite (`Maps/<Map>/Map.png`) |

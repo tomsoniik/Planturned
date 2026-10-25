@@ -5,118 +5,165 @@
   background: var(--bg);
 }
 
-/* Celownik */
+/* Celownik jak w Unturned: cztery białe kreski z przerwą i kropka, z czarnym obrysem na każdym tle */
 .crosshair {
+  --c: #f4f4f0;
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   transform: translate(-50%, -50%);
+  background:
+    linear-gradient(var(--c), var(--c)) center top / 2px 7px no-repeat,
+    linear-gradient(var(--c), var(--c)) center bottom / 2px 7px no-repeat,
+    linear-gradient(var(--c), var(--c)) left center / 7px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) right center / 7px 2px no-repeat;
+  filter: drop-shadow(0 0 1px rgb(0 0 0 / 0.9));
   pointer-events: none;
   z-index: var(--z-overlay);
 }
 
-.crosshair::before,
 .crosshair::after {
   content: "";
   position: absolute;
-  background: var(--accent);
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.6);
-}
-
-.crosshair::before {
-  left: 50%;
-  top: 0;
-  width: 2px;
-  height: 100%;
-  transform: translateX(-50%);
-}
-
-.crosshair::after {
   top: 50%;
-  left: 0;
+  left: 50%;
+  width: 2px;
   height: 2px;
-  width: 100%;
-  transform: translateY(-50%);
+  background: var(--c);
+  transform: translate(-50%, -50%);
 }
 
-.crosshair[data-mode="demolish"]::before,
-.crosshair[data-mode="demolish"]::after {
-  background: var(--danger);
+.crosshair[data-mode="demolish"] {
+  --c: #ff5a5f;
 }
 
-/* Zdrowie i tlen przy chodzeniu */
+/* Stan postaci jak w Unturned: lewy dolny róg, ikona w ramce i pasek, bez wspólnego panelu */
 .vitals {
   position: absolute;
-  left: 12px;
-  bottom: 12px;
+  left: 14px;
+  bottom: 14px;
   display: grid;
-  gap: 6px;
-  width: 230px;
-  padding: 10px 12px;
-  background: rgb(11 16 12 / 0.85);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  gap: 4px;
+  width: 250px;
   font-size: 12px;
-  color: var(--muted);
+  color: #f4f4f0;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.8);
   pointer-events: none;
   z-index: var(--z-overlay);
 }
 
 .vital {
+  --fill: #c94141;
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) 28px;
-  align-items: center;
-  gap: 8px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 4px;
+  height: 26px;
 }
 
-.vital strong {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  color: var(--text);
-  text-align: right;
+.vital[data-kind="oxygen"] {
+  --fill: #58b4d8;
+}
+
+.vitalIcon {
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.55);
+  border-radius: 4px;
+  color: var(--fill);
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.6));
 }
 
 .bar {
-  height: 6px;
-  overflow: hidden;
-  background: rgb(255 255 255 / 0.08);
-  border-radius: 3px;
+  position: relative;
+  display: flex;
+  padding: 4px;
+  background: rgb(0 0 0 / 0.55);
+  border-radius: 4px;
 }
 
 .bar span {
   display: block;
   height: 100%;
-  border-radius: 3px;
-  transition: width 0.2s var(--ease);
+  background: var(--fill);
+  border-radius: 2px;
+  transition: width 0.25s var(--ease);
 }
 
-.bar[data-kind="health"] span {
-  background: var(--danger);
-}
-
-.bar[data-kind="oxygen"] span {
-  background: #6fb3d6;
+.bar em {
+  position: absolute;
+  top: 50%;
+  right: 9px;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
 }
 
 .vitalTags {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: 2px;
 }
 
 .vitalTags span {
-  padding: 2px 8px;
-  background: var(--surface-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 9px 0 7px;
+  background: rgb(0 0 0 / 0.55);
   border-radius: 4px;
-  color: var(--text);
 }
 
 .vitalTags span[data-bad] {
-  background: rgb(229 72 77 / 0.18);
-  color: #f2a3a6;
+  color: #ff8c8f;
+}
+
+/* Interakcja jak w grze: tuż pod celownikiem, klawisz w ramce i nazwa przedmiotu */
+.interact {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, 24px);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #f4f4f0;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.85);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: var(--z-overlay);
+}
+
+.interact kbd {
+  min-width: 24px;
+  height: 24px;
+  background: rgb(0 0 0 / 0.6);
+  border: 1px solid rgb(255 255 255 / 0.55);
+  border-bottom-width: 1px;
+  color: #f4f4f0;
+  font-size: 12px;
+  font-weight: 600;
+  text-shadow: none;
+}
+
+.interact span {
+  display: inline-block;
+}
+
+.interact span::first-letter {
+  text-transform: uppercase;
+}
+
+.interact strong {
+  margin-left: 6px;
+  font-weight: 400;
+  color: rgb(244 244 240 / 0.75);
 }
 
 .deathNote {
@@ -125,7 +172,7 @@
   left: 50%;
   transform: translate(-50%, -50%);
   padding: 12px 18px;
-  background: rgb(11 16 12 / 0.9);
+  background: rgb(0 0 0 / 0.7);
   border: 1px solid rgb(229 72 77 / 0.5);
   border-radius: var(--r-md);
   color: var(--text);
@@ -134,18 +181,85 @@
   z-index: var(--z-overlay);
 }
 
+/* Orbita: podpowiedź i wyjście u góry ekranu */
+.orbitBar {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 32px);
+  padding: 6px 6px 6px 12px;
+  background: rgb(0 0 0 / 0.6);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  color: var(--muted);
+  z-index: var(--z-overlay);
+}
+
+.orbitBar button {
+  flex: none;
+  padding: 4px 10px;
+  background: var(--surface-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Utrata kontekstu WebGL: zamiast czarnego ekranu komunikat i ponowne wczytanie */
+.contextLost {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--text);
+  text-align: center;
+  z-index: calc(var(--z-overlay) + 10);
+}
+
+.contextLost p {
+  max-width: 44ch;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.contextLost button {
+  padding: 8px 16px;
+  background: var(--accent);
+  color: var(--bg);
+  border: 0;
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.contextLost button:active {
+  transform: scale(0.98);
+}
+
 /* Stan celownika u dołu: trzymany element i czy pasuje */
 .aimStatus {
   position: absolute;
-  /* nad paskiem slotów */
-  bottom: 82px;
+  /* pasek slotów jest w dolnym panelu edytora, pod sceną */
+  bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 5px 10px;
-  background: rgb(11 16 12 / 0.85);
+  background: rgb(0 0 0 / 0.55);
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   font-size: 12px;
@@ -156,6 +270,21 @@
   z-index: var(--z-overlay);
 }
 
+.raidInfo {
+  position: absolute;
+  /* nad stanem celownika */
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-overlay);
+}
+
+@media (max-width: 640px) {
+  .raidInfo {
+    bottom: 44px;
+  }
+}
+
 .aimStatus[data-bad],
 .aimStatus[data-demolish] {
   color: var(--danger);
@@ -163,7 +292,7 @@
 
 @media (max-width: 640px) {
   .aimStatus {
-    bottom: 62px;
+    bottom: 12px;
   }
 }
 
@@ -177,35 +306,14 @@
   color: var(--muted);
 }
 
-.modeBadge {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: rgb(11 16 12 / 0.85);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  font-size: 12px;
-  color: var(--text);
-  z-index: var(--z-overlay);
-}
-
-.modeMap {
-  padding-left: 8px;
-  border-left: 1px solid var(--line-strong);
-  color: var(--muted);
-}
-
 .lockHint {
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, 28px);
+  /* pod podpowiedzią interakcji (24 px pod celownikiem) */
+  transform: translate(-50%, 64px);
   padding: 6px 12px;
-  background: rgb(11 16 12 / 0.85);
+  background: rgb(0 0 0 / 0.55);
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   font-size: 12px;

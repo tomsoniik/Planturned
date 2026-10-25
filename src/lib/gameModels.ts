@@ -77,3 +77,47 @@ export function loadGameModels(): Promise<Map<number, GameModel>> {
   }
   return promise;
 }
+
+// --- Rekwizyty: siatki wczytywane pojedynczo, na żądanie (public/game/props/<id>.json) ---
+
+const propModels = new Map<number, GameModel>();
+const propPending = new Set<number>();
+const propListeners = new Set<() => void>();
+
+/** Już wczytane modele rekwizytów (ID z gry -> model). */
+export const loadedPropModels = () => propModels;
+
+/** Powiadamia, gdy dojdzie nowy model rekwizytu; zwraca funkcję wypisania. */
+export function onPropModels(fn: () => void) {
+  propListeners.add(fn);
+  return () => {
+    propListeners.delete(fn);
+  };
+}
+
+/** Zleca wczytanie modeli, których jeszcze nie ma (każdy co najwyżej raz). */
+export function requestPropModels(ids: Iterable<number>) {
+  for (const id of ids) {
+    if (propModels.has(id) || propPending.has(id)) continue;
+    propPending.add(id);
+    fetch(`/game/props/${id}.json`)
+      .then((r) => (r.ok ? (r.json() as Promise<{ p: number[]; i: number[]; c?: number[] }>) : null))
+      .then((mesh) => {
+        if (!mesh) return;
+        const geometry = buildGeometry(mesh);
+        propModels.set(id, {
+          id,
+          name: '',
+          construct: 'Barricade',
+          health: null,
+          color: null,
+          geometry,
+          minY: geometry.boundingBox!.min.y,
+          hasColors: !!mesh.c,
+        });
+        propListeners.forEach((fn) => fn());
+      })
+      .catch(() => {})
+      .finally(() => propPending.delete(id));
+  }
+}

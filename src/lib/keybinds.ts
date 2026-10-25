@@ -11,7 +11,7 @@ export const KEYBIND_ACTIONS = [
   'demolish', 'bed', 'rotate', 'deleteSelected',
   'floorUp', 'floorDown',
   'forward', 'back', 'left', 'right', 'up', 'down', 'sprint', 'crouch', 'prone', 'toggleFly',
-  'map', 'inventory', 'chat', 'grab',
+  'map', 'inventory', 'chat', 'grab', 'interact', 'screenshot',
 ] as const;
 export type KeybindAction = (typeof KEYBIND_ACTIONS)[number];
 export type Keybinds = Record<KeybindAction, string>;
@@ -35,11 +35,14 @@ export const DEFAULT_KEYBINDS: Keybinds = {
   // w grze kucanie to X, ale tu X to wyburzanie
   crouch: 'KeyC',
   prone: 'KeyZ',
-  toggleFly: 'KeyF',
+  // F jak w grze to interakcja (drzwi, klapy), latanie na V
+  toggleFly: 'KeyV',
   map: 'KeyM',
   inventory: 'KeyE',
   chat: 'KeyT',
   grab: 'KeyG',
+  interact: 'KeyF',
+  screenshot: 'F2',
 };
 
 export const SLOT_ACTIONS: KeybindAction[] = ['slot1', 'slot2', 'slot3', 'slot4', 'slot5', 'slot6', 'slot7', 'slot8', 'slot9'];
@@ -55,6 +58,12 @@ function load(): Keybinds {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_KEYBINDS };
     const saved = JSON.parse(raw) as Partial<Keybinds>;
+    // 0.17: latanie przeszło z F na V, a F to interakcja (drzwi, klapy). Kto sam ustawił latanie na F,
+    // miałby oba na jednym klawiszu: latanie wraca na domyślne V, F zostaje interakcją jak w grze.
+    if (saved.toggleFly === 'KeyF' && saved.interact === undefined) {
+      delete saved.toggleFly;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+    }
     const out = { ...DEFAULT_KEYBINDS };
     for (const a of KEYBIND_ACTIONS) if (typeof saved[a] === 'string') out[a] = saved[a]!;
     return out;

@@ -1,0 +1,22 @@
+.icon {
+  display: block;
+  flex: none;
+  object-fit: contain;
+}
+
+/* Brak pliku albo zerwane połączenie: nazwa w szarym kwadracie, żeby kafelek nie był pusty */
+.fallback {
+  display: grid;
+  place-items: center;
+  flex: none;
+  padding: 2px;
+  overflow: hidden;
+  background: var(--surface-3, rgb(255 255 255 / 0.06));
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.1;
+  text-align: center;
+  word-break: break-word;
+}

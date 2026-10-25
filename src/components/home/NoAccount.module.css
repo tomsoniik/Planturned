@@ -67,10 +67,15 @@
 
 .meta {
   font-size: var(--text-small);
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--faint);
+}
+
+/* Tytuł wersji w całości, w osobnej linii (bez wielokropka) */
+.relTitle {
+  grid-column: 1 / -1;
+  font-size: var(--text-ui);
+  font-weight: 500;
+  color: var(--text);
 }
 
 .more {

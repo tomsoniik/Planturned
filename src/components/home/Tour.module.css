@@ -1,0 +1,371 @@
+/* Okno funkcji: 5/12 tytuł i zakładki, 7/12 podgląd z opisem. Na telefonie: tytuł, okno, opis, zakładki w poziomym pasku. */
+.section {
+  padding-bottom: var(--section-gap);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: var(--space-7);
+  align-items: start;
+}
+
+.title {
+  font-size: var(--text-h2);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.sub {
+  margin-top: var(--space-3);
+  max-width: 36ch;
+  font-size: var(--text-body);
+  color: var(--muted);
+}
+
+/* Zakładki: pionowa lista, aktywna z akcentem i paskiem postępu */
+.tabs {
+  display: grid;
+  margin-top: var(--space-6);
+  border-top: 1px solid var(--line);
+}
+
+.tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-ui);
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.2s var(--ease), background 0.2s var(--ease);
+}
+
+.tab:hover {
+  color: var(--text);
+  background: rgb(214 236 205 / 0.03);
+}
+
+.tab[aria-selected="true"] {
+  color: var(--text);
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* Pasek postępu automatu na dole aktywnej zakładki */
+.progress {
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  height: 2px;
+  width: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  animation-name: tour-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes tour-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* Okno: 16:10, slajdy na sobie, płynne przenikanie */
+.stage {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.window {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: 0 30px 60px rgb(4 8 5 / 0.5);
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.slide {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transform: scale(1.015);
+  transition: opacity 0.5s var(--ease), transform 0.7s var(--ease);
+  pointer-events: none;
+}
+
+.slide[data-active] {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.shot {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  -webkit-user-drag: none;
+}
+
+/* Opis pod oknem + strzałki */
+.caption {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+}
+
+.captionText {
+  min-height: 84px;
+}
+
+.captionText h3 {
+  font-size: var(--text-h3);
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  font-weight: 600;
+}
+
+.captionText p {
+  margin-top: var(--space-2);
+  max-width: 56ch;
+  font-size: var(--text-body);
+  color: var(--muted);
+}
+
+.arrows {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.arrows :global(.icon-btn) {
+  width: 40px;
+  height: 40px;
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+/* Slajd "mapy": 3x2 miniatury */
+.maps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+  width: 74%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.maps li {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.maps img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  object-fit: cover;
+}
+
+.maps span {
+  font-size: var(--text-small);
+  color: var(--muted);
+}
+
+/* Slajd "limity": pionowa skala, linie na proporcjonalnej wysokości */
+.scale {
+  position: relative;
+  width: 70%;
+  height: 64%;
+  border-left: 1px solid var(--line-strong);
+}
+
+.line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0 0 var(--space-2) var(--space-4);
+  border-bottom: 1px dashed var(--line-strong);
+  font-size: var(--text-ui);
+  color: var(--muted);
+  transform: translateY(50%);
+}
+
+.line b {
+  font-family: var(--font-mono);
+  font-size: var(--text-h4);
+  font-weight: 500;
+  color: var(--text);
+}
+
+.line[data-kind="ceiling"] {
+  border-bottom-style: solid;
+  border-bottom-color: var(--muted);
+}
+
+.line[data-kind="oxygen"] {
+  border-bottom-color: var(--accent);
+}
+
+.line[data-kind="ground"] {
+  border-bottom-style: solid;
+}
+
+/* Slajd "sterowanie": prawdziwe klawisze */
+.keys {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-6);
+}
+
+.keyLine {
+  display: flex;
+  gap: var(--space-7);
+}
+
+.keyGroup {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+}
+
+.keyGroup > span {
+  font-size: var(--text-small);
+  color: var(--muted);
+}
+
+.keyRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.keys kbd {
+  min-width: 40px;
+  height: 40px;
+  font-size: var(--text-ui);
+}
+
+.command {
+  margin-left: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-ui);
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slide {
+    transition: none;
+  }
+}
+
+/* Tablet i telefon: jedna kolumna, zakładki w poziomym pasku pod opisem */
+@media (max-width: 1023px) {
+  .grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-5);
+  }
+
+  .head {
+    display: contents;
+  }
+
+  .title {
+    order: 1;
+  }
+
+  .sub {
+    order: 2;
+    margin-top: calc(var(--space-3) - var(--space-5));
+  }
+
+  .stage {
+    order: 3;
+  }
+
+  .tabs {
+    order: 4;
+    display: flex;
+    gap: var(--space-2);
+    margin-top: 0;
+    border-top: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab {
+    flex: none;
+    min-height: 40px;
+    padding: var(--space-2) var(--space-4);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-sm);
+    white-space: nowrap;
+  }
+
+  .tab[aria-selected="true"] {
+    box-shadow: none;
+    border-color: rgb(var(--accent-rgb) / 0.5);
+  }
+}
+
+@media (max-width: 767px) {
+  .maps {
+    width: 86%;
+    gap: var(--space-2);
+  }
+
+  .maps span {
+    font-size: var(--text-micro);
+  }
+
+  .scale {
+    width: 82%;
+  }
+
+  .line {
+    font-size: var(--text-small);
+  }
+
+  .keys {
+    gap: var(--space-4);
+    transform: scale(0.72);
+  }
+
+  .captionText {
+    min-height: 120px;
+  }
+}

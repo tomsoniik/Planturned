@@ -8,7 +8,8 @@
   Wygląd odtwarza dawne style CSS elementów (builder.module.css).
 */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BED_CLAIM_RADIUS, TRI_H, TRI_R, findDef, isRoofLayer, planFloor, type BuildItem, type PlacedItem } from '@/lib/builder';
+import { BED_CLAIM_RADIUS, TRI_H, TRI_R, UNITS_PER_METER, findDef, isClaim, isRoofLayer, planFloor, type BuildItem, type PlacedItem } from '@/lib/builder';
+import { loadProps, usePropsStore } from '@/lib/props';
 
 /** Kolejność warstw w rzucie: płyty, ściany, filary, dachy na wierzchu. */
 export const layerOf = (def: BuildItem) => {
@@ -17,6 +18,7 @@ export const layerOf = (def: BuildItem) => {
   if (def.shape === 'wall') return 20;
   if (def.shape === 'pillar') return 25;
   if (def.shape === 'bed') return 15;
+  if (def.shape === 'prop') return 17;
   return 10;
 };
 
@@ -72,7 +74,9 @@ const triPath = (grow = 0) => {
   return p;
 };
 
-const SHAPES = {
+// Path2D istnieje tylko w przeglądarce: kształty powstają przy pierwszym rysowaniu, nie przy imporcie modułu
+// (inaczej renderowanie strony edytora na serwerze kończy się ReferenceError i błędem 500).
+const buildShapes = () => ({
   square: centered(30, 30),
   squareInset: centered(29.5, 29.5),
   tri: triPath(),
@@ -112,6 +116,14 @@ const SHAPES = {
   })(),
   bed: centered(10, 20),
   bedInset: centered(9.5, 19.5),
+});
+let shapesCache: ReturnType<typeof buildShapes> | null = null;
+const shapes = () => (shapesCache ??= buildShapes());
+
+/** Rekwizyt w rzucie: prostokąt w rozmiarze modelu z gry (połowy szerokości i głębokości w jednostkach planu, min. 1,5). */
+const propHalf = (def: BuildItem): [number, number] => {
+  const [w, , d] = def.size ?? [1, 1, 1];
+  return [Math.max(1.5, (w * UNITS_PER_METER) / 2), Math.max(1.5, (d * UNITS_PER_METER) / 2)];
 };
 
 /** Obrys do zaznaczenia i podświetlenia: pudełko elementu (tak jak dawny outline CSS). */
@@ -127,6 +139,10 @@ function boxPath(def: BuildItem, grow: number): Path2D {
       return centered(11 + grow, 11 + grow);
     case 'bed':
       return centered(10 + grow, 20 + grow);
+    case 'prop': {
+      const [hw, hh] = propHalf(def);
+      return centered(hw + grow, hh + grow);
+    }
     default:
       return centered(30 + grow, 30 + grow);
   }
@@ -208,6 +224,7 @@ function itemMatrix(item: PlacedItem, dx = 0, dy = 0) {
 }
 
 function addItem(batch: Batch, beds: BedImage[], item: PlacedItem, def: BuildItem, alpha: number, canvasColor: string) {
+  const SHAPES = shapes();
   const m = itemMatrix(item);
   const c = item.customColor || def.color;
   const part = def.part;
@@ -293,6 +310,14 @@ function addItem(batch: Batch, beds: BedImage[], item: PlacedItem, def: BuildIte
       beds.push({ m, alpha: a });
       break;
     }
+    case 'prop': {
+      // rekwizyt: obrys w rozmiarze modelu, kolor dominujący z gry
+      const [hw, hh] = propHalf(def);
+      const body = centered(hw, hh);
+      batch.add(BODY, `prop:${c}`, body, m, { fill: c, alpha: a * 0.85 });
+      batch.add(INSET, 'prop-inset', body, m, { stroke: DARK(0.55), lineWidth: 1, alpha: a });
+      break;
+    }
   }
 }
 
@@ -317,7 +342,7 @@ function buildScene(items: PlacedItem[], floor: number, showBedAreas: boolean, c
     let batch = buckets.get(z);
     if (!batch) buckets.set(z, (batch = new Batch()));
     addItem(batch, beds, item, def, f < floor ? LOWER_FLOOR_ALPHA : 1, colors.canvas);
-    if (def.shape === 'bed' && showBedAreas && f === floor) {
+    if (isClaim(def) && showBedAreas && f === floor) {
       claimPath.moveTo(item.x + BED_CLAIM_RADIUS, item.y);
       claimPath.arc(item.x, item.y, BED_CLAIM_RADIUS, 0, Math.PI * 2);
       anyClaim = true;
@@ -396,9 +421,17 @@ export default function PlanCanvas({ items, currentFloor, showBedAreas, selected
     img.src = def.icon;
   }, []);
 
+  // Rekwizyty postawione w 3D: definicje dochodzą z eksportu gry, po wczytaniu plan rysuje się od nowa
+  const propsReady = usePropsStore((s) => s.ready);
+  useEffect(() => {
+    loadProps();
+  }, []);
+
   const scene = useMemo(
     () => (colors ? buildScene(items, currentFloor, showBedAreas, colors) : null),
-    [items, currentFloor, showBedAreas, colors],
+    // propsReady: findDef zna rekwizyty dopiero po wczytaniu listy
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [items, currentFloor, showBedAreas, colors, propsReady],
   );
 
   // Zaznaczenie: jeden obrys na wszystkie zaznaczone elementy bieżącego piętra

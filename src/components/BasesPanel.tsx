@@ -5,7 +5,7 @@
   W 2D: pokaż (przybliż i zaznacz), usuń. W 3D (menu Esc): przenieś, teleportuj, usuń.
 */
 import { useMemo } from 'react';
-import { ArrowsOutCardinal, Crosshair, MagnifyingGlassPlus, Trash } from '@phosphor-icons/react';
+import { ArrowsOutCardinal, Crosshair, MagnifyingGlassPlus, Planet, Trash } from '@phosphor-icons/react';
 import { LEVEL_HEIGHT, UNITS_PER_METER, baseGroups, type PlacedItem } from '@/lib/builder';
 import type { MapData, Site } from '@/lib/terrain';
 import { useT } from './I18nProvider';
@@ -53,6 +53,7 @@ export default function BasesPanel({
   onShow,
   onMove,
   onTeleport,
+  onOrbit,
   onDelete,
 }: {
   items: PlacedItem[];
@@ -62,6 +63,8 @@ export default function BasesPanel({
   onShow?: (b: BaseInfo) => void;
   onMove?: (b: BaseInfo) => void;
   onTeleport?: (b: BaseInfo) => void;
+  /** Kamera krąży wokół bazy (3D). */
+  onOrbit?: (b: BaseInfo) => void;
   onDelete: (b: BaseInfo) => void;
 }) {
   const t = useT();
@@ -104,6 +107,11 @@ export default function BasesPanel({
                 {onTeleport && (
                   <button className="icon-btn" onClick={() => onTeleport(b)} title={t.bases.teleport} aria-label={t.bases.teleport}>
                     <Crosshair size={16} weight="bold" />
+                  </button>
+                )}
+                {onOrbit && (
+                  <button className="icon-btn" onClick={() => onOrbit(b)} title={t.bases.orbit} aria-label={t.bases.orbit}>
+                    <Planet size={16} weight="bold" />
                   </button>
                 )}
                 <button className="icon-btn danger" onClick={() => onDelete(b)} title={t.bases.remove} aria-label={t.bases.remove}>

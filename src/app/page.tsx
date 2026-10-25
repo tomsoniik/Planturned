@@ -1,16 +1,18 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import SiteNav from '@/components/SiteNav';
 import SiteFooter from '@/components/SiteFooter';
 import NewProjectButton from '@/components/NewProjectButton';
 import HeroPreview from '@/components/HeroPreview';
 import HeroVideo from '@/components/HeroVideo';
-import HowItWorks from '@/components/home/HowItWorks';
-import GameRules from '@/components/home/GameRules';
+import Tour from '@/components/home/Tour';
 import NoAccount from '@/components/home/NoAccount';
 import FinalCta from '@/components/home/FinalCta';
 import { getContent } from '@/lib/cms/store';
 import { getDict } from '@/lib/i18n-server';
 import styles from './page.module.css';
+
+export const metadata: Metadata = { alternates: { canonical: '/' } };
 
 export default async function Home() {
   const [t, media] = await Promise.all([getDict(), getContent('media')]);
@@ -45,8 +47,7 @@ export default async function Home() {
           </section>
         )}
 
-        <HowItWorks />
-        <GameRules />
+        <Tour />
         <NoAccount />
         <FinalCta />
 

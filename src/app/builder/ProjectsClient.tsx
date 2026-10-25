@@ -104,7 +104,7 @@ export default function ProjectsClient({ media }: { media: Media }) {
     <>
       <SiteNav overlay />
       <div className={styles.shell} {...dropHandlers}>
-        <HeroVideo media={media} />
+        <HeroVideo media={media} still />
         <main className={`wrap ${styles.page}`}>
           <header className={styles.header}>
             <div>
